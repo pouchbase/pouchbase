@@ -3,6 +3,7 @@
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
+	import { describeError } from '#lib/errors.js';
 	import CloudflareSectionSkeleton from './cloudflare-section-skeleton.svelte';
 
 	type Props = {
@@ -42,13 +43,15 @@
 		{/snippet}
 
 		{#snippet failed(error, reset)}
+			{@const { message, reason } = describeError(error)}
 			<Callout.Root variant="error">
 				<Callout.Icon><Icon.Root icon="lucide:circle-x" /></Callout.Icon>
 				<Callout.Body>
 					<Callout.Title>This section could not be loaded</Callout.Title>
-					<Callout.Description>
-						{error instanceof Error ? error.message : String(error)}
-					</Callout.Description>
+					<Callout.Description>{message}</Callout.Description>
+					{#if reason}
+						<Callout.Description class="font-mono text-xs">{reason}</Callout.Description>
+					{/if}
 					<div class="pt-1">
 						<Button.Root variant="secondary" onclick={reset}>
 							<Icon.Root icon="lucide:refresh-cw" />

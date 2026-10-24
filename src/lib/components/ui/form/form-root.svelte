@@ -2,6 +2,7 @@
 	import type { RemoteFormEnhanceCallback } from '$app/server';
 	import { tick } from 'svelte';
 	import type { HTMLFormAttributes } from 'svelte/elements';
+	import { errorMessage, errorToast } from '#lib/errors.js';
 	import { toast } from '../toast';
 	import { setFormContext, type AnyRemoteForm } from './form-context';
 
@@ -39,12 +40,6 @@
 		}
 	};
 
-	function errorMessage(error: unknown): string {
-		const body = (error as { body?: { message?: unknown } } | null)?.body;
-
-		return typeof body?.message === 'string' ? body.message : 'Something went wrong';
-	}
-
 	/**
 	 * Wraps `instance.submit()` so every form shows a toast: `success` when the submission
 	 * succeeded, and an error toast (instead of the error page) when the handler threw.
@@ -60,7 +55,7 @@
 
 				return succeeded;
 			} catch (error) {
-				toast.error(errorMessage(error));
+				toast.error(errorMessage(error), errorToast(error));
 
 				return false;
 			}

@@ -12,6 +12,7 @@ import {
 	environmentSchema,
 	linkRemoteSchema
 } from '#lib/schemas/environments.js';
+import { fail } from '#lib/server/errors.js';
 
 /** How long one call may run steps of a publish or pull. */
 const STEP_BUDGET = 20 * 1000;
@@ -47,7 +48,7 @@ function remoteFailure(failure: ServiceError<number, string>): never {
 		error(known[0], known[1]);
 	}
 
-	error(500, failure.message);
+	fail(failure);
 }
 
 export const updateEnvironment = form(environmentSchema, async (data) => {
@@ -58,7 +59,7 @@ export const updateEnvironment = form(environmentSchema, async (data) => {
 		.set(data.environment === 'none' ? null : data.environment);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getEnvironment().refresh();
@@ -72,7 +73,7 @@ export const getDeployTokens = query(async () => {
 	const result = await services.environments().tokens();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -85,7 +86,7 @@ export const createDeployToken = form(deployTokenSchema, async (data) => {
 	const result = await services.environments().createToken(data.name);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getDeployTokens().refresh();
@@ -103,7 +104,7 @@ export const deleteDeployToken = form(deployTokenIdSchema, async (data) => {
 			error(404, 'Deploy token not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getDeployTokens().refresh();
@@ -118,7 +119,7 @@ export const getRemote = query(async () => {
 	const result = await services.environments().remote();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -140,7 +141,7 @@ export const linkRemote = form(linkRemoteSchema, async (data) => {
 			);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getRemote().refresh();
@@ -154,7 +155,7 @@ export const unlinkRemote = command(async () => {
 	const result = await services.environments().unlink();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getRemote().refresh();
@@ -224,7 +225,7 @@ export const getDeployments = query(async () => {
 	const result = await services.environments().deployments();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;

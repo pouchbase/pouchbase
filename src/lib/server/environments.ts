@@ -3,6 +3,7 @@ import type { RequestEvent } from '@sveltejs/kit';
 import { error } from '@sveltejs/kit';
 
 import { bearerToken } from './api';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * Checks the deploy token of a request from another instance (`/internal/environment/...`), and
@@ -18,7 +19,7 @@ export async function requireDeployToken(event: RequestEvent) {
 	const result = await event.locals.services.environments().verifyToken(token);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {

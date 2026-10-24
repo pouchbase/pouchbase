@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { error, json } from '@sveltejs/kit';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * Deploys the latest release to the Worker: a multipart body with `assets` (the completion token
@@ -44,7 +45,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			error(502, `Could not deploy the update: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return json({ version: result.value });

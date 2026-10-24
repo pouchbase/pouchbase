@@ -15,6 +15,7 @@ import {
 	restoreFunctionVersionSchema,
 	testFunctionSchema
 } from '#lib/schemas/functions.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -36,7 +37,7 @@ export const getFunctions = query(async () => {
 	const result = await services.functions().list();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -49,7 +50,7 @@ export const getFunction = query(z.string(), async (name) => {
 	const result = await services.functions().get(name);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {
@@ -77,7 +78,7 @@ export const createFunction = form(createFunctionSchema, async (data, issue) => 
 			// The function exists; its page shows that it isn't deployed yet.
 			console.error(`[functions] first deploy of ${data.name} failed: ${result.error.data.reason}`);
 		} else {
-			error(500, result.error.message);
+			fail(result.error);
 		}
 	}
 
@@ -98,7 +99,7 @@ export const updateFunction = form(functionSettingsSchema, async (data) => {
 			error(404, 'Function not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctions().refresh();
@@ -120,7 +121,7 @@ export const deleteFunction = form(functionIdSchema, async (data) => {
 			invalid('Could not delete the Worker on Cloudflare. Try again.');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctions().refresh();
@@ -155,7 +156,7 @@ export const deployFunction = command(deployFunctionSchema, async (data) => {
 			error(422, `Cloudflare did not accept the code: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctions().refresh();
@@ -170,7 +171,7 @@ export const getFunctionVersions = query(z.string(), async (id) => {
 	const result = await services.functions().versions(id);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -183,7 +184,7 @@ export const getFunctionVersionSource = query(functionVersionSchema, async (data
 	const result = await services.functions().versionSource(data.id, data.versionId);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {
@@ -219,7 +220,7 @@ export const restoreFunctionVersion = form(restoreFunctionVersionSchema, async (
 			invalid(`Cloudflare did not accept the code: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctions().refresh();
@@ -243,7 +244,7 @@ export const getFunctionSecrets = query(z.string(), async (id) => {
 			error(502, `Could not load the secrets: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -267,7 +268,7 @@ export const setFunctionSecret = form(functionSecretSchema, async (data) => {
 			invalid(`Could not save the secret: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctionSecrets(data.id).refresh();
@@ -289,7 +290,7 @@ export const deleteFunctionSecret = form(deleteFunctionSecretSchema, async (data
 			invalid(`Could not delete the secret: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getFunctionSecrets(data.id).refresh();
@@ -315,7 +316,7 @@ export const getFunctionLogs = query(functionLogsSchema, async (data) => {
 			return { forbidden: true as const, logs: [] };
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { forbidden: false as const, logs: result.value };
@@ -345,7 +346,7 @@ export const testFunction = command(testFunctionSchema, async (data) => {
 			error(502, `The function could not be reached: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;

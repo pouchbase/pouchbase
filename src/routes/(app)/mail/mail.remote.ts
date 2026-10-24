@@ -16,6 +16,7 @@ import {
 	uploadMailImageSchema
 } from '#lib/schemas/mail-templates.js';
 import { mailSettingsSchema, testMailSchema } from '#lib/schemas/mail.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -58,7 +59,7 @@ export const listMailImages = query(listMailImagesSchema, async ({ search }) => 
 	const result = await files.listImages(search, MAIL_IMAGES_LIMIT);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	const thumb = await mailImageThumb(files);
@@ -79,7 +80,7 @@ export const uploadMailImage = form(uploadMailImageSchema, async (data, issue) =
 			);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return mailImage(result.value, await mailImageThumb(files));
@@ -92,7 +93,7 @@ export const getMailTemplates = query(async () => {
 	const result = await services.mailTemplates().list();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -104,7 +105,7 @@ export const getMailTemplate = query(z.string(), async (name) => {
 	const result = await services.mailTemplates().get(name);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {
@@ -121,7 +122,7 @@ export const getMailSender = query(async () => {
 	const result = await services.mail().settings();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	const { provider, senderName, senderAddress } = result.value;
@@ -139,7 +140,7 @@ export const getMailSettings = query(async () => {
 	const result = await services.mail().settings();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -168,7 +169,7 @@ export const updateMailSettings = form(mailSettingsSchema, async (data, issue) =
 			);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getMailSettings().refresh();
@@ -191,7 +192,7 @@ export const sendTestMail = form(testMailSchema, async (data) => {
 			invalid(`Could not send the email: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { sent: true };
@@ -207,7 +208,7 @@ export const createMailTemplate = form(createMailTemplateSchema, async (data, is
 			invalid(issue.name('A template with this name already exists'));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getMailTemplates().refresh();
@@ -231,7 +232,7 @@ export const saveMailTemplate = command(saveMailTemplateSchema, async (data) => 
 			error(422, `Fix the variable tags first: ${result.error.data.problems[0].message}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getMailTemplates().refresh();
@@ -254,7 +255,7 @@ export const deleteMailTemplate = form(mailTemplateNameSchema, async (data) => {
 			invalid('Built-in templates can be reset, not deleted');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getMailTemplates().refresh();
@@ -273,7 +274,7 @@ export const resetMailTemplate = form(mailTemplateNameSchema, async (data) => {
 			error(404, 'Template not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getMailTemplates().refresh();
@@ -306,7 +307,7 @@ export const sendTestMailTemplate = command(sendTestMailTemplateSchema, async (d
 			error(502, `Could not send the email: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { sent: true };

@@ -14,6 +14,7 @@ import {
 	updateFieldSchema,
 	updateFieldsSchema
 } from '#lib/schemas/fields.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -97,7 +98,7 @@ export const createField = form(createFieldSchema, async (data, issue) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -166,7 +167,7 @@ export const updateField = form(updateFieldSchema, async (data, issue) => {
 			}
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -192,7 +193,7 @@ export const renameField = form(renameFieldSchema, async (data, issue) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -224,7 +225,7 @@ export const deleteField = form(deleteFieldSchema, async (data) => {
 			invalid(idInUseMessage(result.error.data.relations));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 });
 
@@ -250,7 +251,7 @@ export const updateComputedField = form(updateComputedSchema, async (data, issue
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { name: result.value.name };
@@ -267,7 +268,7 @@ export const previewComputed = command(previewComputedSchema, async (data) => {
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -316,7 +317,7 @@ export const updateFields = form(updateFieldsSchema, async (data, issue) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.

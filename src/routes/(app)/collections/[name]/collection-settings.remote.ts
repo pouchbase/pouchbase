@@ -7,6 +7,7 @@ import { splitThumbnailSizes } from '#lib/files/thumbnails.js';
 import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 import { apiRulesSchema, thumbnailSettingsSchema } from '#lib/schemas/collection-settings.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -28,13 +29,13 @@ export const getCollectionSettings = query(z.string(), async (collection) => {
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
 });
 
-/** Fields of `users`, which API rules can use as `@request.auth.<field>`. */
+/** Fields of `users`, which API rules can use as `$user.<field>`. */
 export const getUserFields = query(async () => {
 	const { services } = requireUser();
 	const result = await services.collections().requireWithFields(USERS_COLLECTION);
@@ -44,7 +45,7 @@ export const getUserFields = query(async () => {
 			return [];
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value.fields
@@ -64,7 +65,7 @@ export const updateThumbnailSettings = form(thumbnailSettingsSchema, async (data
 			invalid(issue.collection('Collection not found'));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getCollectionSettings(data.collection).refresh();
@@ -94,7 +95,7 @@ export const updateApiRules = form(apiRulesSchema, async (data, issue) => {
 			);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getCollectionSettings(data.collection).refresh();

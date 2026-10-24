@@ -26,6 +26,21 @@ function safeRedirect(target: string | undefined) {
 	return target?.startsWith('/') && !target.startsWith('//') ? target : '/account';
 }
 
+/**
+ * Fails with `message` and, when the registry or the Pouchbase back-end said why, that reason.
+ * The full error is logged.
+ */
+function failed(message: string) {
+	return (cause: unknown): never => {
+		console.error(`${message}:`, cause);
+
+		const reason =
+			cause instanceof RegistryFailure || isPouchbaseError(cause) ? cause.message : undefined;
+
+		error(502, message, reason ? { reason } : {});
+	};
+}
+
 async function signedIn() {
 	const user = await currentUser();
 
@@ -128,7 +143,7 @@ export const signUp = form(signUpSchema, async (data, issue) => {
 /** Sends the verification email again; answers the same whether or not the address has an account. */
 export const resendVerification = form(verificationSchema, async (data) => {
 	try {
-		await pouchbase().auth.requestVerification(data.email);
+		await pouchbase().auth.sendVerification(data.email);
 	} catch {
 		error(502, 'Could not send the email, try again later');
 	}
@@ -164,7 +179,7 @@ export const signOut = form(async () => {
 /** The signed-in user's plugins, newest first. */
 export const getMyPlugins = query(async () => {
 	const user = await signedIn();
-	const plugins = await listOwnPlugins(user.id).catch(() => error(502, 'Could not load plugins'));
+	const plugins = await listOwnPlugins(user.id).catch(failed('Could not load your plugins'));
 
 	return plugins.map((plugin) => ({
 		id: plugin.id,
@@ -220,14 +235,14 @@ export const uploadBundle = form(uploadBundleSchema, async (data, issue) => {
 export const getPublishTokens = query(async () => {
 	const user = await signedIn();
 
-	return listPublishTokens(user.id).catch(() => error(502, 'Could not load the tokens'));
+	return listPublishTokens(user.id).catch(failed('Could not load your publish tokens'));
 });
 
 /** Makes a publish token and returns it; it is shown once and can't be read back. */
 export const createToken = form(publishTokenSchema, async (data) => {
 	const user = await signedIn();
-	const created = await createPublishToken(user.id, data.name).catch(() =>
-		error(502, 'Could not create the token')
+	const created = await createPublishToken(user.id, data.name).catch(
+		failed('Could not create the token')
 	);
 
 	void getPublishTokens().refresh();
@@ -237,8 +252,8 @@ export const createToken = form(publishTokenSchema, async (data) => {
 
 export const deleteToken = form(publishTokenIdSchema, async (data) => {
 	const user = await signedIn();
-	const deleted = await deletePublishToken(user.id, data.id).catch(() =>
-		error(502, 'Could not delete the token')
+	const deleted = await deletePublishToken(user.id, data.id).catch(
+		failed('Could not delete the token')
 	);
 
 	if (!deleted) {

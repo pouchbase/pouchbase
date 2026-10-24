@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { command, form, getRequestEvent, query } from '$app/server';
 
 import { createIndexSchema, deleteIndexSchema, updateIndexSchema } from '#lib/schemas/indexes.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -23,7 +24,7 @@ export const listIndexes = query(z.string(), async (collectionName) => {
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -49,7 +50,7 @@ export const createIndex = form(createIndexSchema, async (data, issue) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listIndexes(data.collection).refresh();
@@ -79,7 +80,7 @@ export const updateIndex = form(updateIndexSchema, async (data, issue) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listIndexes(data.collection).refresh();
@@ -98,7 +99,7 @@ export const deleteIndex = command(deleteIndexSchema, async (data) => {
 			error(404, 'Index not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listIndexes(data.collection).refresh();

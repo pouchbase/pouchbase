@@ -7,6 +7,7 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Link from '#lib/components/ui/link/index.js';
 	import * as Skeleton from '#lib/components/ui/skeleton/index.js';
+	import { errorMessage } from '#lib/errors.js';
 	import PluginCategories from './plugin-categories.svelte';
 	import { getPluginDetails, installPlugin } from './plugins.remote';
 
@@ -109,7 +110,7 @@
 		{#snippet failed(error)}
 			<Callout.Root variant="error">
 				<Icon.Root icon="lucide:circle-alert" class="size-4 shrink-0" />
-				<p>{(error as Error).message ?? 'The plugin could not be loaded'}</p>
+				<p>{errorMessage(error)}</p>
 			</Callout.Root>
 		{/snippet}
 	</svelte:boundary>

@@ -3,6 +3,7 @@ import { error, invalid } from '@sveltejs/kit';
 import { form, getRequestEvent, query } from '$app/server';
 
 import { createAdminSchema } from '#lib/schemas/admins.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -21,7 +22,7 @@ export const getAdmins = query(async () => {
 	const result = await services.users().list();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -40,7 +41,7 @@ export const createAdmin = form(createAdminSchema, async (data, issue) => {
 			invalid(issue.email('This email address is already in use'));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getAdmins().refresh();

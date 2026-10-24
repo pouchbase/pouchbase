@@ -5,6 +5,7 @@ import { error, json } from '@sveltejs/kit';
 import { SNAPSHOT_FORMAT } from '#lib/environments/snapshot.js';
 import { snapshotSchema } from '#lib/schemas/environments.js';
 import { requireDeployToken } from '#lib/server/environments.js';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * What publishing the snapshot in the body would change on this instance. Changes nothing: the
@@ -33,7 +34,7 @@ export const POST: RequestHandler = async (event) => {
 
 	if (result.isErr()) {
 		console.error('[environments] plan failed', result.error);
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return json({

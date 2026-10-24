@@ -4,6 +4,7 @@ import { form, getRequestEvent, query } from '$app/server';
 
 import { passwordProviderSchema } from '#lib/schemas/password-auth.js';
 import { oauthProviderSchema } from '#lib/schemas/settings.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -30,7 +31,7 @@ export const getAuthSettings = query(async () => {
 		);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -43,7 +44,7 @@ export const updatePasswordProvider = form(passwordProviderSchema, async (data, 
 		const mail = await services.mail().enabled();
 
 		if (mail.isErr()) {
-			error(500, mail.error.message);
+			fail(mail.error);
 		}
 
 		if (!mail.value) {
@@ -59,7 +60,7 @@ export const updatePasswordProvider = form(passwordProviderSchema, async (data, 
 	});
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getAuthSettings().refresh();
@@ -85,7 +86,7 @@ export const updateOAuthProvider = form(oauthProviderSchema, async (data, issue)
 			invalid('This provider is no longer available: its plugin was removed');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getAuthSettings().refresh();

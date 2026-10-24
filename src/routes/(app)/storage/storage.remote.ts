@@ -3,6 +3,7 @@ import { error, invalid } from '@sveltejs/kit';
 import { command, form, getRequestEvent, query } from '$app/server';
 
 import { storageSettingsSchema } from '#lib/schemas/storage.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -21,7 +22,7 @@ export const getStorageSettings = query(async () => {
 	const result = await services.storage().settings();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -57,7 +58,7 @@ export const updateStorageSettings = form(storageSettingsSchema, async (data, is
 			invalid(`Could not write to the bucket: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getStorageSettings().refresh();
@@ -73,7 +74,7 @@ export const getStorageMigration = query(async () => {
 	const result = await services.storage().migration();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -90,7 +91,7 @@ export const migrateStorage = command(async () => {
 			error(502, `Could not copy a file: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -102,7 +103,7 @@ export const skipStorageMigration = form(async () => {
 	const result = await services.storage().skipMigration();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getStorageMigration().refresh();

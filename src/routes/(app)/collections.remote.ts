@@ -9,6 +9,7 @@ import {
 	deleteCollectionSchema,
 	renameCollectionSchema
 } from '#lib/schemas/collections.js';
+import { fail } from '#lib/server/errors.js';
 
 const importSchema = z.object({
 	file: collectionExportSchema,
@@ -21,7 +22,7 @@ export const listCollections = query(async () => {
 	const result = await getRequestEvent().locals.services.collections().list();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// Built-in collections (like `users`) first.
@@ -34,7 +35,7 @@ export const getCollection = query(z.string(), async (name) => {
 	const result = await getRequestEvent().locals.services.collections().getByName(name);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {
@@ -64,7 +65,7 @@ export const createCollection = form(createCollectionSchema, async (data, issue)
 			invalid(issue.name('A collection with this name already exists'));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listCollections().refresh();
@@ -94,7 +95,7 @@ export const renameCollection = form(renameCollectionSchema, async (data, issue)
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listCollections().refresh();
@@ -122,7 +123,7 @@ export const deleteCollection = form(deleteCollectionSchema, async (data) => {
 			);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void listCollections().refresh();
@@ -170,7 +171,7 @@ export const importCollections = command(importSchema, async ({ file, ...options
 			error(422, `Stopped after ${failure.data.done} changes: ${failure.data.reason}`);
 		}
 
-		error(500, failure.message);
+		fail(failure);
 	}
 
 	if (result.value.applied) {

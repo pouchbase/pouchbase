@@ -3,6 +3,7 @@ import { error } from '@sveltejs/kit';
 import { command, getRequestEvent, query } from '$app/server';
 
 import { version } from '../../../package.json';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -21,7 +22,7 @@ export const getUpdateStatus = query(async () => {
 	const result = await services.updates().status();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -34,7 +35,7 @@ export const checkForUpdates = command(async () => {
 	const result = await services.updates().status({ refresh: true });
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	getUpdateStatus().set(result.value);
@@ -62,7 +63,7 @@ export const prepareWorkerUpdate = command(async () => {
 			error(502, `Could not start the update: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// Preparing looked up the latest release again, which may be newer than the dialog shows.
@@ -86,7 +87,7 @@ export const updateBinary = command(async () => {
 			error(409, 'There is no newer version to install');
 		}
 
-		error(500, result.error.data.reason);
+		fail(result.error);
 	}
 
 	return { version: result.value };

@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 
 import { form, getRequestEvent, query } from '$app/server';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const event = getRequestEvent();
@@ -22,11 +23,11 @@ export const getTypes = query(async () => {
 	]);
 
 	if (code.isErr()) {
-		error(500, code.error.message);
+		fail(code.error);
 	}
 
 	if (token.isErr()) {
-		error(500, token.error.message);
+		fail(token.error);
 	}
 
 	return { code: code.value, token: token.value };
@@ -38,7 +39,7 @@ export const regenerateTypesToken = form(async () => {
 	const result = await locals.services.types().regenerateToken();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getTypes().refresh();

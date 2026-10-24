@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { error } from '@sveltejs/kit';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * A completed backup as a tar archive (`manifest.json`, `system.sql` and `app.sql`), streamed from
@@ -23,7 +24,7 @@ export const GET: RequestHandler = async ({ params, locals }) => {
 			error(502, `Could not read the backup: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {

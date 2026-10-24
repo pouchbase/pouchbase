@@ -6,6 +6,7 @@
 	import * as Spinner from '#lib/components/ui/spinner/index.js';
 	import * as Table from '#lib/components/ui/table/index.js';
 	import { toast } from '#lib/components/ui/toast/index.js';
+	import { errorMessage, errorToast } from '#lib/errors.js';
 	import type { GridField } from './grid';
 	import IndexDialog from './index-dialog.svelte';
 	import { deleteIndex, listIndexes } from './indexes.remote';
@@ -34,9 +35,7 @@
 			await deleteIndex({ collection: collection.name, name });
 			toast.success('Index deleted');
 		} catch (error) {
-			toast.error(
-				(error as { body?: { message?: string } })?.body?.message ?? "The index couldn't be deleted"
-			);
+			toast.error(errorMessage(error), errorToast(error));
 		}
 	}
 </script>

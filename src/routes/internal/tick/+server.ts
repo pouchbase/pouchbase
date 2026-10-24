@@ -5,6 +5,7 @@ import { error } from '@sveltejs/kit';
 import { CLOUDFLARE_API_TOKEN } from '$app/env/private';
 
 import { json } from '#lib/server/api.js';
+import { fail } from '#lib/server/errors.js';
 
 /** How long one tick may run steps of backups and restores, and then of deployments. */
 const BUDGET = 25 * 1000;
@@ -33,7 +34,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (result.isErr()) {
 		console.error('[tick] backups failed', result.error);
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	// Publishes from another instance continue when that instance stopped driving them.
@@ -41,7 +42,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 
 	if (deployments.isErr()) {
 		console.error('[tick] deployments failed', deployments.error);
-		error(500, deployments.error.message);
+		fail(deployments.error);
 	}
 
 	return json({ backups: result.value, deployments: deployments.value });

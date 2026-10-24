@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { snapshotSchema } from '#lib/schemas/environments.js';
 import { requireDeployToken } from '#lib/server/environments.js';
+import { fail } from '#lib/server/errors.js';
 
 const applySchema = z.object({
 	snapshot: snapshotSchema,
@@ -50,7 +51,7 @@ export const POST: RequestHandler = async (event) => {
 			error(409, 'A publish, backup or restore is running on this instance');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	await environments.advance(BUDGET);

@@ -3,6 +3,7 @@ import type { RequestHandler } from './$types';
 import { error, json } from '@sveltejs/kit';
 
 import { requireDeployToken } from '#lib/server/environments.js';
+import { fail } from '#lib/server/errors.js';
 
 /** How long one request may run steps of the deployment. */
 const BUDGET = 20 * 1000;
@@ -14,7 +15,7 @@ export const GET: RequestHandler = async (event) => {
 	const result = await event.locals.services.environments().deployment(event.params.id);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {
@@ -35,13 +36,13 @@ export const POST: RequestHandler = async (event) => {
 	const advanced = await environments.advance(BUDGET);
 
 	if (advanced.isErr()) {
-		error(500, advanced.error.message);
+		fail(advanced.error);
 	}
 
 	const result = await environments.deployment(event.params.id);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {

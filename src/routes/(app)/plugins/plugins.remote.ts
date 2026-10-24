@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { form, getRequestEvent, query } from '$app/server';
 
 import { pluginIdSchema, searchPluginsSchema } from '#lib/schemas/plugins.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -57,7 +58,7 @@ export const getInstalledPlugins = query(async () => {
 	const result = await services.plugins().installed();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -111,7 +112,7 @@ export const installPlugin = form(pluginIdSchema, async ({ id }) => {
 			);
 		}
 
-		error(500, failure.message);
+		fail(failure);
 	}
 
 	void getInstalledPlugins().refresh();
@@ -129,7 +130,7 @@ export const uninstallPlugin = form(pluginIdSchema, async ({ id }) => {
 			invalid('Built-in plugins ship with Pouchbase and cannot be removed');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	if (!result.value) {

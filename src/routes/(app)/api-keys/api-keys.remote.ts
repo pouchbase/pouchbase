@@ -3,6 +3,7 @@ import { error } from '@sveltejs/kit';
 import { form, getRequestEvent, query } from '$app/server';
 
 import { apiKeyIdSchema, apiKeySchema } from '#lib/schemas/api-keys.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -21,7 +22,7 @@ export const getApiKeys = query(async () => {
 	const result = await services.apiKeys().list();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -34,7 +35,7 @@ export const createApiKey = form(apiKeySchema, async (data) => {
 	const result = await services.apiKeys().create(data.name, data.scope);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getApiKeys().refresh();
@@ -56,7 +57,7 @@ export const deleteApiKey = form(apiKeyIdSchema, async (data) => {
 			error(409, 'The key of a function is renewed when the function is deployed');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getApiKeys().refresh();

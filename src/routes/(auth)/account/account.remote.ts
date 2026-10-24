@@ -1,8 +1,9 @@
-import { error, invalid } from '@sveltejs/kit';
+import { invalid } from '@sveltejs/kit';
 
 import { form, getRequestEvent } from '$app/server';
 
 import { resetPasswordSchema, verifyEmailSchema } from '#lib/schemas/password-auth.js';
+import { fail } from '#lib/server/errors.js';
 
 /** Sets the new password of an app user, from the link in the reset email. */
 export const resetPassword = form(resetPasswordSchema, async (data, issue) => {
@@ -19,7 +20,7 @@ export const resetPassword = form(resetPasswordSchema, async (data, issue) => {
 				invalid('This link is invalid or has expired. Ask for a new one in the app.');
 				break;
 			default:
-				error(500, result.error.message);
+				fail(result.error);
 		}
 	}
 
@@ -37,7 +38,7 @@ export const verifyEmail = form(verifyEmailSchema, async (data) => {
 			invalid('This link is invalid or has expired. Ask for a new one in the app.');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { verified: true };

@@ -3,6 +3,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { form, getRequestEvent } from '$app/server';
 
 import { accountSchema } from '#lib/schemas/install.js';
+import { fail } from '#lib/server/errors.js';
 
 export const createAccount = form(accountSchema, async (data) => {
 	const { services } = getRequestEvent().locals;
@@ -17,7 +18,7 @@ export const createAccount = form(accountSchema, async (data) => {
 			error(403, 'An account has already been created');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	redirect(303, '/');

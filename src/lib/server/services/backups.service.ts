@@ -18,6 +18,7 @@ import {
 import { nextRun, parseCron } from '#lib/backups/cron.js';
 import { splitStatements } from '#lib/backups/sql.js';
 
+import { reasonOf } from '../errors';
 import { createS3Storage } from '../platform';
 import {
 	backupDestinations,
@@ -1156,7 +1157,8 @@ export class BackupsService extends Service {
 		const value = await result;
 
 		if (value.isErr()) {
-			throw new StepError(value.error.message);
+			// Stored with the job and shown in the dashboard: say what failed and why.
+			throw new StepError(reasonOf(value.error) ?? value.error.message);
 		}
 
 		return value.value;

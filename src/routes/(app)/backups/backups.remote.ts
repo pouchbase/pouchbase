@@ -10,6 +10,7 @@ import {
 	idSchema,
 	restoreBackupSchema
 } from '#lib/schemas/backups.js';
+import { fail } from '#lib/server/errors.js';
 
 /** How long one call of `advanceBackups` may run steps, so the page shows progress regularly. */
 const STEP_BUDGET = 8 * 1000;
@@ -37,19 +38,19 @@ export const getBackups = query(async () => {
 	]);
 
 	if (destinations.isErr()) {
-		error(500, destinations.error.message);
+		fail(destinations.error);
 	}
 
 	if (schedules.isErr()) {
-		error(500, schedules.error.message);
+		fail(schedules.error);
 	}
 
 	if (list.isErr()) {
-		error(500, list.error.message);
+		fail(list.error);
 	}
 
 	if (restore.isErr()) {
-		error(500, restore.error.message);
+		fail(restore.error);
 	}
 
 	return {
@@ -88,7 +89,7 @@ export const saveBackupDestination = form(backupDestinationSchema, async (data, 
 			invalid(`Could not write to the bucket: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -106,7 +107,7 @@ export const deleteBackupDestination = form(idSchema, async (data) => {
 			invalid('Wait until the running backup or restore has finished');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -132,7 +133,7 @@ export const discoverBackups = command(z.string(), async (id) => {
 				error(502, `Could not read the bucket: ${result.error.data.reason}`);
 			}
 
-			error(500, result.error.message);
+			fail(result.error);
 		}
 
 		added += result.value;
@@ -168,7 +169,7 @@ export const saveBackupSchedule = form(backupScheduleSchema, async (data, issue)
 			invalid(issue.cron('This schedule never runs'));
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -182,7 +183,7 @@ export const deleteBackupSchedule = form(idSchema, async (data) => {
 	const result = await services.backups().deleteSchedule(data.id);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -204,7 +205,7 @@ export const startBackup = form(createBackupSchema, async (data, issue) => {
 			invalid('Wait until the running restore has finished');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -230,7 +231,7 @@ export const deleteBackup = form(idSchema, async (data) => {
 			invalid(`Could not delete the backup: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -256,7 +257,7 @@ export const restoreBackup = form(restoreBackupSchema, async (data) => {
 			invalid('Only completed backups can be restored');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -284,7 +285,7 @@ export const startBackupUpload = command(
 				error(400, 'This is not a Pouchbase backup: its manifest.json is missing or invalid');
 			}
 
-			error(500, result.error.message);
+			fail(result.error);
 		}
 
 		return { id: result.value };
@@ -310,7 +311,7 @@ export const finishBackupUpload = command(z.string(), async (id) => {
 			error(502, `Could not write to the destination: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -325,7 +326,7 @@ export const cancelBackupUpload = command(z.string(), async (id) => {
 	const result = await services.backups().delete(id);
 
 	if (result.isErr() && result.error.code !== 16004) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getBackups().refresh();
@@ -343,7 +344,7 @@ export const advanceBackups = command(async () => {
 	const result = await services.backups().advance(STEP_BUDGET);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;

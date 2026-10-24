@@ -1,6 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { error } from '@sveltejs/kit';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * An export file of the collections in `?collections=a,b` (every collection without it), as a
@@ -15,7 +16,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const result = await locals.services.collections().export(names);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	const date = result.value.exportedAt.slice(0, 10);

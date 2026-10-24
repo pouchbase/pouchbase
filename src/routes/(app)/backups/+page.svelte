@@ -15,6 +15,7 @@
 	import { toast } from '#lib/components/ui/toast/index.js';
 	import * as Topbar from '#lib/components/ui/topbar/index.js';
 	import { describeCron } from '#lib/backups/cron.js';
+	import { errorMessage, errorToast } from '#lib/errors.js';
 	import { formatFileSize } from '#lib/files/files.js';
 	import BackupStatusBadge from './backup-status-badge.svelte';
 	import { advanceBackups, discoverBackups, getBackups } from './backups.remote';
@@ -56,12 +57,6 @@
 			untrack(() => void advance());
 		}
 	});
-
-	function errorMessage(error: unknown): string {
-		const body = (error as { body?: { message?: unknown } } | null)?.body;
-
-		return typeof body?.message === 'string' ? body.message : 'Something went wrong';
-	}
 
 	/** Runs steps of the running jobs from this page, so they finish without waiting for ticks. */
 	async function advance() {
@@ -106,7 +101,7 @@
 					: `Added ${added === 1 ? '1 backup' : `${added} backups`} from ${destination.name}`
 			);
 		} catch (error) {
-			toast.error(errorMessage(error));
+			toast.error(errorMessage(error), errorToast(error));
 		}
 	}
 

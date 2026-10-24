@@ -14,6 +14,7 @@ import { form, getRequestEvent, query } from '$app/server';
 
 import { USAGE_RANGES } from '#lib/cloudflare/limits.js';
 import { cloudflarePlanSchema } from '#lib/schemas/cloudflare.js';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * Data for the Cloudflare overview on the dashboard. Each section has its own query, so one that
@@ -65,7 +66,7 @@ export const getCloudflareResources = query(
 				return UNAVAILABLE;
 			}
 
-			error(500, result.error.message);
+			fail(result.error);
 		}
 
 		return { ok: true, data: result.value };
@@ -86,7 +87,7 @@ export const getCloudflareWorker = query(async (): Promise<SectionResult<WorkerI
 			return forbidden('Workers Scripts: Read');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { ok: true, data: result.value };
@@ -108,7 +109,7 @@ export const getCloudflareUsage = query(
 				return forbidden('Account Analytics: Read');
 			}
 
-			error(500, result.error.message);
+			fail(result.error);
 		}
 
 		return { ok: true, data: result.value };
@@ -129,7 +130,7 @@ export const getCloudflareLimits = query(async (): Promise<SectionResult<LimitTo
 			return forbidden('Account Analytics: Read');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { ok: true, data: result.value };
@@ -141,7 +142,7 @@ export const getCloudflarePlan = query(async (): Promise<CloudflarePlan> => {
 	const result = await services.cloudflare().plan();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -153,7 +154,7 @@ export const updateCloudflarePlan = form(cloudflarePlanSchema, async (data) => {
 	const result = await services.cloudflare().setPlan(data.plan);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	void getCloudflarePlan().refresh();

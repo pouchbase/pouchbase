@@ -4,6 +4,7 @@ import type { DatabaseFile } from '#lib/backups/archive.js';
 import { error } from '@sveltejs/kit';
 
 import { DATABASE_FILES, UPLOAD_PART_SIZE } from '#lib/backups/archive.js';
+import { fail } from '#lib/server/errors.js';
 
 /**
  * One part of a database file of an uploaded backup, as the raw request body:
@@ -44,7 +45,7 @@ export const PUT: RequestHandler = async ({ params, url, request, locals }) => {
 			error(502, `Could not upload to the destination: ${result.error.data.reason}`);
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return new Response(null, { status: 204 });

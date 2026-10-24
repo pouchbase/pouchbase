@@ -1,8 +1,9 @@
-import { error, invalid, redirect } from '@sveltejs/kit';
+import { invalid, redirect } from '@sveltejs/kit';
 
 import { form, getRequestEvent, query } from '$app/server';
 
 import { loginSchema } from '#lib/schemas/auth.js';
+import { fail } from '#lib/server/errors.js';
 
 export const login = form(loginSchema, async (data) => {
 	const { locals } = getRequestEvent();
@@ -14,7 +15,7 @@ export const login = form(loginSchema, async (data) => {
 			invalid('Invalid email address or password');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	redirect(303, '/');
@@ -26,7 +27,7 @@ export const logout = form(async () => {
 	const result = await locals.services.sessions().invalidate();
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	redirect(303, '/login');

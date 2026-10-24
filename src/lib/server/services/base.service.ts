@@ -3,6 +3,7 @@ import type { ResultAsync } from 'neverthrow';
 
 import { getRequestEvent } from '$app/server';
 
+import { reasonOf } from '../errors';
 import { PlatformError } from '../platform';
 import { db } from '../db';
 
@@ -13,6 +14,11 @@ export type ServiceError<Code extends number, Message extends string> = {
 	code: Code;
 	message: Message;
 	data?: unknown;
+	/**
+	 * What went wrong underneath, e.g. the message of D1 or the Cloudflare API. `fail()` shows it
+	 * to admins next to the message of the code.
+	 */
+	reason?: string;
 };
 
 export class Service {
@@ -26,8 +32,9 @@ export class Service {
 	 * Generically format an error object
 	 *
 	 * @param code - Give this a unique number, to reference the error
-	 * @param message - A human readable message
-	 * @param error - The original error, if any
+	 * @param message - A constant for the code, e.g. `API_KEYS_QUERY_FAILED`; the message people
+	 *   see is in `ERROR_MESSAGES` (`#lib/server/error-messages.ts`)
+	 * @param error - The original error, if any; its message becomes the `reason`
 	 * @returns
 	 */
 	error<Code extends number, Message extends string>(
@@ -35,9 +42,12 @@ export class Service {
 		message: Message,
 		error?: unknown
 	): ServiceError<Code, Message> {
+		const reason = reasonOf(error);
+
 		return {
 			code,
 			message,
+			...(reason && { reason }),
 			data:
 				error instanceof PlatformError
 					? { status: error.status, errors: error.errors }

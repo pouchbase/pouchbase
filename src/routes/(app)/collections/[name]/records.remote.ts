@@ -20,6 +20,7 @@ import {
 	RECORDS_PER_PAGE,
 	type SaveRecordInput
 } from '#lib/schemas/records.js';
+import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
 	const { locals } = getRequestEvent();
@@ -41,7 +42,7 @@ export const listRecords = query(listRecordsSchema, async ({ collection, page, s
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	const { fields, ...rest } = result.value;
@@ -70,7 +71,7 @@ export const getRecord = query(getRecordSchema, async ({ collection, id }) => {
 			error(404, 'Collection not found');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -81,7 +82,7 @@ export const listRelationOptions = query(z.string(), async (collectionId) => {
 	const result = await getRequestEvent().locals.services.records().listOptions(collectionId);
 
 	if (result.isErr()) {
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;
@@ -123,7 +124,7 @@ function failRecordWrite(
 			break;
 	}
 
-	error(500, failure.message);
+	fail(failure);
 }
 
 export const saveRecord = form('unchecked', async (data: SaveRecordInput, issue) => {
@@ -160,7 +161,7 @@ export const saveRecord = form('unchecked', async (data: SaveRecordInput, issue)
 		const saved = await services.auth().setPassword(result.value.id, password);
 
 		if (saved.isErr()) {
-			error(500, saved.error.message);
+			fail(saved.error);
 		}
 	}
 
@@ -246,7 +247,7 @@ async function storeUploads(
 					break;
 			}
 
-			error(500, result.error.message);
+			fail(result.error);
 		}
 
 		stored.push(result.value.id);
@@ -326,7 +327,7 @@ export const editImage = command(imageEditsSchema, async ({ id, edits }) => {
 				break;
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return { id };
@@ -370,7 +371,7 @@ export const deleteRecords = form(deleteRecordsSchema, async (data) => {
 			invalid('This would delete too many linked records at once. Delete fewer records.');
 		}
 
-		error(500, result.error.message);
+		fail(result.error);
 	}
 
 	return result.value;

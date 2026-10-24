@@ -1,9 +1,11 @@
+import type { ServiceError } from '../services/base.service';
 import type { Handle } from '@sveltejs/kit/hooks';
 
 import { error, redirect } from '@sveltejs/kit';
 import { okAsync } from 'neverthrow';
 
 import { json } from '../api';
+import { fail as failWith, messageOf } from '../errors';
 import { background } from '../platform/runtime';
 
 const PUBLIC_ROUTES = ['/login'];
@@ -37,6 +39,15 @@ export const guard: Handle = async ({ event, resolve }) => {
 		error(status, message);
 	};
 
+	// The databases or Cloudflare can't be reached: say what failed, and why to admins.
+	const failService = (failure: ServiceError<number, string>) => {
+		if (isApi) {
+			return json({ message: messageOf(failure) }, 500);
+		}
+
+		failWith(failure, 500);
+	};
+
 	const result = await services
 		.install()
 		.getState()
@@ -56,7 +67,7 @@ export const guard: Handle = async ({ event, resolve }) => {
 		}
 
 		console.error('[pouchbase] Could not check the installation', result.error);
-		return fail(500, result.error.message);
+		return failService(result.error);
 	}
 
 	// Installations created by an older version may have pending migrations and miss the
@@ -68,7 +79,7 @@ export const guard: Handle = async ({ event, resolve }) => {
 			.andThen(() => services.auth().ensureUsersCollection());
 
 		if (ready.isErr()) {
-			return fail(500, ready.error.message);
+			return failService(ready.error);
 		}
 
 		// Gives the Worker D1 bindings when it has none yet (right after installing, or after a
