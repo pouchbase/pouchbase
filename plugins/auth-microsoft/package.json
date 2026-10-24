@@ -1,6 +1,6 @@
 {
 	"name": "@pouchbase-plugins/auth-microsoft",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"private": true,
 	"description": "Sign in with Microsoft.",
 	"license": "MIT",

@@ -1,5 +1,11 @@
 # @pouchbasejs/js-sdk
 
+## 0.7.0
+
+### Minor Changes
+
+- [`2578b98`](https://github.com/pouchbase/pouchbase/commit/2578b98fa707dc84bc321901e8960960c50ecb9b) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: follow the redesigned API. The auth store is replaced by `pouch.session` (`session: 'browser'` or your own `SessionStorage`), `send()`/`buildUrl()` are `request()`/`url()`, the password and email methods are `sendPasswordReset()`, `resetPassword()`, `sendVerification()` and `verifyEmail()`, `collections` is `schema`, `realtime.subscribe()` is `live.watch()` (and `db.<name>.watch()`, stopped with `stop()`), the `filter` tag is `condition`, and `findMany()` pages with `limit`/`offset`.
+
 ## 0.6.0
 
 ### Minor Changes
