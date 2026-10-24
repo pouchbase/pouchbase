@@ -100,7 +100,7 @@ export async function requestApiKey(
 }
 
 /**
- * Who the records API acts for: the user of the request's bearer token (`{ auth }`, see
+ * Who the records API acts for: the user of the request's bearer token (`{ user }`, see
  * `requestUser`), or `undefined` for an API key with the `service` scope, which the API rules don't
  * apply to. Other API keys get a `403` response, an invalid key a `401`.
  */
@@ -110,7 +110,7 @@ export async function requestAccess(
 	if (!bearerToken(event)?.startsWith(API_KEY_PREFIX)) {
 		const caller = await requestUser(event);
 
-		return 'response' in caller ? caller : { access: { auth: caller.user } };
+		return 'response' in caller ? caller : { access: { user: caller.user } };
 	}
 
 	const caller = await requestServiceKey(event, 'use the records API');

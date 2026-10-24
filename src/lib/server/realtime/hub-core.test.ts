@@ -93,13 +93,13 @@ describe('parseClientMessage', () => {
 		expect(parseClientMessage('{"type":"auth","token":"t"}')).toEqual({ type: 'auth', token: 't' });
 		expect(parseClientMessage('{"type":"auth"}')).toEqual({ type: 'auth', token: undefined });
 		expect(
-			parseClientMessage('{"type":"subscribe","id":"a","filter":" views > 1 ","fields":["id"]}')
+			parseClientMessage('{"type":"subscribe","id":"a","where":" views > 1 ","select":["id"]}')
 		).toEqual({
 			type: 'subscribe',
 			id: 'a',
 			record: undefined,
-			filter: 'views > 1',
-			fields: ['id']
+			where: 'views > 1',
+			select: ['id']
 		});
 		expect(parseClientMessage('{"type":"unsubscribe","id":"a"}')).toEqual({
 			type: 'unsubscribe',
@@ -112,7 +112,7 @@ describe('parseClientMessage', () => {
 		expect(parseClientMessage('[]')).toHaveProperty('error');
 		expect(parseClientMessage('{"type":"shout"}')).toHaveProperty('error');
 		expect(parseClientMessage('{"type":"subscribe","id":"a b"}')).toHaveProperty('error');
-		expect(parseClientMessage('{"type":"subscribe","id":"a","fields":[1]}')).toHaveProperty(
+		expect(parseClientMessage('{"type":"subscribe","id":"a","select":[1]}')).toHaveProperty(
 			'error'
 		);
 		expect(parseClientMessage('{"type":"subscribe","id":"a","record":""}')).toHaveProperty('error');
@@ -179,13 +179,13 @@ describe('HubCore', () => {
 		const { calls, connect, subscribe, messages } = setup({
 			subscribe: (body) =>
 				(body as { filter: string | null }).filter === 'bad'
-					? { status: 400, body: { code: 'invalid_filter', message: 'Unknown field `bad`' } }
+					? { status: 400, body: { code: 'invalid_query', message: 'Unknown field `bad`' } }
 					: { status: 200, body: {} }
 		});
 
 		await connect('s1', 'ada');
-		await subscribe('s1', { id: 'all', fields: ['id', 'title'] });
-		await subscribe('s1', { id: 'one', record: 'p1', filter: 'bad' });
+		await subscribe('s1', { id: 'all', select: ['id', 'title'] });
+		await subscribe('s1', { id: 'one', record: 'p1', where: 'bad' });
 		await subscribe('s1', { id: 'all' });
 
 		expect(calls[1]).toEqual({
@@ -202,7 +202,7 @@ describe('HubCore', () => {
 		});
 		expect(messages('s1').slice(1)).toEqual([
 			{ type: 'subscribed', id: 'all' },
-			{ type: 'error', id: 'one', code: 'invalid_filter', message: 'Unknown field `bad`' },
+			{ type: 'error', id: 'one', code: 'invalid_query', message: 'Unknown field `bad`' },
 			{
 				type: 'error',
 				id: 'all',
@@ -235,7 +235,7 @@ describe('HubCore', () => {
 
 		await connect('ada', 'ada');
 		await connect('grace', 'grace');
-		await subscribe('ada', { id: 'all', fields: ['title'] });
+		await subscribe('ada', { id: 'all', select: ['title'] });
 		await subscribe('ada', { id: 'other', record: 'p2' });
 		await subscribe('grace', { id: 'all' });
 		await hub.publish([event('p1', { id: 'p1', title: 'Hi', views: 3 })]);
@@ -278,7 +278,7 @@ describe('HubCore', () => {
 
 		await connect('ada', 'ada');
 		await subscribe('ada', { id: 'ids' });
-		await subscribe('ada', { id: 'records', fields: ['title'], expand: ['author'] });
+		await subscribe('ada', { id: 'records', select: ['title'], include: ['author'] });
 		await hub.publish([event('p1', { id: 'p1', title: 'Hi', author: 'ada' })]);
 
 		const authorize = calls.find((call) => call.path === 'authorize')!;
@@ -306,14 +306,14 @@ describe('HubCore', () => {
 		]);
 	});
 
-	it('refuses an invalid expand', () => {
-		expect(parseClientMessage('{"type":"subscribe","id":"a","expand":"author"}')).toHaveProperty(
+	it('refuses an invalid include', () => {
+		expect(parseClientMessage('{"type":"subscribe","id":"a","include":"author"}')).toHaveProperty(
 			'error'
 		);
-		expect(parseClientMessage('{"type":"subscribe","id":"a","expand":["author.team"]}')).toEqual({
+		expect(parseClientMessage('{"type":"subscribe","id":"a","include":["author.team"]}')).toEqual({
 			type: 'subscribe',
 			id: 'a',
-			expand: ['author.team']
+			include: ['author.team']
 		});
 	});
 

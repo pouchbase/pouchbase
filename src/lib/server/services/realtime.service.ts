@@ -44,10 +44,10 @@ export type AuthorizeRequest = {
 
 type ForbiddenError = ServiceError<22002, 'SUBSCRIPTION_FORBIDDEN'>;
 type InvalidSubscriptionError = ServiceError<22003, 'INVALID_SUBSCRIPTION'> & {
-	data: { param: 'filter' | 'fields' | 'expand'; message: string };
+	data: { param: 'where' | 'select' | 'include'; message: string };
 };
 
-type ExpandError = ErrorOf<ReturnType<RecordsService['apiExpand']>>;
+type IncludeError = ErrorOf<ReturnType<RecordsService['apiInclude']>>;
 
 /** What the records API checks for `subject`: nothing for admins (the dashboard). */
 function apiAccess(subject: Subject): ApiAccess | undefined {
@@ -55,7 +55,7 @@ function apiAccess(subject: Subject): ApiAccess | undefined {
 		return undefined;
 	}
 
-	return { auth: subject.kind === 'user' ? subject.auth : null };
+	return { user: subject.kind === 'user' ? subject.auth : null };
 }
 
 /** The fields the records API reads and filters on: all but blobs. */
@@ -129,7 +129,7 @@ export class RealtimeService extends Service {
 	/**
 	 * Whether `subject` may subscribe: the collection exists, the API offers `view` for it and its
 	 * view rule isn't locked or invalid (admins skip the rule), and the filter, fields and `expand`
-	 * are valid (see `RecordsService.apiExpand`).
+	 * are valid (see `RecordsService.apiInclude`).
 	 */
 	checkSubscription(
 		request: SubscriptionRequest
@@ -139,7 +139,7 @@ export class RealtimeService extends Service {
 		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
 		| ForbiddenError
 		| InvalidSubscriptionError
-		| ExpandError
+		| IncludeError
 	> {
 		return this.services
 			.collections()
@@ -154,7 +154,7 @@ export class RealtimeService extends Service {
 					}
 
 					try {
-						if (!compileRule(collection.settings.rules?.view, readable, { auth })) {
+						if (!compileRule(collection.settings.rules?.view, readable, { user: auth })) {
 							return errAsync(this.error(22002, 'SUBSCRIPTION_FORBIDDEN'));
 						}
 					} catch {
@@ -164,9 +164,9 @@ export class RealtimeService extends Service {
 
 				if (request.filter) {
 					try {
-						compileFilter(request.filter, readable, { auth });
+						compileFilter(request.filter, readable, { user: auth });
 					} catch (error) {
-						return errAsync(this.invalid('filter', error));
+						return errAsync(this.invalid('where', error));
 					}
 				}
 
@@ -175,7 +175,7 @@ export class RealtimeService extends Service {
 				);
 
 				if (unknown) {
-					return errAsync(this.invalid('fields', new FilterError(`Unknown field \`${unknown}\``)));
+					return errAsync(this.invalid('select', new FilterError(`Unknown field \`${unknown}\``)));
 				}
 
 				if (!request.expand?.length) {
@@ -184,12 +184,12 @@ export class RealtimeService extends Service {
 
 				return this.services
 					.records()
-					.apiExpand(request.collection, [], request.expand, apiAccess(request.subject))
-					.mapErr((error): ExpandError | ForbiddenError | InvalidSubscriptionError => {
+					.apiInclude(request.collection, [], request.expand, apiAccess(request.subject))
+					.mapErr((error): IncludeError | ForbiddenError | InvalidSubscriptionError => {
 						if (error.code === 8015) {
 							return {
 								...this.error(22003, 'INVALID_SUBSCRIPTION'),
-								data: { param: 'expand', message: `Invalid expand: ${error.data.message}` }
+								data: { param: 'include', message: `Invalid include: ${error.data.message}` }
 							};
 						}
 
@@ -277,7 +277,7 @@ export class RealtimeService extends Service {
 			[...groups].map(([key, group]) =>
 				this.services
 					.records()
-					.apiExpand(
+					.apiInclude(
 						request.collection,
 						group.items.map((item) => item.record),
 						group.expand,
@@ -355,7 +355,7 @@ export class RealtimeService extends Service {
 		});
 	}
 
-	private invalid(param: 'filter' | 'fields' | 'expand', error: unknown): InvalidSubscriptionError {
+	private invalid(param: 'where' | 'select' | 'include', error: unknown): InvalidSubscriptionError {
 		return {
 			...this.error(22003, 'INVALID_SUBSCRIPTION'),
 			data: { param, message: error instanceof FilterError ? error.message : `Invalid ${param}` }

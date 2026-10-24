@@ -14,6 +14,7 @@ import {
 	RELATION_ON_DELETE_IDS,
 	RICH_TEXT_FORMATS
 } from '#lib/fields/field-types.js';
+import { upgradeSettings } from '#lib/collections/upgrade.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 import { FUNCTION_LANGUAGES, MAX_CODE_SIZE } from '#lib/functions/functions.js';
 
@@ -66,10 +67,13 @@ export const snapshotCollectionSchema = z.object({
 	id,
 	name,
 	system: z.boolean(),
-	settings: z.object({
-		thumbnails: z.object({ enabled: z.boolean(), sizes: z.array(z.string()) }).optional(),
-		rules: z.partialRecord(z.enum(API_RULE_ACTIONS), z.string().nullable()).optional()
-	}),
+	// Snapshots and export files of older versions can hold settings in an older syntax.
+	settings: z
+		.object({
+			thumbnails: z.object({ enabled: z.boolean(), sizes: z.array(z.string()) }).optional(),
+			rules: z.partialRecord(z.enum(API_RULE_ACTIONS), z.string().nullable()).optional()
+		})
+		.transform(upgradeSettings),
 	fields: z.array(snapshotFieldSchema),
 	/** Custom indexes only: the indexes of "Unique" fields come with the field. */
 	indexes: z.array(snapshotIndexSchema)

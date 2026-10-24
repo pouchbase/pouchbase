@@ -32,12 +32,12 @@ export const invoke = snippet(
 	'typescript',
 	`
 // POST /api/functions/hello with a JSON body; the signed-in user's token is sent along.
-const { message } = await pb.functions.invoke<{ message: string }>('hello', {
+const { message } = await pouch.functions.invoke<{ message: string }>('hello', {
 	body: { name: 'Ada' }
 });
 
 // Another method, a path below the function and a query string.
-await pb.functions.invoke('orders', { method: 'GET', path: '/42', query: { expand: 'items' } });`
+await pouch.functions.invoke('orders', { method: 'GET', path: '/42', query: { include: 'items' } });`
 );
 
 export const curl = snippet(

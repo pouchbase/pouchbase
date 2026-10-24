@@ -450,7 +450,7 @@ export class CollectionsService extends Service {
 
 				try {
 					// Compiled as a signed-in request, so every part of the rule is checked.
-					compileRule(rule, readable, { auth: {}, body: {} });
+					compileRule(rule, readable, { user: {}, input: {} });
 					saved[action] = rule === null ? null : rule.trim();
 				} catch (error) {
 					issues[action] = error instanceof Error ? error.message : 'Invalid rule';
@@ -514,7 +514,7 @@ export class CollectionsService extends Service {
 		});
 	}
 
-	/** Creates a collection with its fields, indexes and API rules (`POST /api/collections`). */
+	/** Creates a collection with its fields, indexes and API rules (`POST /api/schema`). */
 	createFromApi(
 		input: ApiCreateCollection
 	): ResultAsync<
@@ -537,7 +537,7 @@ export class CollectionsService extends Service {
 	}
 
 	/**
-	 * Changes a collection (`PATCH /api/collections/<name>`): only the given parts. Fields and
+	 * Changes a collection (`PATCH /api/schema/<name>`): only the given parts. Fields and
 	 * indexes left out of a given list are deleted, which needs `force`.
 	 */
 	updateFromApi(

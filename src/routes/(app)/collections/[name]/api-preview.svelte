@@ -104,7 +104,7 @@
 		</div>
 		<p>
 			Send <span class="font-mono">Authorization: Bearer &lt;token&gt;</span> to act as a signed-in
-			user; the SDK does this after <span class="font-mono">pb.auth.signIn()</span>.
+			user; the SDK does this after <span class="font-mono">pouch.auth.signIn()</span>.
 		</p>
 	</div>
 

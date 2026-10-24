@@ -80,22 +80,22 @@
 		},
 		{
 			method: 'POST',
-			path: '/api/auth/password/request-reset',
+			path: '/api/auth/password/forgot',
 			purpose: 'Email a link to choose a new password: { email }'
 		},
 		{
 			method: 'POST',
-			path: '/api/auth/password/confirm-reset',
+			path: '/api/auth/password/reset',
 			purpose: 'Set the new password: { token, password }'
 		},
 		{
 			method: 'POST',
-			path: '/api/auth/verification/request',
+			path: '/api/auth/email/send-verification',
 			purpose: 'Email a link to verify the address: { email }'
 		},
 		{
 			method: 'POST',
-			path: '/api/auth/verification/confirm',
+			path: '/api/auth/email/verify',
 			purpose: 'Verify the address: { token }'
 		},
 		{

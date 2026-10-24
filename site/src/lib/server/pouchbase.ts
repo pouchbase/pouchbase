@@ -1,4 +1,4 @@
-import { AuthStore, createClient } from '@pouchbasejs/js-sdk';
+import { createClient } from '@pouchbasejs/js-sdk';
 import type { Pouchbase, User } from '@pouchbasejs/js-sdk';
 
 import { POUCHBASE_SERVICE_KEY } from '$app/env/private';
@@ -86,9 +86,13 @@ export type Schema = {
 
 /** A client for the instance, signed in with the user's token when there is one. */
 export function pouchbase(token?: string): Pouchbase<Schema> {
-	return createClient<Schema>(POUCHBASE_URL ?? '', {
-		authStore: token ? new AuthStore({ token, userId: '', user: null }) : undefined
-	});
+	const pouch = createClient<Schema>(POUCHBASE_URL ?? '');
+
+	if (token) {
+		pouch.session.begin({ token, userId: '' });
+	}
+
+	return pouch;
 }
 
 /** A client with the service key: API rules don't apply to it. Server-side only. */

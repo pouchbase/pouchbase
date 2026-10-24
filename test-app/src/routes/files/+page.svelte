@@ -1,25 +1,25 @@
 <script lang="ts">
 	import Output from '#lib/components/output.svelte';
 	import Panel from '#lib/components/panel.svelte';
-	import { pb } from '#lib/pouchbase.svelte.js';
+	import { pouch } from '#lib/pouchbase.svelte.js';
 	import { Runner } from '#lib/run.svelte.js';
 
 	const runner = new Runner();
 
 	let id = $state('');
-	let thumb = $state('');
+	let size = $state('');
 	let download = $state(false);
 
 	const url = $derived(
-		id.trim() ? pb.files.url(id.trim(), { thumb: thumb || undefined, download }) : ''
+		id.trim() ? pouch.files.url(id.trim(), { size: size || undefined, download }) : ''
 	);
 </script>
 
-<Panel title="File URL" description="GET /api/files/<id> · pb.files.url()">
+<Panel title="File URL" description="GET /api/files/<id> · pouch.files.url()">
 	<div class="stack">
 		<div class="row">
 			<label>File id <input bind:value={id} /></label>
-			<label>Thumb <input bind:value={thumb} placeholder="100x100" /></label>
+			<label>Size <input bind:value={size} placeholder="100x100:fit" /></label>
 			<label class="check"><input type="checkbox" bind:checked={download} /> download</label>
 		</div>
 		{#if url}
@@ -37,7 +37,9 @@
 		<button
 			disabled={runner.loading}
 			onclick={() =>
-				runner.run(() => pb.db.$collection('files').findMany({ orderBy: { created_at: 'desc' } }))}
+				runner.run(() =>
+					pouch.db.$collection('files').findMany({ orderBy: { created_at: 'desc' } })
+				)}
 		>
 			List files
 		</button>

@@ -44,7 +44,7 @@
 							first request.
 						</p>
 						<p class="text-sm text-zinc-500">
-							URL: <span class="font-mono">/api/files/&lt;id&gt;?thumb=&lt;size&gt;</span>
+							URL: <span class="font-mono">/api/files/&lt;id&gt;?size=&lt;size&gt;</span>
 						</p>
 					</div>
 
@@ -65,8 +65,9 @@
 							/>
 							<Form.Description>
 								<span class="font-mono">WxH</span> crops to fill (also
-								<span class="font-mono">WxHt</span> / <span class="font-mono">WxHb</span> from the
-								top / bottom), <span class="font-mono">WxHf</span> fits inside without cropping,
+								<span class="font-mono">WxH:top</span> / <span class="font-mono">WxH:bottom</span>
+								from the top / bottom), <span class="font-mono">WxH:fit</span> fits inside without
+								cropping,
 								<span class="font-mono">Wx0</span> and <span class="font-mono">0xH</span> scale to a width
 								or height. Images are never enlarged.
 							</Form.Description>

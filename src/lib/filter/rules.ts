@@ -3,7 +3,7 @@ import { USERS_COLLECTION } from '#lib/auth/users.js';
 
 /**
  * API rules of a collection: one per action of the records API
- * (`/api/collections/<name>/records`). Shared between the client and the server.
+ * (`/api/db/<name>`). Shared between the client and the server.
  */
 
 export const API_RULE_ACTIONS = ['list', 'view', 'create', 'update', 'delete'] as const;
@@ -16,8 +16,8 @@ export type ApiRuleAction = (typeof API_RULE_ACTIONS)[number];
  * - `null` (or missing): locked; the action isn't available through the API, only to admins in the
  *   dashboard. The default, so new collections are private.
  * - `''`: anyone may, also without signing in.
- * - a filter expression (see `filter.ts`): only for records that match it, e.g.
- *   `author = @request.auth.id`. For `list` it filters the results; for `create` it is checked
+ * - a condition (see `filter.ts`): only for records that match it, e.g.
+ *   `author == $user.id`. For `list` it filters the results; for `create` it is checked
  *   against the new record.
  */
 export type ApiRules = Partial<Record<ApiRuleAction, string | null>>;
@@ -53,12 +53,12 @@ export function protectedApiFields(collection: { name: string; system: boolean }
 }
 
 /** The rule of "Signed-in users": any request with a valid token. */
-export const SIGNED_IN_RULE = '@request.auth.id != ""';
+export const SIGNED_IN_RULE = '$user.id != null';
 
 /**
- * The rule of "Owner": only the user whose id is in `field`, a relation to `users` (`?=` for a
+ * The rule of "Owner": only the user whose id is in `field`, a relation to `users` (`any()` for a
  * multiple relation). For `users` itself, `id` is the user.
  */
 export function ownerRule(field: string, multiple = false) {
-	return `${field} ${multiple ? '?=' : '='} @request.auth.id`;
+	return multiple ? `any(${field}) == $user.id` : `${field} == $user.id`;
 }

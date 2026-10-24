@@ -17,13 +17,13 @@ To test against another instance, such as `pnpm dev:app` on http://localhost:517
 
 ## Pages
 
-| Page      | What it tries                                                                                                                                  |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Health    | `pb.health()`, `pb.auth.providers()`                                                                                                           |
-| Auth      | Sign-up, sign-in, OAuth popups, `me()`, password resets, email verification                                                                    |
-| Records   | `findMany`, `findFirst`, `count`, `findAll`, `find`, `insert`, `patch`, `remove` on any collection, with `where` objects or filter expressions |
-| Realtime  | Subscriptions to a collection or a record, with the connection state and events                                                                |
-| Functions | `pb.functions.invoke()` with any method, path, query and body                                                                                  |
-| Files     | `pb.files.url()` with thumbnails and downloads, and the `files` collection                                                                     |
+| Page      | What it tries                                                                                                                                       |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health    | `pouch.health()`, `pouch.auth.providers()`                                                                                                          |
+| Auth      | Sign-up, sign-in, OAuth popups, `me()`, the session, password resets, email verification                                                            |
+| Database  | `findMany`, `findFirst`, `count`, `findAll`, `find`, `insert`, `patch`, `remove` on any collection, with `where` objects or hand-written conditions |
+| Live      | `pouch.live.watch()` on a collection or a record, with the connection state and events                                                              |
+| Functions | `pouch.functions.invoke()` with any method, path, query and body                                                                                    |
+| Files     | `pouch.files.url()` with thumbnail sizes and downloads, and the `files` collection                                                                  |
 
-Every call shows its result or the `PouchbaseError` (kind, status, message, issues) and how long it took. The token is kept in `localStorage` by `LocalAuthStore`.
+Every call shows its result or the `PouchbaseError` (kind, status, message, issues) and how long it took. The session is kept in `localStorage` (`session: 'browser'`).

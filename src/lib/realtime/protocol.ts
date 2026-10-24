@@ -1,5 +1,5 @@
 /**
- * The realtime protocol: messages over the WebSocket at `/api/realtime?collection=<name>`, which
+ * The realtime protocol: messages over the WebSocket at `/api/live?collection=<name>`, which
  * sends the create, update and delete events of one collection's records. A client opens one
  * socket per collection, sends `auth` first and then subscribes to every record or to one.
  *
@@ -7,7 +7,7 @@
  * `packages/js-sdk/src/realtime/protocol.ts`; keep both in sync.
  */
 
-export const REALTIME_PATH = '/api/realtime';
+export const REALTIME_PATH = '/api/live';
 
 export type RealtimeAction = 'create' | 'update' | 'delete';
 
@@ -18,16 +18,16 @@ export type ClientMessage =
 	/** The first message: the token of an app user, or none (anonymous, or the dashboard's session). */
 	| { type: 'auth'; token?: string }
 	/**
-	 * Every record of the collection, or the one with id `record`; `filter`, `fields` and `expand`
+	 * Every record of the collection, or the one with id `record`; `where`, `select` and `include`
 	 * (`["author", "comments.author"]`) as in the records API.
 	 */
 	| {
 			type: 'subscribe';
 			id: string;
 			record?: string;
-			filter?: string;
-			fields?: string[];
-			expand?: string[];
+			where?: string;
+			select?: string[];
+			include?: string[];
 	  }
 	| { type: 'unsubscribe'; id: string };
 
@@ -55,8 +55,8 @@ export type RealtimeErrorCode =
 	| 'collection_not_found'
 	/** The API doesn't offer `view` for this collection, or its view rule is locked or invalid. */
 	| 'forbidden'
-	/** The filter doesn't compile, `fields` names a field that doesn't exist, or `expand` is invalid. */
-	| 'invalid_filter'
+	/** `where` doesn't compile, `select` names a field that doesn't exist, or `include` is invalid. */
+	| 'invalid_query'
 	| 'too_many_subscriptions'
 	| 'duplicate_id'
 	/** The server couldn't check the subscription. */

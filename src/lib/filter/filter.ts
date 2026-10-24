@@ -1,31 +1,40 @@
 /**
- * Filter expressions, used by `?filter=` of the records API and by the API
- * rules of a collection:
+ * Conditions, used by `?where=` of the records API and by the API rules of a collection:
  *
  * ```
- * status = "published" && (views > 10 || author = @request.auth.id)
+ * status == "published" and (views > 10 or author == $user.id)
  * ```
  *
- * - Operands: field names, `"strings"` or `'strings'`, numbers, `true`, `false`, `null`, `@now`,
- *   `@request.auth.<field>` (the signed-in user; `""` when signed out) and
- *   `@request.body.<field>` (the submitted value, for create and update rules).
- * - Operators: `=`, `!=`, `>`, `>=`, `<`, `<=`, `~` (contains / like), `!~` (doesn't contain), and
- *   the same prefixed with `?` (`?=`, `?~`, ...) for "any item of" a multiple relation or list.
- * - `&&`, `||` and parentheses; `//` starts a comment until the end of the line.
+ * - Operands: field names, `"strings"` or `'strings'`, numbers, `true`, `false`, `null`, `$now`,
+ *   `$user.<field>` (the signed-in user; empty when signed out) and `$input.<field>` (the
+ *   submitted value, for create and update rules).
+ * - Comparisons: `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains` and `not contains` (case-insensitive;
+ *   `%` in a literal is a wildcard).
+ * - `any(<field>) <comparison> <value>`: true when any item of a multiple relation or list matches.
+ * - `and`, `or` and parentheses; `#` starts a comment until the end of the line.
  *
  * Shared between the client (validating rules in forms) and the server, which compiles the parsed
  * expression to SQL (`src/lib/server/filter.ts`).
  */
 
-export const COMPARE_OPERATORS = ['=', '!=', '>', '>=', '<', '<=', '~', '!~'] as const;
+export const COMPARE_OPERATORS = [
+	'==',
+	'!=',
+	'>',
+	'>=',
+	'<',
+	'<=',
+	'contains',
+	'not contains'
+] as const;
 
 export type CompareOperator = (typeof COMPARE_OPERATORS)[number];
 
 export type Operand =
 	// `position`: where the name starts in the text, for error messages in the editor.
 	| { kind: 'field'; name: string; position: number }
-	| { kind: 'auth'; name: string; position: number }
-	| { kind: 'body'; name: string; position: number }
+	| { kind: 'user'; name: string; position: number }
+	| { kind: 'input'; name: string; position: number }
 	| { kind: 'string'; value: string }
 	| { kind: 'number'; value: number }
 	| { kind: 'boolean'; value: boolean }
@@ -37,20 +46,23 @@ export type FilterExpression =
 	| {
 			kind: 'compare';
 			operator: CompareOperator;
-			/** `?=`, `?~`, ...: true when any item of the left (multiple) value matches. */
+			/** `any(field) …`: true when any item of the left (multiple) value matches. */
 			any: boolean;
 			left: Operand;
 			right: Operand;
 	  };
 
-/** Longest filter or rule, in characters. */
+/** Longest condition or rule, in characters. */
 export const MAX_FILTER_LENGTH = 3500;
 /** Most comparisons in one expression; keeps the SQL within D1's limit of bound parameters. */
 export const MAX_COMPARISONS = 30;
 
 const NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** A filter that can't be parsed; `position` is the offset in the text where it went wrong. */
+/** Words with a meaning of their own, so they can't be field names in a condition. */
+export const KEYWORDS = ['and', 'or', 'not', 'any', 'contains'] as const;
+
+/** A condition that can't be parsed; `position` is the offset in the text where it went wrong. */
 export class FilterError extends Error {
 	override name = 'FilterError';
 	readonly position: number;
@@ -65,8 +77,8 @@ type Token =
 	| { type: 'string'; value: string; position: number }
 	| { type: 'number'; value: number; position: number }
 	| { type: 'identifier'; value: string; position: number }
-	| { type: 'operator'; value: CompareOperator; any: boolean; position: number }
-	| { type: 'and' | 'or' | '(' | ')'; position: number };
+	| { type: 'operator'; value: CompareOperator; position: number }
+	| { type: 'and' | 'or' | 'any' | '(' | ')'; position: number };
 
 function tokenize(text: string): Token[] {
 	const tokens: Token[] = [];
@@ -75,13 +87,14 @@ function tokenize(text: string): Token[] {
 	while (index < text.length) {
 		const char = text[index];
 		const position = index;
+		const rest = text.slice(index);
 
 		if (/\s/.test(char)) {
 			index++;
 			continue;
 		}
 
-		if (text.startsWith('//', index)) {
+		if (char === '#') {
 			const end = text.indexOf('\n', index);
 			index = end === -1 ? text.length : end;
 			continue;
@@ -93,10 +106,11 @@ function tokenize(text: string): Token[] {
 			continue;
 		}
 
-		if (text.startsWith('&&', index) || text.startsWith('||', index)) {
-			tokens.push({ type: char === '&' ? 'and' : 'or', position });
-			index += 2;
-			continue;
+		if (rest.startsWith('&&') || rest.startsWith('||')) {
+			throw new FilterError(
+				`Use \`${char === '&' ? 'and' : 'or'}\` to combine conditions`,
+				position
+			);
 		}
 
 		if (char === '"' || char === "'") {
@@ -122,7 +136,7 @@ function tokenize(text: string): Token[] {
 			continue;
 		}
 
-		const number = /^-?\d+(\.\d+)?/.exec(text.slice(index));
+		const number = /^-?\d+(\.\d+)?/.exec(rest);
 
 		if (number) {
 			tokens.push({ type: 'number', value: Number(number[0]), position });
@@ -130,26 +144,42 @@ function tokenize(text: string): Token[] {
 			continue;
 		}
 
-		const operator = /^\??(!=|>=|<=|!~|=|>|<|~)/.exec(text.slice(index));
+		const operator = /^(==|!=|>=|<=|>|<)/.exec(rest);
 
 		if (operator) {
-			const any = operator[0].startsWith('?');
-
-			tokens.push({
-				type: 'operator',
-				value: (any ? operator[0].slice(1) : operator[0]) as CompareOperator,
-				any,
-				position
-			});
+			tokens.push({ type: 'operator', value: operator[0] as CompareOperator, position });
 			index += operator[0].length;
 			continue;
 		}
 
-		const identifier = /^@?[A-Za-z_][A-Za-z0-9_.]*/.exec(text.slice(index));
+		if (char === '=') {
+			throw new FilterError('Use `==` to compare', position);
+		}
 
-		if (identifier) {
-			tokens.push({ type: 'identifier', value: identifier[0], position });
-			index += identifier[0].length;
+		const notContains = /^not\s+contains\b/.exec(rest);
+
+		if (notContains) {
+			tokens.push({ type: 'operator', value: 'not contains', position });
+			index += notContains[0].length;
+			continue;
+		}
+
+		const word = /^\$?[A-Za-z_][A-Za-z0-9_.]*/.exec(rest);
+
+		if (word) {
+			const value = word[0];
+
+			if (value === 'contains') {
+				tokens.push({ type: 'operator', value, position });
+			} else if (value === 'and' || value === 'or' || value === 'any') {
+				tokens.push({ type: value, position });
+			} else if (value === 'not') {
+				throw new FilterError('Use `!=` or `not contains`', position);
+			} else {
+				tokens.push({ type: 'identifier', value, position });
+			}
+
+			index += value.length;
 			continue;
 		}
 
@@ -166,23 +196,23 @@ function identifierOperand(value: string, position: number): Operand {
 			return { kind: 'boolean', value: value === 'true' };
 		case 'null':
 			return { kind: 'null' };
-		case '@now':
+		case '$now':
 			return { kind: 'now' };
 	}
 
-	const request = /^@request\.(auth|body)\.(.+)$/.exec(value);
+	const variable = /^\$(user|input)\.(.+)$/.exec(value);
 
-	if (request) {
-		if (!NAME.test(request[2])) {
-			throw new FilterError(`\`${request[2]}\` is not a field name`, position);
+	if (variable) {
+		if (!NAME.test(variable[2])) {
+			throw new FilterError(`\`${variable[2]}\` is not a field name`, position);
 		}
 
-		return { kind: request[1] as 'auth' | 'body', name: request[2], position };
+		return { kind: variable[1] as 'user' | 'input', name: variable[2], position };
 	}
 
-	if (value.startsWith('@')) {
+	if (value.startsWith('$')) {
 		throw new FilterError(
-			`Unknown variable \`${value}\`; use @now, @request.auth.<field> or @request.body.<field>`,
+			`Unknown variable \`${value}\`; use $now, $user.<field> or $input.<field>`,
 			position
 		);
 	}
@@ -199,8 +229,8 @@ function identifierOperand(value: string, position: number): Operand {
 }
 
 /**
- * Parses a filter expression.
- * @throws {FilterError} When the text isn't a valid expression.
+ * Parses a condition.
+ * @throws {FilterError} When the text isn't a valid condition.
  */
 export function parseFilter(text: string): FilterExpression {
 	if (text.length > MAX_FILTER_LENGTH) {
@@ -213,6 +243,14 @@ export function parseFilter(text: string): FilterExpression {
 
 	const peek = () => tokens[index];
 	const end = () => (tokens.at(-1)?.position ?? 0) + 1;
+
+	function expect(type: '(' | ')', message: string) {
+		if (peek()?.type !== type) {
+			throw new FilterError(message, peek()?.position ?? end());
+		}
+
+		index++;
+	}
 
 	function operand(): Operand {
 		const token = tokens[index++];
@@ -241,20 +279,32 @@ export function parseFilter(text: string): FilterExpression {
 
 			const inner = or();
 
-			if (peek()?.type !== ')') {
-				throw new FilterError('Missing `)`', peek()?.position ?? end());
-			}
-
-			index++;
+			expect(')', 'Missing `)`');
 			return inner;
 		}
 
+		const any = token?.type === 'any';
+
+		if (any) {
+			index++;
+			expect('(', 'Expected `(` after `any`');
+		}
+
 		const left = operand();
+
+		if (any) {
+			if (left.kind !== 'field') {
+				throw new FilterError('`any()` takes a field of this collection', token.position);
+			}
+
+			expect(')', 'Missing `)`');
+		}
+
 		const operator = tokens[index++];
 
 		if (operator?.type !== 'operator') {
 			throw new FilterError(
-				'Expected an operator such as =, !=, >, < or ~',
+				'Expected a comparison such as ==, !=, >, < or contains',
 				operator?.position ?? end()
 			);
 		}
@@ -263,7 +313,7 @@ export function parseFilter(text: string): FilterExpression {
 			throw new FilterError(`Use at most ${MAX_COMPARISONS} comparisons`, operator.position);
 		}
 
-		return { kind: 'compare', operator: operator.value, any: operator.any, left, right: operand() };
+		return { kind: 'compare', operator: operator.value, any, left, right: operand() };
 	}
 
 	function and(): FilterExpression {
@@ -289,20 +339,20 @@ export function parseFilter(text: string): FilterExpression {
 	}
 
 	if (!tokens.length) {
-		throw new FilterError('The filter is empty');
+		throw new FilterError('The condition is empty');
 	}
 
 	const expression = or();
 	const rest = peek();
 
 	if (rest) {
-		throw new FilterError('Expected && or || between conditions', rest.position);
+		throw new FilterError('Expected `and` or `or` between conditions', rest.position);
 	}
 
 	return expression;
 }
 
-/** Names of the collection's fields an expression reads (not those of `@request.*`). */
+/** Names of the collection's fields an expression reads (not those of `$user` or `$input`). */
 export function filterFields(expression: FilterExpression): string[] {
 	if (expression.kind !== 'compare') {
 		return [...new Set([...filterFields(expression.left), ...filterFields(expression.right)])];
@@ -313,12 +363,12 @@ export function filterFields(expression: FilterExpression): string[] {
 	);
 }
 
-/** A problem in a filter, with the part of the text it is about (offsets, `end` exclusive). */
+/** A problem in a condition, with the part of the text it is about (offsets, `end` exclusive). */
 export type FilterProblem = { message: string; start: number; end: number };
 
 /** The end of the word (name, number, string or operator) that starts at `start`. */
 function wordEnd(text: string, start: number) {
-	const match = /^(@?[\w.]+|"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\s\w]+)/.exec(
+	const match = /^(\$?[\w.]+|"(?:\\.|[^"\\])*"?|'(?:\\.|[^'\\])*'?|[^\s\w]+)/.exec(
 		text.slice(start)
 	);
 
@@ -326,13 +376,13 @@ function wordEnd(text: string, start: number) {
 }
 
 /**
- * Checks a filter as the server will: its syntax, and that the fields it uses exist. Fields of the
- * signed-in user (`@request.auth.*`) are only checked when `authFields` is given. Returns the
- * first problem, or `null` when the filter is valid.
+ * Checks a condition as the server will: its syntax, and that the fields it uses exist. Fields of
+ * the signed-in user (`$user.*`) are only checked when `userFields` is given. Returns the first
+ * problem, or `null` when the condition is valid.
  */
 export function checkFilter(
 	text: string,
-	names: { fields: string[]; authFields?: string[] }
+	names: { fields: string[]; userFields?: string[] }
 ): FilterProblem | null {
 	let expression: FilterExpression;
 
@@ -354,17 +404,17 @@ export function checkFilter(
 			: [...operands(node.left), ...operands(node.right)];
 
 	for (const operand of operands(expression)) {
-		if (operand.kind !== 'field' && operand.kind !== 'auth' && operand.kind !== 'body') {
+		if (operand.kind !== 'field' && operand.kind !== 'user' && operand.kind !== 'input') {
 			continue;
 		}
 
 		const known =
-			operand.kind === 'auth'
-				? !names.authFields || names.authFields.includes(operand.name)
+			operand.kind === 'user'
+				? !names.userFields || names.userFields.includes(operand.name)
 				: names.fields.includes(operand.name);
 
 		if (!known) {
-			const owner = operand.kind === 'auth' ? 'users' : 'this collection';
+			const owner = operand.kind === 'user' ? 'users' : 'this collection';
 
 			return {
 				message: `\`${operand.name}\` is not a field of ${owner}`,

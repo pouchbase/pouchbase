@@ -2,9 +2,9 @@ import type { Pouchbase } from '../client.js';
 import { pending, PouchbaseError } from '../error.js';
 import type { Pending } from '../error.js';
 import { compileInclude, compileOrderBy, compileSelect, compileWhere } from '../query.js';
-import type { FieldName, Filter, OrderBy, Selected, Where } from '../query.js';
-import type { RealtimeEvent, RealtimeSubscription } from '../realtime/connection.js';
-import type { SubscribeOptions } from './realtime.js';
+import type { FieldName, Condition, OrderBy, Selected, Where } from '../query.js';
+import type { LiveEvent, LiveSubscription } from '../live/connection.js';
+import type { WatchOptions } from './live.js';
 
 /** A record of a collection without generated types. */
 export type AnyRecord = Record<string, unknown>;
@@ -96,33 +96,30 @@ export type SelectOptions<S, I = undefined> = CallOptions & {
 /** Options for `findMany()`. */
 export type FindManyOptions<R, S, I = undefined> = SelectOptions<S, I> & {
 	/** Which records; all of them without it. */
-	where?: Where<R> | Filter;
+	where?: Where<R> | Condition;
 	/** The order; the order of creation without it. */
 	orderBy?: OrderBy<R>;
-	/** Records per page, 1 to 500. Defaults to 30. */
+	/** How many records to return, 1 to 500. Defaults to 30. */
 	limit?: number;
-	/** The page, from 1. Defaults to 1. */
-	page?: number;
+	/** How many matching records to skip first. Defaults to 0. */
+	offset?: number;
 };
 
 /** Options for `findFirst()`. */
-export type FindFirstOptions<R, S, I = undefined> = Omit<
-	FindManyOptions<R, S, I>,
-	'limit' | 'page'
->;
+export type FindFirstOptions<R, S, I = undefined> = Omit<FindManyOptions<R, S, I>, 'limit'>;
 
 /** Options for `iterate()` and `findAll()`. */
 export type IterateOptions<R, S, I = undefined> = Omit<
 	FindManyOptions<R, S, I>,
-	'limit' | 'page'
+	'limit' | 'offset'
 > & {
 	/** Records per request, 1 to 500. Defaults to 200. */
 	batchSize?: number;
 };
 
-/** Options for `subscribe()`. */
-export type CollectionSubscribeOptions<R, S, I = undefined> = Omit<
-	SubscribeOptions<R>,
+/** Options for `pouch.db.<name>.watch()`. */
+export type CollectionWatchOptions<R, S, I = undefined> = Omit<
+	WatchOptions<R>,
 	'select' | 'include'
 > & {
 	/** Only changes to this record. */
@@ -133,31 +130,31 @@ export type CollectionSubscribeOptions<R, S, I = undefined> = Omit<
 	include?: I;
 };
 
-/** One page of `findMany()`. */
+/** What `findMany()` returns: some of the matching records, and how many match in all. */
 export type Page<T> = {
 	items: T[];
-	/** Records that match, on all pages. */
+	/** How many records match in all. */
 	total: number;
-	page: number;
-	/** Number of pages. */
-	pages: number;
-	/** Whether there is a page after this one. */
+	/** The `limit` the records were fetched with. */
+	limit: number;
+	/** How many matching records were skipped before `items`. */
+	offset: number;
+	/** Whether more records match after these. */
 	hasMore: boolean;
 };
 
 type ListResponse<T> = {
-	page: number;
-	perPage: number;
-	totalItems: number;
-	totalPages: number;
 	items: T[];
+	total: number;
+	limit: number;
+	offset: number;
 };
 
 /** The selection `S` of record `R`, with the relations in `I` included (see `Included`). */
 type Output<R, S, Schema, L, I> = Included<R, Selected<R, S>, Schema, L, I>;
 
 /**
- * The records of one collection (`/api/collections/<name>/records`), typed by `R` (a record), `C`
+ * The records of one collection (`/api/db/<collection>`), typed by `R` (a record), `C`
  * (what to send to create one), and the `Schema` with the collections its relations `L` point to
  * (see `RelationsOf`). What a caller may do follows the collection's API rules: a locked rule
  * fails with `forbidden`, and records a rule doesn't match are left out of lists and are "not
@@ -169,17 +166,18 @@ export class CollectionClient<
 	Schema = Record<never, never>,
 	L = AnyRelations
 > {
-	readonly #pb: Pouchbase<object>;
+	readonly #pouch: Pouchbase<object>;
 	/** Name of the collection. */
 	readonly name: string;
 
-	constructor(pb: Pouchbase<object>, name: string) {
-		this.#pb = pb;
+	constructor(pouch: Pouchbase<object>, name: string) {
+		this.#pouch = pouch;
 		this.name = name;
 	}
 
 	#path(id?: string) {
-		const base = `/api/collections/${encodeURIComponent(this.name)}/records`;
+		const base = `/api/db/${encodeURIComponent(this.name)}`;
+
 		return id === undefined ? base : `${base}/${encodeURIComponent(id)}`;
 	}
 
@@ -187,7 +185,7 @@ export class CollectionClient<
 	 * A record by id, or `null` when it doesn't exist or the view rule hides it.
 	 *
 	 * ```ts
-	 * const post = await pb.db.posts.find(id, { select: ['id', 'title'] });
+	 * const post = await pouch.db.posts.find(id, { select: ['id', 'title'] });
 	 * ```
 	 */
 	find<
@@ -195,9 +193,12 @@ export class CollectionClient<
 		const I extends Include<Schema, L> | undefined = undefined
 	>(id: string, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I> | null> {
 		return pending(
-			this.#pb
-				.send<Output<R, S, Schema, L, I>>(this.#path(id), {
-					query: { fields: compileSelect(options.select), expand: compileInclude(options.include) },
+			this.#pouch
+				.request<Output<R, S, Schema, L, I>>(this.#path(id), {
+					query: {
+						select: compileSelect(options.select),
+						include: compileInclude(options.include)
+					},
 					signal: options.signal
 				})
 				.catch((error: unknown) => {
@@ -222,22 +223,23 @@ export class CollectionClient<
 		const I extends Include<Schema, L> | undefined = undefined
 	>(id: string, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I>> {
 		return pending(
-			this.#pb.send<Output<R, S, Schema, L, I>>(this.#path(id), {
-				query: { fields: compileSelect(options.select), expand: compileInclude(options.include) },
+			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(id), {
+				query: { select: compileSelect(options.select), include: compileInclude(options.include) },
 				signal: options.signal
 			})
 		);
 	}
 
 	/**
-	 * One page of records.
+	 * The records that match, `limit` at a time, with how many match in all.
 	 *
 	 * ```ts
-	 * const { items, total, hasMore } = await pb.db.posts.findMany({
+	 * const { items, total, hasMore } = await pouch.db.posts.findMany({
 	 * 	where: { status: 'published', views: { gte: 10 } },
 	 * 	orderBy: { created_at: 'desc' },
 	 * 	select: ['id', 'title'],
-	 * 	limit: 20
+	 * 	limit: 20,
+	 * 	offset: 40
 	 * });
 	 * ```
 	 */
@@ -246,24 +248,24 @@ export class CollectionClient<
 		const I extends Include<Schema, L> | undefined = undefined
 	>(options: FindManyOptions<R, S, I> = {}): Pending<Page<Output<R, S, Schema, L, I>>> {
 		return pending(
-			this.#pb
-				.send<ListResponse<Output<R, S, Schema, L, I>>>(this.#path(), {
+			this.#pouch
+				.request<ListResponse<Output<R, S, Schema, L, I>>>(this.#path(), {
 					query: {
-						page: options.page,
-						perPage: options.limit,
-						filter: compileWhere(options.where) || undefined,
-						sort: compileOrderBy(options.orderBy) || undefined,
-						fields: compileSelect(options.select),
-						expand: compileInclude(options.include)
+						where: compileWhere(options.where) || undefined,
+						order: compileOrderBy(options.orderBy) || undefined,
+						select: compileSelect(options.select),
+						include: compileInclude(options.include),
+						limit: options.limit,
+						offset: options.offset
 					},
 					signal: options.signal
 				})
 				.then((response) => ({
 					items: response.items,
-					total: response.totalItems,
-					page: response.page,
-					pages: response.totalPages,
-					hasMore: response.page < response.totalPages
+					total: response.total,
+					limit: response.limit,
+					offset: response.offset,
+					hasMore: response.offset + response.items.length < response.total
 				}))
 		);
 	}
@@ -277,17 +279,17 @@ export class CollectionClient<
 	}
 
 	/** How many records match. */
-	count(where?: Where<R> | Filter, options: CallOptions = {}): Pending<number> {
+	count(where?: Where<R> | Condition, options: CallOptions = {}): Pending<number> {
 		return pending(
 			this.findMany({ where, limit: 1, signal: options.signal }).then((page) => page.total)
 		);
 	}
 
 	/**
-	 * Every record that matches, fetched page by page as you go:
+	 * Every record that matches, fetched `batchSize` at a time as you go:
 	 *
 	 * ```ts
-	 * for await (const post of pb.db.posts.iterate({ where: { status: 'draft' } })) {
+	 * for await (const post of pouch.db.posts.iterate({ where: { status: 'draft' } })) {
 	 * 	console.log(post.title);
 	 * }
 	 * ```
@@ -301,10 +303,11 @@ export class CollectionClient<
 		const { batchSize = 200, ...query } = options;
 		const limit = Math.min(Math.max(Math.trunc(batchSize), 1), 500);
 
-		for (let page = 1; ; page++) {
-			const result = await this.findMany<S, I>({ ...query, limit, page });
+		for (let offset = 0; ;) {
+			const result = await this.findMany<S, I>({ ...query, limit, offset });
 
 			yield* result.items;
+			offset += result.items.length;
 
 			if (!result.hasMore || !result.items.length) {
 				return;
@@ -335,7 +338,7 @@ export class CollectionClient<
 	 * be `Date`s. Fails with `invalid` (`issues` per field), `conflict` or `forbidden`.
 	 *
 	 * ```ts
-	 * const post = await pb.db.posts.insert({ title: 'Hello', published: true });
+	 * const post = await pouch.db.posts.insert({ title: 'Hello', published: true });
 	 * ```
 	 */
 	insert<
@@ -343,10 +346,10 @@ export class CollectionClient<
 		const I extends Include<Schema, L> | undefined = undefined
 	>(data: C, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I>, FieldName<C>> {
 		return pending(
-			this.#pb.send<Output<R, S, Schema, L, I>>(this.#path(), {
+			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(), {
 				method: 'POST',
 				body: data,
-				query: { fields: compileSelect(options.select), expand: compileInclude(options.include) },
+				query: { select: compileSelect(options.select), include: compileInclude(options.include) },
 				signal: options.signal
 			})
 		);
@@ -365,10 +368,10 @@ export class CollectionClient<
 		options: SelectOptions<S, I> = {}
 	): Pending<Output<R, S, Schema, L, I>, FieldName<C>> {
 		return pending(
-			this.#pb.send<Output<R, S, Schema, L, I>>(this.#path(id), {
+			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(id), {
 				method: 'PATCH',
 				body: data,
-				query: { fields: compileSelect(options.select), expand: compileInclude(options.include) },
+				query: { select: compileSelect(options.select), include: compileInclude(options.include) },
 				signal: options.signal
 			})
 		);
@@ -376,33 +379,33 @@ export class CollectionClient<
 
 	/**
 	 * Calls `callback` with every change to the records of this collection (or to record `id`) that
-	 * the view rule lets you see, as they are saved. See `pb.realtime`.
+	 * the view rule lets you see, as they are saved. See `pouch.live`.
 	 *
 	 * ```ts
-	 * const subscription = pb.db.posts.subscribe((event) => console.log(event.action, event.record), {
+	 * const watching = pouch.db.posts.watch((event) => console.log(event.action, event.record), {
 	 * 	where: { status: 'published' },
 	 * 	select: ['id', 'title']
 	 * });
-	 * subscription.unsubscribe();
+	 * watching.stop();
 	 * ```
 	 */
-	subscribe<
+	watch<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
 	>(
-		callback: (event: RealtimeEvent<Output<R, S, Schema, L, I>>) => void,
-		options: CollectionSubscribeOptions<R, S, I> = {}
-	): RealtimeSubscription {
+		callback: (event: LiveEvent<Output<R, S, Schema, L, I>>) => void,
+		options: CollectionWatchOptions<R, S, I> = {}
+	): LiveSubscription {
 		const { id, select, include, ...rest } = options;
 
-		return this.#pb.realtime.subscribe<Output<R, S, Schema, L, I>>(
+		return this.#pouch.live.watch<Output<R, S, Schema, L, I>>(
 			id === undefined ? this.name : `${this.name}/${id}`,
 			callback,
 			{
 				...rest,
 				select: select as readonly string[] | undefined,
 				include: include as AnyInclude | undefined
-			} as SubscribeOptions<Output<R, S, Schema, L, I>>
+			} as WatchOptions<Output<R, S, Schema, L, I>>
 		);
 	}
 
@@ -412,16 +415,16 @@ export class CollectionClient<
 	 */
 	remove(id: string, options: CallOptions = {}): Pending<void> {
 		return pending(
-			this.#pb
-				.send(this.#path(id), { method: 'DELETE', signal: options.signal })
+			this.#pouch
+				.request(this.#path(id), { method: 'DELETE', signal: options.signal })
 				.then(() => undefined)
 		);
 	}
 }
 
 /**
- * The collections of a schema, each as a typed `CollectionClient`: `pb.db.posts`. Collections that
- * aren't in the schema are reached with `pb.db.$collection(name)`.
+ * The collections of a schema, each as a typed `CollectionClient`: `pouch.db.posts`. Collections that
+ * aren't in the schema are reached with `pouch.db.$collection(name)`.
  */
 export type Db<S> = {
 	readonly [K in keyof S & string]: CollectionClient<
@@ -435,14 +438,14 @@ export type Db<S> = {
 	$collection<R = AnyRecord, C = Partial<R>>(name: string): CollectionClient<R, C>;
 };
 
-/** `pb.db`: a client per collection name, made when it is first used. */
-export function createDb<S>(pb: Pouchbase<object>): Db<S> {
+/** `pouch.db`: a client per collection name, made when it is first used. */
+export function createDb<S>(pouch: Pouchbase<object>): Db<S> {
 	const clients = new Map<string, CollectionClient>();
 	const client = (name: string) => {
 		let found = clients.get(name);
 
 		if (!found) {
-			found = new CollectionClient(pb, name);
+			found = new CollectionClient(pouch, name);
 			clients.set(name, found);
 		}
 

@@ -5,7 +5,7 @@ import { FilterError, parseFilter } from '#lib/filter/filter.js';
 
 /**
  * Compiles filter expressions (`#lib/filter/filter.ts`) to a SQL condition with bound parameters,
- * for `?filter=` and the API rules of the records API. Throws a `FilterError` for unknown fields.
+ * for `?where=` and the API rules of the records API. Throws a `FilterError` for unknown fields.
  *
  * Field names are checked against the collection's fields before they end up in the SQL, and
  * every value is a bound parameter, so a filter can never inject SQL.
@@ -13,12 +13,12 @@ import { FilterError, parseFilter } from '#lib/filter/filter.js';
 
 export type SqlCondition = { sql: string; params: (string | number | null)[] };
 
-/** What `@request.*` refers to while the condition runs. */
+/** What `$user` and `$input` refer to while the condition runs. */
 export type FilterContext = {
-	/** The signed-in user (a row of `users`), or `null`; every `@request.auth.*` is `""` then. */
-	auth: Record<string, unknown> | null;
+	/** The signed-in user (a row of `users`), or `null`; every `$user.*` is `""` then. */
+	user: Record<string, unknown> | null;
 	/** The submitted fields, for create and update rules. */
-	body?: Record<string, unknown>;
+	input?: Record<string, unknown>;
 };
 
 type CompiledOperand = SqlCondition & {
@@ -63,12 +63,12 @@ function compileOperand(
 
 			return { sql: `"${field.name}"`, params: [], field };
 		}
-		case 'auth': {
+		case 'user': {
 			// Never `empty`: a signed-out user must not match records with an empty field.
-			return { sql: '?', params: [context.auth ? bindable(context.auth[operand.name]) : ''] };
+			return { sql: '?', params: [context.user ? bindable(context.user[operand.name]) : ''] };
 		}
-		case 'body':
-			return { sql: '?', params: [bindable(context.body?.[operand.name])] };
+		case 'input':
+			return { sql: '?', params: [bindable(context.input?.[operand.name])] };
 		case 'string':
 			return { sql: '?', params: [operand.value], empty: operand.value === '' };
 		case 'number':
@@ -112,7 +112,7 @@ function compare(
 	const params = [...left.params, ...right.params];
 
 	switch (operator) {
-		case '=':
+		case '==':
 		case '!=': {
 			// `""` and `null` both match an empty value.
 			const sql = right.empty
@@ -122,15 +122,15 @@ function compare(
 					: `${left.sql} IS ${right.sql}`;
 			const used = right.empty ? left.params : left.empty ? right.params : params;
 
-			return { sql: operator === '=' ? sql : `NOT (${sql})`, params: used };
+			return { sql: operator === '==' ? sql : `NOT (${sql})`, params: used };
 		}
-		case '~':
-		case '!~': {
+		case 'contains':
+		case 'not contains': {
 			const pattern = likePattern(rightOperand, right);
 			const sql = `COALESCE(${left.sql}, '') LIKE ${pattern.sql}`;
 
 			return {
-				sql: operator === '~' ? sql : `NOT (${sql})`,
+				sql: operator === 'contains' ? sql : `NOT (${sql})`,
 				params: [...left.params, ...pattern.params]
 			};
 		}
@@ -163,7 +163,7 @@ function compileExpression(
 	}
 
 	if (!left.field) {
-		throw new FilterError(`\`?${operator}\` needs a field on the left`);
+		throw new FilterError('`any()` takes a field of this collection');
 	}
 
 	// Any item of a JSON array (multiple relations and lists); a single value counts as one item.
@@ -222,24 +222,27 @@ export function both(first: SqlCondition, second: SqlCondition): SqlCondition {
 }
 
 /**
- * An `ORDER BY` list from `?sort=`: field names separated by commas, `-` in
- * front for descending (`-created_at,title`).
+ * An `ORDER BY` list from `?order=`: field names separated by commas, each with `:asc` (the
+ * default) or `:desc` (`created_at:desc,title`).
  * @throws {FilterError} For fields that don't exist or can't be sorted on.
  */
-export function compileSort(text: string, fields: Pick<Field, 'name' | 'type'>[]): string[] {
+export function compileOrder(text: string, fields: Pick<Field, 'name' | 'type'>[]): string[] {
 	return text
 		.split(',')
 		.map((part) => part.trim())
 		.filter(Boolean)
 		.map((part) => {
-			const descending = part.startsWith('-');
-			const name = part.replace(/^[-+]/, '');
+			const [name, direction = 'asc', ...extra] = part.split(':').map((piece) => piece.trim());
 			const field = fields.find((candidate) => candidate.name === name);
 
-			if (!field || field.type === 'blob') {
-				throw new FilterError(`Can't sort on \`${name}\``);
+			if (extra.length || (direction !== 'asc' && direction !== 'desc')) {
+				throw new FilterError(`\`${part}\` must be a field with \`:asc\` or \`:desc\``);
 			}
 
-			return `"${field.name}" ${descending ? 'DESC' : 'ASC'}`;
+			if (!field || field.type === 'blob') {
+				throw new FilterError(`Can't order by \`${name}\``);
+			}
+
+			return `"${field.name}" ${direction === 'desc' ? 'DESC' : 'ASC'}`;
 		});
 }

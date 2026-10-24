@@ -12,7 +12,7 @@ import { internalSecret } from './internal-secret.ts';
 /**
  * The realtime hub of the Node target and of `vite dev`: a `ws` server in the same process as the
  * app. `server.mjs` (and `vite/realtime.ts` in development) hand it the HTTP upgrades of
- * `/api/realtime`; SvelteKit can't answer those itself. It keeps one `HubCore` per collection, and
+ * `/api/live`; SvelteKit can't answer those itself. It keeps one `HubCore` per collection, and
  * reaches the app's internal routes over loopback.
  *
  * The hub lives on `globalThis`, so the server entry and the app's broker (`broker/node.ts`) find
@@ -72,7 +72,7 @@ export class NodeHub {
 	#heartbeat: ReturnType<typeof setInterval> | null = null;
 
 	/**
-	 * Takes over an HTTP upgrade. Returns `false` when it isn't for `/api/realtime`, so the caller
+	 * Takes over an HTTP upgrade. Returns `false` when it isn't for `/api/live`, so the caller
 	 * can hand it to someone else (Vite's HMR socket) or close it.
 	 */
 	upgrade(request: IncomingMessage, socket: Duplex, head: Buffer): boolean {

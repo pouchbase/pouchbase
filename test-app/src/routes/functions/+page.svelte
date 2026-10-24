@@ -1,7 +1,7 @@
 <script lang="ts">
 	import Output from '#lib/components/output.svelte';
 	import Panel from '#lib/components/panel.svelte';
-	import { pb } from '#lib/pouchbase.svelte.js';
+	import { pouch } from '#lib/pouchbase.svelte.js';
 	import { parseJson, Runner } from '#lib/run.svelte.js';
 
 	type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -15,7 +15,10 @@
 	let body = $state('{\n\t"name": "Ada"\n}');
 </script>
 
-<Panel title="Invoke" description="<method> /api/functions/<name>/<path> · pb.functions.invoke()">
+<Panel
+	title="Invoke"
+	description="<method> /api/functions/<name>/<path> · pouch.functions.invoke()"
+>
 	<div class="stack">
 		<div class="row">
 			<label>Name <input bind:value={name} /></label>
@@ -29,14 +32,14 @@
 			</label>
 			<label>Path <input bind:value={path} placeholder="/42" /></label>
 		</div>
-		<label>Query (JSON) <input bind:value={query} placeholder={'{ "expand": "items" }'} /></label>
+		<label>Query (JSON) <input bind:value={query} placeholder={'{ "include": "items" }'} /></label>
 		<label>Body (JSON) <textarea bind:value={body} rows="6"></textarea></label>
 		<div class="row">
 			<button
 				disabled={runner.loading || name.trim() === ''}
 				onclick={() =>
 					runner.run(() =>
-						pb.functions.invoke(name.trim(), {
+						pouch.functions.invoke(name.trim(), {
 							method,
 							path: path || undefined,
 							query: parseJson(query) as Record<string, string> | undefined,

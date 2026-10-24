@@ -17,6 +17,7 @@
 		{ id: 'password', title: 'Email and password' },
 		{ id: 'oauth', title: 'OAuth' },
 		{ id: 'mail', title: 'Verification and password reset' },
+		{ id: 'session', title: 'The session' },
 		{ id: 'tokens', title: 'Tokens' },
 		{ id: 'rest-api', title: 'REST API' }
 	];
@@ -31,13 +32,10 @@
 			'POST /api/auth/password/sign-in',
 			'{ email, password }; 401 for wrong credentials, 403 (email_not_verified) until the email is verified'
 		],
-		['POST /api/auth/password/request-reset', '{ email }; the same answer for unknown addresses'],
-		[
-			'POST /api/auth/password/confirm-reset',
-			'{ token, password }; 400 for an invalid or expired link'
-		],
-		['POST /api/auth/verification/request', '{ email }'],
-		['POST /api/auth/verification/confirm', '{ token }; marks the user as verified'],
+		['POST /api/auth/password/forgot', '{ email }; the same answer for unknown addresses'],
+		['POST /api/auth/password/reset', '{ token, password }; 400 for an invalid or expired link'],
+		['POST /api/auth/email/send-verification', '{ email }'],
+		['POST /api/auth/email/verify', '{ token }; marks the user as verified'],
 		[
 			'GET /api/auth/oauth2/<provider>',
 			'?state=…&challenge=…, opened in a popup; starts an OAuth sign-in'
@@ -97,9 +95,9 @@
 	</p>
 
 	<p>
-		Users can't be created through the records API: they sign up. Through the records API they can't
-		change their <Code.Root>email</Code.Root> or <Code.Root>verified</Code.Root> either. Who may read
-		and change the other fields is up to the
+		Users can't be created through the database API: they sign up. Through the database API they
+		can't change their <Code.Root>email</Code.Root> or <Code.Root>verified</Code.Root> either. Who may
+		read and change the other fields is up to the
 		<a href="{resolve('/docs/collections')}#api-rules">API rules</a> of
 		<Code.Root>users</Code.Root>.
 	</p>
@@ -160,11 +158,11 @@
 	</p>
 
 	<p>
-		Build the sign-in buttons from <Code.Root>pb.auth.providers()</Code.Root>: it lists the enabled
-		providers with their <Code.Root>label</Code.Root> and <Code.Root>iconUrl</Code.Root>, the URL of
-		the provider's logo (an SVG, or <Code.Root>null</Code.Root>). A provider id is any lowercase id,
-		such as <Code.Root>gitlab</Code.Root>; <Code.Root>KNOWN_OAUTH_PROVIDERS</Code.Root> lists the built-in
-		ones.
+		Build the sign-in buttons from <Code.Root>pouch.auth.providers()</Code.Root>: it lists the
+		enabled providers with their <Code.Root>label</Code.Root> and <Code.Root>iconUrl</Code.Root>,
+		the URL of the provider's logo (an SVG, or <Code.Root>null</Code.Root>). A provider id is any
+		lowercase id, such as <Code.Root>gitlab</Code.Root>; <Code.Root>KNOWN_OAUTH_PROVIDERS</Code.Root
+		> lists the built-in ones.
 	</p>
 
 	<p>
@@ -204,11 +202,44 @@
 		work once; verification links are valid for 3 days.
 	</p>
 
+	<h2 id="session">The session</h2>
+
+	<p>
+		A successful sign-in begins a session in <Code.Root>pouch.session</Code.Root>: the token, the
+		user's id and, once known, the user. <Code.Root>pouch.auth.signOut()</Code.Root> ends it. Every request
+		sends the token along while the session lasts.
+	</p>
+
+	<CodeBlock.Root title="TypeScript">
+		<CodeBlock.Source code={data.code.session} />
+	</CodeBlock.Root>
+
+	<p>
+		<Code.Root>signedIn</Code.Root> only looks at the token: it is <Code.Root>true</Code.Root> while there
+		is one and it hasn't expired, and the server can still reject it.
+		<Code.Root>expiresAt</Code.Root> is the expiry from the token, or <Code.Root>null</Code.Root>.
+	</p>
+
+	<p>
+		Where the session is kept between page loads is up to the <Code.Root>session</Code.Root> option of
+		<Code.Root>createClient</Code.Root>: <Code.Root>'memory'</Code.Root> (the default) keeps nothing,
+		so a reload signs the user out; <Code.Root>'browser'</Code.Root> keeps it in
+		<Code.Root>localStorage</Code.Root> (and falls back to nothing where that doesn't exist);
+		<Code.Root>browserStorage(key)</Code.Root> does the same under a key of your own. For anything else,
+		such as cookies or a native app's secure storage, pass a
+		<Code.Root>SessionStorage</Code.Root> with <Code.Root>load</Code.Root>,
+		<Code.Root>persist</Code.Root> and <Code.Root>forget</Code.Root>.
+	</p>
+
+	<CodeBlock.Root title="TypeScript">
+		<CodeBlock.Source code={data.code.storage} />
+	</CodeBlock.Root>
+
 	<h2 id="tokens">Tokens</h2>
 
 	<p>
 		Every sign-in returns <Code.Root>{'{ token, user_id }'}</Code.Root>. The token is a JWT (HS256),
-		valid for 7 days. The SDK keeps it in <Code.Root>pb.authStore</Code.Root> and sends it as
+		valid for 7 days. The SDK keeps it in <a href="#session">the session</a> and sends it as
 		<Code.Root>Authorization: Bearer &lt;token&gt;</Code.Root>; without the SDK, send that header
 		yourself. The API answers requests from any origin.
 	</p>

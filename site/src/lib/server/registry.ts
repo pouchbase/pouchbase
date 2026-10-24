@@ -67,6 +67,11 @@ function bundleUrl(origin: string, slug: string, version: string) {
 	return `${registryBase(origin)}/plugins/${slug}/versions/${version}/bundle`;
 }
 
+/** URL of a plugin's icon; `v` changes with every version, so it can be cached for good. */
+function iconUrl(origin: string, slug: string, version: string) {
+	return `${registryBase(origin)}/plugins/${slug}/icon?v=${encodeURIComponent(version)}`;
+}
+
 function iso(value: string) {
 	return new Date(value).toISOString();
 }
@@ -178,7 +183,7 @@ export async function searchPlugins(input: SearchInput): Promise<PluginList> {
 			where: { $and: conditions },
 			orderBy: { downloads: 'desc', name: 'asc' },
 			limit: input.perPage,
-			page: input.page
+			offset: (input.page - 1) * input.perPage
 		})
 		.catch(backendFailure);
 
@@ -260,6 +265,36 @@ export async function getBundle(slug: string, version: string): Promise<string |
 		.catch((error: unknown) => console.error('Plugin registry: counting a download failed', error));
 
 	return row.bundle;
+}
+
+/**
+ * The icon (`manifest.icon`) of the newest version of a plugin, as SVG; `null` when the plugin or
+ * its icon doesn't exist.
+ */
+export async function getIcon(slug: string): Promise<string | null> {
+	const plugin = await findPlugin(slug);
+
+	if (!plugin) {
+		return null;
+	}
+
+	const row = await service()
+		.db.plugin_versions.findFirst({
+			where: { plugin: plugin.id, version: plugin.version },
+			select: ['bundle']
+		})
+		.catch(backendFailure);
+
+	if (!row) {
+		return null;
+	}
+
+	const { manifest, files } = JSON.parse(row.bundle) as {
+		manifest: { icon?: string };
+		files: Record<string, string>;
+	};
+
+	return manifest.icon && Object.hasOwn(files, manifest.icon) ? files[manifest.icon]! : null;
 }
 
 /** The plugins of a user, newest first, for the account pages. */
@@ -352,6 +387,7 @@ export async function publishVersion(
 		license: manifest.license,
 		homepage: manifest.homepage ?? null,
 		repository: manifest.repository ?? null,
+		icon_url: manifest.icon ? iconUrl(origin, slug, manifest.version) : null,
 		keywords: manifest.keywords,
 		categories,
 		categories_text: categoryList(categories),
@@ -369,7 +405,6 @@ export async function publishVersion(
 				slug,
 				owner: userId,
 				readme: null,
-				icon_url: null,
 				api_versions: apiVersionList([manifest.apiVersion]),
 				downloads: 0,
 				verified: false

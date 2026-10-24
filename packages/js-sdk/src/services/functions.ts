@@ -1,6 +1,6 @@
 import type { Pouchbase, RequestOptions } from '../client.js';
 
-/** Options for `pb.functions.invoke()`. */
+/** Options for `pouch.functions.invoke()`. */
 export type InvokeOptions = {
 	/** Defaults to `POST` with a `body`, `GET` without one. */
 	method?: RequestOptions['method'];
@@ -19,10 +19,10 @@ export type InvokeOptions = {
  * function knows who calls it; functions that require sign-in answer `401` without one.
  */
 export class FunctionsService {
-	readonly #pb: Pouchbase<object>;
+	readonly #pouch: Pouchbase<object>;
 
-	constructor(pb: Pouchbase<object>) {
-		this.#pb = pb;
+	constructor(pouch: Pouchbase<object>) {
+		this.#pouch = pouch;
 	}
 
 	/**
@@ -30,7 +30,7 @@ export class FunctionsService {
 	 * (`null` for an empty body).
 	 *
 	 * ```ts
-	 * const { message } = await pb.functions.invoke<{ message: string }>('hello', {
+	 * const { message } = await pouch.functions.invoke<{ message: string }>('hello', {
 	 * 	body: { name: 'Ada' }
 	 * });
 	 * ```
@@ -41,7 +41,7 @@ export class FunctionsService {
 	invoke<T = unknown>(name: string, options: InvokeOptions = {}): Promise<T> {
 		const path = options.path ? `/${options.path.replace(/^\/+/, '')}` : '';
 
-		return this.#pb.send<T>(`/api/functions/${encodeURIComponent(name)}${path}`, {
+		return this.#pouch.request<T>(`/api/functions/${encodeURIComponent(name)}${path}`, {
 			method: options.method,
 			body: options.body,
 			query: options.query,

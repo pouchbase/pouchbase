@@ -11,7 +11,7 @@ import type {
 	UserOf
 } from '../types.js';
 
-/** Options for `pb.auth.signInWithOAuth()`. */
+/** Options for `pouch.auth.signInWithOAuth()`. */
 export type OAuthOptions = {
 	/**
 	 * Opens the provider's sign-in page. Defaults to a browser popup; pass your own to use, for
@@ -45,15 +45,15 @@ const OAUTH_ERRORS: Record<OAuthError, string> = {
 
 /** Sign-up, sign-in, OAuth, password resets and email verification for app users. */
 export class AuthService<C extends object = { users: User }> {
-	readonly #pb: Pouchbase<C>;
+	readonly #pouch: Pouchbase<C>;
 
-	constructor(pb: Pouchbase<C>) {
-		this.#pb = pb;
+	constructor(pouch: Pouchbase<C>) {
+		this.#pouch = pouch;
 	}
 
 	/** The enabled OAuth providers, to show their sign-in buttons. */
 	async providers(): Promise<OAuthProviderInfo[]> {
-		return this.#pb.send('/api/auth/providers', { auth: false });
+		return this.#pouch.request('/api/auth/providers', { auth: false });
 	}
 
 	/**
@@ -64,7 +64,7 @@ export class AuthService<C extends object = { users: User }> {
 	 * `503` when a verified email is required but mail isn't set up.
 	 */
 	async signUp(input: SignUpInput): Promise<SignUpResult> {
-		const response = await this.#pb.send<SignUpResponse>('/api/auth/password/sign-up', {
+		const response = await this.#pouch.request<SignUpResponse>('/api/auth/password/sign-up', {
 			body: input,
 			auth: false
 		});
@@ -85,7 +85,7 @@ export class AuthService<C extends object = { users: User }> {
 	 * `403` with `code` `email_not_verified` when the address must be verified first.
 	 */
 	async signIn(email: string, password: string): Promise<AuthResult> {
-		const response = await this.#pb.send<SignInResponse>('/api/auth/password/sign-in', {
+		const response = await this.#pouch.request<SignInResponse>('/api/auth/password/sign-in', {
 			body: { email, password },
 			auth: false
 		});
@@ -109,7 +109,7 @@ export class AuthService<C extends object = { users: User }> {
 		const verifier = randomString(32);
 
 		try {
-			const url = this.#pb.buildUrl(`/api/auth/oauth2/${encodeURIComponent(provider)}`, {
+			const url = this.#pouch.url(`/api/auth/oauth2/${encodeURIComponent(provider)}`, {
 				state,
 				challenge: await s256(verifier)
 			});
@@ -126,7 +126,7 @@ export class AuthService<C extends object = { users: User }> {
 			while (Date.now() < deadline) {
 				await wait(options.interval ?? 1000, options.signal);
 
-				const result = await this.#pb.send<OAuthResultResponse>('/api/auth/oauth2/result', {
+				const result = await this.#pouch.request<OAuthResultResponse>('/api/auth/oauth2/result', {
 					body: { state, verifier },
 					auth: false,
 					signal: options.signal
@@ -160,28 +160,29 @@ export class AuthService<C extends object = { users: User }> {
 	}
 
 	/**
-	 * The signed-in user, also kept in `authStore.user`. Returns `null` when signed out or when
-	 * the token is rejected, and then clears the auth store. Typed with the `users` record of the
+	 * The signed-in user, also kept in `pouch.session.user`. Returns `null` when signed out, or when
+	 * the token is rejected and the session ends. Typed with the `users` record of the
 	 * client's collections, or pass your own type.
 	 */
 	async me<T extends { id: string } = UserOf<C>>(
 		options: { signal?: AbortSignal } = {}
 	): Promise<T | null> {
-		const store = this.#pb.authStore;
+		const session = this.#pouch.session;
+		const token = session.token;
 
-		if (!store.token) {
+		if (!token) {
 			return null;
 		}
 
 		try {
-			const user = await this.#pb.send<T>('/api/auth/me', { signal: options.signal });
+			const user = await this.#pouch.request<T>('/api/auth/me', { signal: options.signal });
 
-			store.save({ token: store.token, userId: user.id, user: user as unknown as User });
+			session.begin({ token, userId: user.id, user: user as unknown as User });
 
 			return user;
 		} catch (error) {
 			if (error instanceof PouchbaseError && error.status === 401) {
-				store.clear();
+				session.end();
 
 				return null;
 			}
@@ -190,25 +191,25 @@ export class AuthService<C extends object = { users: User }> {
 		}
 	}
 
-	/** Signs out locally by clearing the auth store. Tokens are stateless and expire by themselves. */
+	/** Signs out by ending the session. Tokens are stateless and expire by themselves. */
 	signOut(): void {
-		this.#pb.authStore.clear();
+		this.#pouch.session.end();
 	}
 
 	/**
 	 * Emails a link to choose a new password. Succeeds whether or not the address has an account.
 	 * @throws {PouchbaseError} `403` when password sign-in is off, `503` when mail isn't set up.
 	 */
-	async requestPasswordReset(email: string): Promise<void> {
-		await this.#pb.send('/api/auth/password/request-reset', { body: { email }, auth: false });
+	async sendPasswordReset(email: string): Promise<void> {
+		await this.#pouch.request('/api/auth/password/forgot', { body: { email }, auth: false });
 	}
 
 	/**
 	 * Sets a new password with the token from the reset email.
 	 * @throws {PouchbaseError} `400` for an invalid or expired token, or `issues` for the password.
 	 */
-	async confirmPasswordReset(token: string, password: string): Promise<void> {
-		await this.#pb.send('/api/auth/password/confirm-reset', {
+	async resetPassword(token: string, password: string): Promise<void> {
+		await this.#pouch.request('/api/auth/password/reset', {
 			body: { token, password },
 			auth: false
 		});
@@ -218,20 +219,23 @@ export class AuthService<C extends object = { users: User }> {
 	 * Emails a link to verify the address. Succeeds whether or not the address has an account.
 	 * @throws {PouchbaseError} `503` when mail isn't set up.
 	 */
-	async requestVerification(email: string): Promise<void> {
-		await this.#pb.send('/api/auth/verification/request', { body: { email }, auth: false });
+	async sendVerification(email: string): Promise<void> {
+		await this.#pouch.request('/api/auth/email/send-verification', {
+			body: { email },
+			auth: false
+		});
 	}
 
 	/**
 	 * Marks the user as verified with the token from the verification email.
 	 * @throws {PouchbaseError} `400` for an invalid or expired token.
 	 */
-	async confirmVerification(token: string): Promise<void> {
-		await this.#pb.send('/api/auth/verification/confirm', { body: { token }, auth: false });
+	async verifyEmail(token: string): Promise<void> {
+		await this.#pouch.request('/api/auth/email/verify', { body: { token }, auth: false });
 	}
 
 	#save(response: SignInResponse): AuthResult {
-		this.#pb.authStore.save({ token: response.token, userId: response.user_id, user: null });
+		this.#pouch.session.begin({ token: response.token, userId: response.user_id });
 
 		return { token: response.token, userId: response.user_id };
 	}

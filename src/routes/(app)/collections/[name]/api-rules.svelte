@@ -26,7 +26,7 @@
 		relationTargets: Record<string, string>;
 		/** The saved rules. */
 		rules: ApiRules | undefined;
-		/** Fields of `users`, for `@request.auth.*`. */
+		/** Fields of `users`, for `$user.*`. */
 		userFields: Code.FilterName[];
 	};
 
@@ -40,7 +40,7 @@
 		fields: fields
 			.filter((field) => field.type !== 'blob')
 			.map((field) => ({ name: field.name, type: field.type })),
-		authFields: userFields
+		userFields
 	});
 
 	// "Owner" choices: relation fields that point to `users`, or the user itself in `users`.
@@ -99,7 +99,7 @@
 		{
 			value: CUSTOM,
 			label: 'Custom rule',
-			description: 'Write a filter',
+			description: 'Write a condition',
 			icon: 'lucide:code-xml',
 			rule: null
 		}
@@ -131,12 +131,12 @@
 	}
 
 	const EXAMPLES = [
-		['Only the author', 'author = @request.auth.id'],
-		['Signed-in users', '@request.auth.id != ""'],
-		['Verified users', '@request.auth.verified = true'],
-		['Published, or your own', 'status = "published" || author = @request.auth.id'],
-		['Only as yourself (create)', '@request.body.author = @request.auth.id'],
-		['Any of a multiple relation', 'editors ?= @request.auth.id']
+		['Only the author', 'author == $user.id'],
+		['Signed-in users', '$user.id != null'],
+		['Verified users', '$user.verified == true'],
+		['Published, or your own', 'status == "published" or author == $user.id'],
+		['Only as yourself (create)', '$input.author == $user.id'],
+		['Any of a multiple relation', 'any(editors) == $user.id']
 	];
 </script>
 
@@ -199,10 +199,10 @@
 			<Collapsible.Trigger>How custom rules work</Collapsible.Trigger>
 			<Collapsible.Content class="flex flex-col gap-4 pt-3 text-sm text-zinc-600">
 				<p>
-					A custom rule is a filter: a request is only allowed for records that match it. Combine
-					conditions with <code class="font-mono">&&</code> and
-					<code class="font-mono">||</code>, and group them with parentheses. The editor suggests
-					fields as you type.
+					A custom rule is a condition: a request is only allowed for records that match it. Combine
+					comparisons with <code class="font-mono">and</code> and
+					<code class="font-mono">or</code>, group them with parentheses, and start a comment with
+					<code class="font-mono">#</code>. The editor suggests fields as you type.
 				</p>
 
 				<Table.Root>
@@ -212,33 +212,34 @@
 							<Table.Cell>Fields of the record</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">@request.auth.id</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">$user.id</Table.Cell>
 							<Table.Cell>
 								A field of the signed-in user, from <span class="font-mono">users</span>; empty when
 								signed out
 							</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">@request.body.title</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">$input.title</Table.Cell>
 							<Table.Cell>A submitted value, in create and update rules</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">@now</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">$now</Table.Cell>
 							<Table.Cell>The current date and time</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">= != &gt; &gt;= &lt; &lt;=</Table.Cell
+							<Table.Cell class="font-mono whitespace-nowrap"
+								>== != &gt; &gt;= &lt; &lt;=</Table.Cell
 							>
 							<Table.Cell
-								>Compare; <span class="font-mono">= ""</span> also matches empty values</Table.Cell
+								>Compare; <span class="font-mono">== null</span> also matches empty values</Table.Cell
 							>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">~ !~</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">contains, not contains</Table.Cell>
 							<Table.Cell>Contains, doesn't contain (case-insensitive)</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">?= ?~ …</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">any(editors) == …</Table.Cell>
 							<Table.Cell>Any item of a multiple relation or list matches</Table.Cell>
 						</Table.Row>
 					</Table.Body>

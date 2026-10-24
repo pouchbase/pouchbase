@@ -83,10 +83,11 @@ export function authorizationChecks(options: {
 				subject.kind === 'admin'
 					? ALWAYS
 					: options.viewOffered
-						? compileRule(options.viewRule, readable, { auth })
+						? compileRule(options.viewRule, readable, { user: auth })
 						: null;
 
-			condition = rule && filter ? both(rule, compileFilter(filter, readable, { auth })) : rule;
+			condition =
+				rule && filter ? both(rule, compileFilter(filter, readable, { user: auth })) : rule;
 		} catch {
 			// A rule or filter that no longer compiles (a field was renamed) lets nothing through.
 			return { key, allowed: false };

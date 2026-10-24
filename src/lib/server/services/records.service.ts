@@ -24,7 +24,7 @@ import { apiActions, protectedApiFields } from '#lib/filter/rules.js';
 
 import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from '../computed';
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
-import { ALWAYS, both, compileFilter, compileRule, compileSort } from '../filter';
+import { ALWAYS, both, compileFilter, compileOrder, compileRule } from '../filter';
 import { generateId } from '../crypto';
 import { USERS_COLLECTION } from './auth.service';
 import { FILES_COLLECTION } from '#lib/files/files.js';
@@ -94,7 +94,7 @@ type RecordContext = { collection: Collection; fields: Field[]; databaseId: stri
  * that get an `access` check the collection's API rule for it; without one (the dashboard) every
  * record is reachable.
  */
-export type ApiAccess = { auth: Record<string, unknown> | null };
+export type ApiAccess = { user: Record<string, unknown> | null };
 
 /**
  * A record as the records API returns it: every field except blobs, with real values: booleans as
@@ -103,30 +103,32 @@ export type ApiAccess = { auth: Record<string, unknown> | null };
 export type ApiRecord = Record<string, unknown>;
 
 export type ApiListOptions = {
-	page: number;
-	perPage: number;
-	/** Fields to sort on: `-created_at,title` (`-` for descending). */
-	sort?: string;
-	/** A filter expression, see `#lib/filter/filter.ts`. */
-	filter?: string;
+	/** Records to return. */
+	limit: number;
+	/** Matching records to skip first. */
+	offset: number;
+	/** Fields to order by: `created_at:desc,title` (`:asc` when left out). */
+	order?: string;
+	/** A condition, see `#lib/filter/filter.ts`. */
+	where?: string;
 	/** Only return these fields; all of them when missing. */
-	fields?: string[];
-	/** Relation fields to replace by their records: `author`, `comments.author` (see `expand()`). */
-	expand?: string[];
+	select?: string[];
+	/** Relation fields to replace by their records: `author`, `comments.author` (see `include()`). */
+	include?: string[];
 };
 
-/** What the records API returns of a record: `fields` limits the fields, `expand` relations. */
-export type ApiReadOptions = { fields?: string[]; expand?: string[] };
+/** What the records API returns of a record: `select` limits the fields, `include` relations. */
+export type ApiReadOptions = { select?: string[]; include?: string[] };
 
 /** Relation fields to expand by name, each with the fields to expand in its related records. */
-type ExpandTree = Map<string, ExpandTree>;
+type IncludeTree = Map<string, IncludeTree>;
 
 export type ApiRecordList = {
-	page: number;
-	perPage: number;
-	totalItems: number;
-	totalPages: number;
 	items: ApiRecord[];
+	/** Records that match, on every page. */
+	total: number;
+	limit: number;
+	offset: number;
 };
 
 type GuardError =
@@ -135,11 +137,14 @@ type GuardError =
 	| (ServiceError<8016, 'INVALID_RULE'> & { data: { action: ApiRuleAction; message: string } })
 	| InvalidRecordError;
 
+/** The query parameters of the records API that `INVALID_QUERY` can be about. */
+type ApiQueryParam = 'where' | 'order' | 'select' | 'include';
+
 type InvalidQueryError = ServiceError<8015, 'INVALID_QUERY'> & {
-	data: { param: 'filter' | 'sort' | 'fields' | 'expand'; message: string };
+	data: { param: ApiQueryParam; message: string };
 };
 
-type ExpandError =
+type IncludeError =
 	| ContextError
 	| GuardError
 	| InvalidQueryError
@@ -208,7 +213,7 @@ const MAX_IDS = 90;
 /** Most records one delete may cascade to through relation fields. */
 const MAX_CASCADE = 1000;
 /** How deep `expand` follows relations: `a.b.c`. */
-const MAX_EXPAND_DEPTH = 3;
+const MAX_INCLUDE_DEPTH = 3;
 /** Field types whose value makes a good label for a related record, in order of preference. */
 const LABEL_TYPES = new Set(['text', 'email', 'url']);
 
@@ -479,11 +484,11 @@ function selectFields(readable: Field[], names: string[] | undefined) {
 }
 
 /**
- * `?expand=author,comments.author` as a tree of field names. Throws a `FilterError` for a path
- * that is empty or deeper than `MAX_EXPAND_DEPTH`.
+ * `?include=author,comments.author` as a tree of field names. Throws a `FilterError` for a path
+ * that is empty or deeper than `MAX_INCLUDE_DEPTH`.
  */
-function parseExpand(paths: string[] | undefined): ExpandTree {
-	const tree: ExpandTree = new Map();
+function parseInclude(paths: string[] | undefined): IncludeTree {
+	const tree: IncludeTree = new Map();
 
 	for (const path of paths ?? []) {
 		const names = path.split('.').map((name) => name.trim());
@@ -492,9 +497,9 @@ function parseExpand(paths: string[] | undefined): ExpandTree {
 			throw new FilterError(`Invalid path \`${path}\``);
 		}
 
-		if (names.length > MAX_EXPAND_DEPTH) {
+		if (names.length > MAX_INCLUDE_DEPTH) {
 			throw new FilterError(
-				`\`${path}\` is too deep: relations can be expanded ${MAX_EXPAND_DEPTH} levels deep`
+				`\`${path}\` is too deep: relations can be included ${MAX_INCLUDE_DEPTH} levels deep`
 			);
 		}
 
@@ -519,8 +524,8 @@ function parseExpand(paths: string[] | undefined): ExpandTree {
  * `paths` (or a tree of them) as a tree, checking that every field of its first level is a
  * relation or file field of `readable`. Throws a `FilterError`.
  */
-function expandTree(readable: Field[], paths: string[] | ExpandTree | undefined) {
-	const tree = paths instanceof Map ? paths : parseExpand(paths);
+function includeTree(readable: Field[], paths: string[] | IncludeTree | undefined) {
+	const tree = paths instanceof Map ? paths : parseInclude(paths);
 
 	for (const name of tree.keys()) {
 		const field = readable.find((field) => field.name === name);
@@ -538,7 +543,7 @@ function expandTree(readable: Field[], paths: string[] | ExpandTree | undefined)
 }
 
 /** The fields to select: `names` plus the fields to expand, or all of them without `names`. */
-function withExpanded(names: string[] | undefined, tree: ExpandTree) {
+function withIncluded(names: string[] | undefined, tree: IncludeTree) {
 	return names?.length ? [...new Set([...names, ...tree.keys()])] : names;
 }
 
@@ -720,16 +725,16 @@ export class RecordsService extends Service {
 	}
 
 	/**
-	 * One page of records for the records API, filtered by `options.filter` and by the collection's
+	 * One page of records for the records API, filtered by `options.where` and by the collection's
 	 * list rule: records the rule doesn't match are left out. Without `access` (an API key with the
-	 * service scope), the rule isn't checked. `options.expand` replaces relations by their records
-	 * (see `expand()`).
+	 * service scope), the rule isn't checked. `options.include` replaces relations by their records
+	 * (see `include()`).
 	 */
 	apiList(
 		collectionName: string,
 		options: ApiListOptions,
 		access: ApiAccess | undefined
-	): ResultAsync<ApiRecordList, ExpandError | ServiceError<8000, 'LIST_RECORDS_FAILED'>> {
+	): ResultAsync<ApiRecordList, IncludeError | ServiceError<8000, 'LIST_RECORDS_FAILED'>> {
 		return this.context(collectionName).andThen((context) =>
 			this.guard(context, 'list', access).andThen((rule) => {
 				const { collection, fields: collectionFields, databaseId } = context;
@@ -738,27 +743,27 @@ export class RecordsService extends Service {
 
 				// Without fields the collection has no table yet.
 				if (!collectionFields.length) {
-					return okAsync({ ...options, totalItems: 0, totalPages: 0, items: [] });
+					return okAsync({ items: [], total: 0, limit: options.limit, offset: options.offset });
 				}
 
-				return this.compileQuery('filter', () =>
-					options.filter?.trim()
-						? both(rule, compileFilter(options.filter, readable, access ?? { auth: null }))
+				return this.compileQuery('where', () =>
+					options.where?.trim()
+						? both(rule, compileFilter(options.where, readable, access ?? { user: null }))
 						: rule
 				).andThen((where) =>
-					this.compileQuery('sort', () => compileSort(options.sort ?? '', readable))
+					this.compileQuery('order', () => compileOrder(options.order ?? '', readable))
 						.andThen((sort) =>
-							this.compileQuery('expand', () => expandTree(readable, options.expand)).map(
+							this.compileQuery('include', () => includeTree(readable, options.include)).map(
 								(tree) => ({ sort, tree })
 							)
 						)
 						.andThen(({ sort, tree }) =>
-							this.compileQuery('fields', () =>
-								selectFields(readable, withExpanded(options.fields, tree))
+							this.compileQuery('select', () =>
+								selectFields(readable, withIncluded(options.select, tree))
 							).map((selected) => ({ sort, tree, selected }))
 						)
 						.andThen(({ sort, tree, selected }) => {
-							// Without a sort, records come in the order they were created.
+							// Without an order, records come in the order they were created.
 							const order = [
 								...(sort.length ? sort : [`"${created[0] ?? key}" ASC`]),
 								`"${key}" ASC`
@@ -773,24 +778,21 @@ export class RecordsService extends Service {
 									},
 									{
 										sql: `SELECT ${columns} FROM "${collection.name}" WHERE ${where.sql} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`,
-										params: [...where.params, options.perPage, (options.page - 1) * options.perPage]
+										params: [...where.params, options.limit, options.offset]
 									}
 								]),
 								(error) => this.error(8000, 'LIST_RECORDS_FAILED', error)
 							)
 								.map(([[total], rows]) => {
-									const totalItems = Number(total?.[0] ?? 0);
-
 									return {
-										page: options.page,
-										perPage: options.perPage,
-										totalItems,
-										totalPages: Math.ceil(totalItems / options.perPage),
-										items: rows.map((row) => toApiRecord(selected, row))
+										items: rows.map((row) => toApiRecord(selected, row)),
+										total: Number(total?.[0] ?? 0),
+										limit: options.limit,
+										offset: options.offset
 									} satisfies ApiRecordList;
 								})
 								.andThen((list) =>
-									this.expand(collectionFields, list.items, tree, access).map(() => list)
+									this.include(collectionFields, list.items, tree, access).map(() => list)
 								);
 						})
 				);
@@ -801,13 +803,13 @@ export class RecordsService extends Service {
 	/**
 	 * One record for the records API; `null` when it doesn't exist or the collection's view rule
 	 * doesn't match it. Without `access`, the rule isn't checked. `fields` limits the fields and
-	 * `expand` replaces relations by their records (see `expand()`).
+	 * `expand` replaces relations by their records (see `include()`).
 	 */
 	apiGet(
 		collectionName: string,
 		id: string,
 		options: ApiReadOptions & { access?: ApiAccess } = {}
-	): ResultAsync<ApiRecord | null, ExpandError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
+	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
 		return this.readApiRecord(collectionName, id, options, options.access, options.access);
 	}
 
@@ -1766,19 +1768,19 @@ export class RecordsService extends Service {
 	}
 
 	/**
-	 * Expands the relations in `expand` of `records` of a collection in place, as `?expand=` does
-	 * (see `expand()`), for realtime events. Without records it only checks `expand`: every path
+	 * Expands the relations in `expand` of `records` of a collection in place, as `?include=` does
+	 * (see `include()`), for realtime events. Without records it only checks `expand`: every path
 	 * must be a chain of relations to collections whose view rule `access` may use.
 	 */
-	apiExpand(
+	apiInclude(
 		collectionName: string,
 		records: ApiRecord[],
 		expand: string[],
 		access: ApiAccess | undefined
-	): ResultAsync<void, ExpandError> {
+	): ResultAsync<void, IncludeError> {
 		return this.context(collectionName).andThen(({ fields: collectionFields }) =>
-			this.compileQuery('expand', () => expandTree(apiFields(collectionFields), expand)).andThen(
-				(tree) => this.expand(collectionFields, records, tree, access)
+			this.compileQuery('include', () => includeTree(apiFields(collectionFields), expand)).andThen(
+				(tree) => this.include(collectionFields, records, tree, access)
 			)
 		);
 	}
@@ -1811,7 +1813,7 @@ export class RecordsService extends Service {
 		options: ApiReadOptions,
 		viewer: ApiAccess | undefined,
 		access: ApiAccess | undefined
-	): ResultAsync<ApiRecord | null, ExpandError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
+	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
 		return this.context(collectionName).andThen((context) =>
 			this.guard(context, 'view', viewer).andThen((rule) => {
 				const { collection, fields: collectionFields, databaseId } = context;
@@ -1822,10 +1824,10 @@ export class RecordsService extends Service {
 					return okAsync(null);
 				}
 
-				return this.compileQuery('expand', () => expandTree(readable, options.expand)).andThen(
+				return this.compileQuery('include', () => includeTree(readable, options.include)).andThen(
 					(tree) =>
-						this.compileQuery('fields', () =>
-							selectFields(readable, withExpanded(options.fields, tree))
+						this.compileQuery('select', () =>
+							selectFields(readable, withIncluded(options.select, tree))
 						).andThen((selected) =>
 							fromPromise(
 								queryDatabase(
@@ -1841,7 +1843,7 @@ export class RecordsService extends Service {
 
 								const record = toApiRecord(selected, row);
 
-								return this.expand(collectionFields, [record], tree, access).map(() => record);
+								return this.include(collectionFields, [record], tree, access).map(() => record);
 							})
 						)
 				);
@@ -1856,12 +1858,12 @@ export class RecordsService extends Service {
 	 * related records that the view rule of their collection matches are included; fails when the
 	 * API doesn't show records of that collection at all.
 	 */
-	private expand(
+	private include(
 		collectionFields: Field[],
 		records: ApiRecord[],
-		tree: ExpandTree,
+		tree: IncludeTree,
 		access: ApiAccess | undefined
-	): ResultAsync<void, ExpandError> {
+	): ResultAsync<void, IncludeError> {
 		// Without records, every level is still checked.
 		if (!tree.size) {
 			return okAsync(undefined);
@@ -1900,32 +1902,32 @@ export class RecordsService extends Service {
 		context: RecordContext,
 		records: ApiRecord[],
 		name: string,
-		subtree: ExpandTree,
+		subtree: IncludeTree,
 		access: ApiAccess | undefined
-	): ResultAsync<Map<string, ApiRecord>, ExpandError> {
+	): ResultAsync<Map<string, ApiRecord>, IncludeError> {
 		const { collection, fields: collectionFields, databaseId } = context;
 		const readable = apiFields(collectionFields);
 		const { id: idColumn } = autoFields(collectionFields);
 		const ids = [...new Set(records.flatMap((record) => relatedIds(record[name])))];
 
 		return this.guard(context, 'view', access)
-			.mapErr((error): ExpandError =>
+			.mapErr((error): IncludeError =>
 				error.code === 8013 || error.code === 8014
 					? {
 							...this.error(8015, 'INVALID_QUERY'),
 							data: {
-								param: 'expand',
-								message: `the API doesn't show records of \`${collection.name}\`, so \`${name}\` can't be expanded`
+								param: 'include',
+								message: `the API doesn't show records of \`${collection.name}\`, so \`${name}\` can't be included`
 							}
 						}
 					: error
 			)
 			.andThen((rule) =>
-				this.compileQuery('expand', () => expandTree(readable, subtree)).map(() => rule)
+				this.compileQuery('include', () => includeTree(readable, subtree)).map(() => rule)
 			)
 			.andThen((rule) => {
 				if (!idColumn || !ids.length) {
-					return this.expand(collectionFields, [], subtree, access).map(
+					return this.include(collectionFields, [], subtree, access).map(
 						() => new Map<string, ApiRecord>()
 					);
 				}
@@ -1952,7 +1954,7 @@ export class RecordsService extends Service {
 				).andThen((results) => {
 					const found = results.flat().map((row) => toApiRecord(readable, row));
 
-					return this.expand(collectionFields, found, subtree, access).map(
+					return this.include(collectionFields, found, subtree, access).map(
 						() => new Map(found.map((record) => [String(record[idColumn]), record]))
 					);
 				});
@@ -1997,8 +1999,8 @@ export class RecordsService extends Service {
 
 		try {
 			condition = compileRule(collection.settings.rules?.[action], apiFields(collectionFields), {
-				auth: access.auth,
-				body: input
+				user: access.user,
+				input
 			});
 		} catch (error) {
 			return errAsync({
@@ -2012,7 +2014,7 @@ export class RecordsService extends Service {
 
 	/** Runs `compile` for a query parameter; a `FilterError` becomes an `INVALID_QUERY`. */
 	private compileQuery<T>(
-		param: 'filter' | 'sort' | 'fields' | 'expand',
+		param: ApiQueryParam,
 		compile: () => T
 	): ResultAsync<T, InvalidQueryError> {
 		try {

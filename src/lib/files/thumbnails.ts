@@ -3,18 +3,18 @@ import type { ApiRules } from '#lib/filter/rules.js';
 /**
  * Thumbnail sizes:
  *
- * - `WxH`  crop to fill W×H, centered (e.g. `100x100`)
- * - `WxHt` crop to fill W×H from the top
- * - `WxHb` crop to fill W×H from the bottom
- * - `WxHf` fit inside W×H without cropping
- * - `Wx0`  scale to width W, keeping the aspect ratio
- * - `0xH`  scale to height H, keeping the aspect ratio
+ * - `WxH`        crop to fill W×H, centered (e.g. `100x100`)
+ * - `WxH:top`    crop to fill W×H from the top
+ * - `WxH:bottom` crop to fill W×H from the bottom
+ * - `WxH:fit`    fit inside W×H without cropping
+ * - `Wx0`        scale to width W, keeping the aspect ratio
+ * - `0xH`        scale to height H, keeping the aspect ratio
  */
 
 export type ThumbnailMode = 'crop' | 'top' | 'bottom' | 'fit' | 'width' | 'height';
 
 export type ThumbnailSize = {
-	/** The size as written, e.g. `100x100f`; also used in URLs (`?thumb=100x100f`). */
+	/** The size as written, e.g. `100x100:fit`; also used in URLs (`?size=100x100:fit`). */
 	spec: string;
 	width: number;
 	height: number;
@@ -24,7 +24,7 @@ export type ThumbnailSize = {
 /** Largest thumbnail side. */
 export const MAX_THUMBNAIL_SIDE = 4000;
 
-const PATTERN = /^(\d{1,4})x(\d{1,4})([tbf])?$/;
+const PATTERN = /^(\d{1,4})x(\d{1,4})(?::(top|bottom|fit))?$/;
 
 export function parseThumbnailSize(spec: string): ThumbnailSize | null {
 	const match = PATTERN.exec(spec.trim().toLowerCase());
@@ -35,23 +35,25 @@ export function parseThumbnailSize(spec: string): ThumbnailSize | null {
 
 	const width = Number(match[1]);
 	const height = Number(match[2]);
-	const suffix = match[3];
+	const mode = match[3] as 'top' | 'bottom' | 'fit' | undefined;
 
 	if ((!width && !height) || width > MAX_THUMBNAIL_SIDE || height > MAX_THUMBNAIL_SIDE) {
 		return null;
 	}
 
 	if (!width || !height) {
-		// `Wx0` and `0xH` scale on one side; a crop/fit suffix makes no sense there.
-		return suffix
+		// `Wx0` and `0xH` scale on one side; a crop/fit mode makes no sense there.
+		return mode
 			? null
 			: { spec: `${width}x${height}`, width, height, mode: width ? 'width' : 'height' };
 	}
 
-	const mode: ThumbnailMode =
-		suffix === 'f' ? 'fit' : suffix === 't' ? 'top' : suffix === 'b' ? 'bottom' : 'crop';
-
-	return { spec: `${width}x${height}${suffix ?? ''}`, width, height, mode };
+	return {
+		spec: `${width}x${height}${mode ? `:${mode}` : ''}`,
+		width,
+		height,
+		mode: mode ?? 'crop'
+	};
 }
 
 /** Splits a list like `100x100, 300x0` (commas or new lines) into specs. */

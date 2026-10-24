@@ -1,7 +1,7 @@
 /**
  * The sign-in providers built into Pouchbase (as plugins, `plugins/auth-*` in the app). An
  * instance can have more: every installed sign-in plugin adds its own, so ask
- * `pb.auth.providers()` which ones are enabled.
+ * `pouch.auth.providers()` which ones are enabled.
  */
 export const KNOWN_OAUTH_PROVIDERS = [
 	'google',
@@ -34,7 +34,7 @@ export type OAuthProviderInfo = {
 
 /**
  * A row of the `users` collection. Its fields depend on the collection's schema, so everything but
- * `id` is untyped; pass your own type to `pb.auth.me<T>()` for more.
+ * `id` is untyped; pass your own type to `pouch.auth.me<T>()` for more.
  */
 export type User = Record<string, unknown> & { id: string };
 
@@ -63,14 +63,14 @@ export type AuthResult = {
 };
 
 /**
- * The result of `pb.auth.signUp()`. When the instance requires a verified email, `token` is `null`
+ * The result of `pouch.auth.signUp()`. When the instance requires a verified email, `token` is `null`
  * and the user signs in after following the link in the verification email.
  */
 export type SignUpResult =
 	| (AuthResult & { verificationRequired: false })
 	| { token: null; userId: string; verificationRequired: true };
 
-/** Input for `pb.auth.signUp()`. */
+/** Input for `pouch.auth.signUp()`. */
 export type SignUpInput = {
 	/** Full name, such as `Ada Lovelace`. */
 	name: string;

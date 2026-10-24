@@ -3,14 +3,14 @@ import type { ConnectionState } from '@pouchbasejs/js-sdk';
 import { Pouchbase } from '@pouchbasejs/js-sdk';
 
 /**
- * Live updates in the dashboard, through the SDK's realtime client. The dashboard connects without
+ * Live updates in the dashboard, through the SDK's live client. The dashboard connects without
  * a token: the hub sees the session cookie of the same origin, so it is the admin and gets every
  * change, whatever the API rules say.
  */
 
 let client: Pouchbase | null = null;
 
-function pb() {
+function pouch() {
 	client ??= new Pouchbase(location.origin);
 	return client;
 }
@@ -30,28 +30,28 @@ export class LiveCollection {
 		$effect(() => {
 			const collection = name();
 			let timer: ReturnType<typeof setTimeout> | undefined;
-			const realtime = pb().realtime;
+			const live = pouch().live;
 
 			this.state = 'connecting';
 
-			const stopState = realtime.onState((changed, state) => {
+			const stopState = live.onState((changed, state) => {
 				if (changed === collection) {
 					this.state = state;
 				}
 			});
-			const subscription = realtime.subscribe(collection, () => {
+			const watching = live.watch(collection, () => {
 				clearTimeout(timer);
 				timer = setTimeout(onChange, DEBOUNCE_MS);
 			});
 
-			subscription.ready.catch(() => {
+			watching.ready.catch(() => {
 				this.state = 'closed';
 			});
 
 			return () => {
 				clearTimeout(timer);
 				stopState();
-				subscription.unsubscribe();
+				watching.stop();
 			};
 		});
 	}

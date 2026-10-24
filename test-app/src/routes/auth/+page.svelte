@@ -2,7 +2,7 @@
 	import type { OAuthProviderInfo } from '@pouchbasejs/js-sdk';
 	import Output from '#lib/components/output.svelte';
 	import Panel from '#lib/components/panel.svelte';
-	import { auth, pb } from '#lib/pouchbase.svelte.js';
+	import { auth, pouch } from '#lib/pouchbase.svelte.js';
 	import { Runner } from '#lib/run.svelte.js';
 
 	const runner = new Runner();
@@ -14,25 +14,35 @@
 	let token = $state('');
 	let newPassword = $state('');
 
-	pb.auth.providers().then(
+	pouch.auth.providers().then(
 		(list) => (providers = list),
 		() => (providers = [])
 	);
 </script>
 
-<Panel title="Auth store" description="pb.authStore, kept in localStorage by LocalAuthStore">
+<Panel title="Session" description="pouch.session, kept in localStorage (session: 'browser')">
 	<div class="row">
-		<button disabled={runner.loading} onclick={() => runner.run(() => pb.auth.me())}>
-			pb.auth.me()
+		<button disabled={runner.loading} onclick={() => runner.run(() => pouch.auth.me())}>
+			pouch.auth.me()
 		</button>
-		<button class="ghost" onclick={() => runner.run(async () => pb.authStore.isValid)}>
-			authStore.isValid
+		<button
+			class="ghost"
+			onclick={() =>
+				runner.run(async () => ({
+					signedIn: pouch.session.signedIn,
+					expiresAt: pouch.session.expiresAt
+				}))}
+		>
+			session.signedIn
 		</button>
-		<button class="ghost" disabled={!auth.state} onclick={() => pb.auth.signOut()}>
-			pb.auth.signOut()
+		<button class="ghost" disabled={!auth.session} onclick={() => pouch.session.end()}>
+			pouch.session.end()
+		</button>
+		<button class="ghost" disabled={!auth.session} onclick={() => pouch.auth.signOut()}>
+			pouch.auth.signOut()
 		</button>
 	</div>
-	<pre>{JSON.stringify(auth.state, null, 2)}</pre>
+	<pre>{JSON.stringify(auth.session, null, 2)}</pre>
 </Panel>
 
 <Output outcome={runner.outcome} />
@@ -44,7 +54,7 @@
 			onsubmit={(event) => {
 				event.preventDefault();
 				runner.run(() =>
-					pb.auth.signUp({
+					pouch.auth.signUp({
 						name: signUp.name,
 						email: signUp.email,
 						password: signUp.password
@@ -66,7 +76,7 @@
 			class="stack"
 			onsubmit={(event) => {
 				event.preventDefault();
-				runner.run(() => pb.auth.signIn(signIn.email, signIn.password));
+				runner.run(() => pouch.auth.signIn(signIn.email, signIn.password));
 			}}
 		>
 			<label>Email <input bind:value={signIn.email} type="email" autocomplete="email" /></label>
@@ -78,12 +88,12 @@
 		</form>
 	</Panel>
 
-	<Panel title="OAuth" description="pb.auth.signInWithOAuth() opens a popup">
+	<Panel title="OAuth" description="pouch.auth.signInWithOAuth() opens a popup">
 		<div class="row">
 			{#each providers as provider (provider.provider)}
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pb.auth.signInWithOAuth(provider.provider))}
+					onclick={() => runner.run(() => pouch.auth.signInWithOAuth(provider.provider))}
 				>
 					{provider.label}
 				</button>
@@ -99,15 +109,15 @@
 			<div class="row">
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pb.auth.requestPasswordReset(email))}
+					onclick={() => runner.run(() => pouch.auth.sendPasswordReset(email))}
 				>
-					Request reset
+					Send reset
 				</button>
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pb.auth.requestVerification(email))}
+					onclick={() => runner.run(() => pouch.auth.sendVerification(email))}
 				>
-					Request verification
+					Send verification
 				</button>
 			</div>
 			<label>Token from the email <input bind:value={token} /></label>
@@ -115,15 +125,15 @@
 			<div class="row">
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pb.auth.confirmPasswordReset(token, newPassword))}
+					onclick={() => runner.run(() => pouch.auth.resetPassword(token, newPassword))}
 				>
-					Confirm reset
+					Reset password
 				</button>
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pb.auth.confirmVerification(token))}
+					onclick={() => runner.run(() => pouch.auth.verifyEmail(token))}
 				>
-					Confirm verification
+					Verify email
 				</button>
 			</div>
 		</div>

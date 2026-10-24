@@ -15,7 +15,7 @@
 		{ id: 'relations', title: 'Relations' },
 		{ id: 'writing-records', title: 'Writing records' },
 		{ id: 'api-rules', title: 'API rules' },
-		{ id: 'filters', title: 'Filters' },
+		{ id: 'conditions', title: 'Conditions' },
 		{ id: 'files', title: 'Files' },
 		{ id: 'schema', title: 'Managing collections' },
 		{ id: 'rest-api', title: 'REST API' }
@@ -24,58 +24,88 @@
 	const rules = [
 		['Admins only', 'The default: not available through the API, only to admins in the dashboard.'],
 		['Everyone', 'Also without signing in.'],
-		['Signed-in users', 'Any request with a valid token (@request.auth.id != "").'],
+		['Signed-in users', 'Any request with a valid token ($user.id != null).'],
 		[
 			'Owner',
-			'Only the user in a relation field to users, such as author = @request.auth.id. In users itself: the user themselves.'
+			'Only the user in a relation field to users, such as author == $user.id, or any(editors) == $user.id for a multiple relation. In users itself: the user themselves.'
 		],
 		[
 			'Custom rule',
-			'A filter; only records that match it are allowed, e.g. status = "published" || author = @request.auth.id.'
+			'A condition; only records that match it are allowed, e.g. status == "published" or author == $user.id.'
+		]
+	];
+
+	const operands = [
+		['title  author.name', 'A field of the record; a dot follows a relation'],
+		['"text"  \'text\'', 'A string, in double or single quotes'],
+		['42  3.14', 'Numbers'],
+		['true  false  null', 'Booleans, and null for an empty value'],
+		['$now', 'The current date and time'],
+		['$user.<field>', 'A field of the signed-in user, e.g. $user.id; null when signed out'],
+		[
+			'$input.<field>',
+			'The value submitted for a field, in create and update rules, e.g. $input.status'
 		]
 	];
 
 	const operators = [
-		['=  !=', 'Equal, not equal'],
-		['>  >=  <  <=', 'Greater and less than'],
-		['~  !~', 'Contains, does not contain (text)'],
-		['?=  ?~  …', 'With ? in front: any item of a multiple relation or list, e.g. tags ?= "news"'],
-		['&&  ||  ( )', 'And, or, grouping']
+		['==  !=', 'Equal, not equal'],
+		['>  >=  <  <=', 'Greater and less than (numbers, dates and text)'],
+		[
+			'contains  not contains',
+			'Contains, does not contain: a case-insensitive substring match; % in the text is a wildcard'
+		],
+		[
+			'any(<field>) …',
+			'True when any item of a multiple relation or list matches, e.g. any(tags) == "news"'
+		],
+		['and  or  ( )', 'Both, either, and parentheses for grouping'],
+		['# …', 'A comment, until the end of the line']
+	];
+
+	const examples = [
+		['$user.id != null', 'Signed in'],
+		['author == $user.id', 'The owner, through a single relation to users'],
+		['any(editors) == $user.id', 'One of the editors, through a multiple relation'],
+		['status == "published" or author == $user.id', 'Published, or your own'],
+		['published_at <= $now', 'Published by now'],
+		['title contains "svelte"', 'The title has svelte in it, in any case'],
+		['$input.author == $user.id', 'Create rule: only with yourself as the author']
 	];
 
 	const endpoints = [
 		[
-			'GET /api/collections/<name>/records',
-			'Records the list rule allows; page, perPage, sort, filter, fields, expand'
+			'GET /api/db/<collection>',
+			'Records the list rule allows; where, order, select, include, limit, offset'
 		],
-		['GET /api/collections/<name>/records/<id>', 'One record, when the view rule allows it'],
+		['GET /api/db/<collection>/<id>', 'One record, when the view rule allows it; select, include'],
 		[
-			'POST /api/collections/<name>/records',
-			'Creates a record from { <field>: value }, when the create rule allows it'
-		],
-		[
-			'PATCH /api/collections/<name>/records/<id>',
-			'Changes the given fields, when the update rule allows it'
+			'POST /api/db/<collection>',
+			'Creates a record from { <field>: value }, when the create rule allows it; select, include'
 		],
 		[
-			'DELETE /api/collections/<name>/records/<id>',
-			'Deletes a record when the delete rule allows it; 204'
+			'PATCH /api/db/<collection>/<id>',
+			'Changes the given fields, when the update rule allows it; select, include'
 		],
-		['GET /api/files/<id>', 'A file from the files collection; ?thumb=<size>, ?download'],
+		['DELETE /api/db/<collection>/<id>', 'Deletes a record when the delete rule allows it; 204'],
+		['GET /api/files/<id>', 'A file from the files collection; ?size=<size>, ?download'],
 		['GET /api/types?token=…', 'TypeScript types of every collection; the URL is on the Types page']
 	];
 
 	const schemaEndpoints = [
-		['GET /api/collections', 'Every collection with its fields, indexes, API rules and settings'],
-		['GET /api/collections/<name>', 'One collection'],
-		['POST /api/collections', 'Creates a collection from { name, fields, indexes, rules }; 201'],
+		['GET /api/schema', 'Every collection with its fields, indexes, API rules and settings'],
+		['GET /api/schema/<name>', 'One collection'],
+		['POST /api/schema', 'Creates a collection from { name, fields, indexes, rules }; 201'],
 		[
-			'PATCH /api/collections/<name>',
+			'PATCH /api/schema/<name>',
 			'Changes the given parts; ?force=true for changes that remove fields or data'
 		],
-		['DELETE /api/collections/<name>', 'Deletes a collection and its records; 204'],
-		['GET /api/collections/export', 'An export file; ?collections=a,b for some of them'],
-		['POST /api/collections/import', 'Imports an export file; ?dryRun, ?removeMissing, ?force']
+		['DELETE /api/schema/<name>', 'Deletes a collection and its records; 204'],
+		[
+			'GET /api/schema/export',
+			'An export file, { format: 2, exportedAt, collections, related }; ?collections=a,b for some of them'
+		],
+		['POST /api/schema/import', 'Imports an export file; ?dryRun, ?removeMissing, ?force']
 	];
 </script>
 
@@ -120,9 +150,9 @@
 	<p>
 		The file has a <Code.Root>&lt;Name&gt;Record</Code.Root> (what the API returns) and a
 		<Code.Root>&lt;Name&gt;Create</Code.Root> (what you send) per collection. Every collection is then
-		a typed property of <Code.Root>pb.db</Code.Root>: field names, conditions, the sort order, the
-		selected fields, the values you send and the results are all checked. Collections that aren't in
-		the schema are reached with <Code.Root>pb.db.$collection('name')</Code.Root>.
+		a typed property of <Code.Root>pouch.db</Code.Root>: field names, conditions, the sort order,
+		the selected fields, the values you send and the results are all checked. Collections that
+		aren't in the schema are reached with <Code.Root>pouch.db.$collection('name')</Code.Root>.
 	</p>
 
 	<h2 id="reading-records">Reading records</h2>
@@ -135,6 +165,14 @@
 		Conditions are objects, so values never need escaping. Records come back with real values:
 		booleans as booleans, JSON fields parsed, and multiple relations, files and lists as arrays
 		(empty when there are none). Blob fields are left out.
+	</p>
+
+	<p>
+		<Code.Root>findMany()</Code.Root> returns a page: <Code.Root>items</Code.Root>, the
+		<Code.Root>total</Code.Root> number of matches, the <Code.Root>limit</Code.Root> and
+		<Code.Root>offset</Code.Root> it used and <Code.Root>hasMore</Code.Root>. For the next page,
+		pass <Code.Root>offset + limit</Code.Root> as the offset; <Code.Root>iterate()</Code.Root> and
+		<Code.Root>findAll()</Code.Root> do that for you.
 	</p>
 
 	<h2 id="relations">Relations</h2>
@@ -213,24 +251,41 @@
 		Server-side code that has to manage every record, such as a back-end that writes what users may
 		not, uses an API key with the <strong>service</strong> scope (<strong>System → API keys</strong
 		>). The rules don't apply to it, as for an admin. Pass the key as
-		<Code.Root>apiKey</Code.Root> and call the records through <Code.Root>pb.asService()</Code.Root
+		<Code.Root>apiKey</Code.Root> and call the records through <Code.Root
+			>pouch.asService()</Code.Root
 		>:
-		<Code.Root>pb.asService().db.posts.patch(id, &#123; featured: true &#125;)</Code.Root>. Never
+		<Code.Root>pouch.asService().db.posts.patch(id, &#123; featured: true &#125;)</Code.Root>. Never
 		put a service key in an app that runs in the browser.
 	</p>
 
-	<h2 id="filters">Filters</h2>
+	<h2 id="conditions">Conditions</h2>
 
 	<p>
-		Custom rules and hand-written filters use the same syntax: field names, <Code.Root
-			>"strings"</Code.Root
-		>, numbers, <Code.Root>true</Code.Root> and <Code.Root>false</Code.Root>, <Code.Root
-			>null</Code.Root
-		>,
-		<Code.Root>@now</Code.Root>, <Code.Root>@request.auth.&lt;field&gt;</Code.Root> (the signed-in user;
-		an empty string when signed out) and <Code.Root>@request.body.&lt;field&gt;</Code.Root> (the submitted
-		values), with these operators:
+		Custom API rules, hand-written <Code.Root>where</Code.Root> clauses and the
+		<Code.Root>where</Code.Root> parameter of the REST API are all <strong>conditions</strong>: an
+		expression that is true or false for a record, such as
+		<Code.Root>status == "published" and views &gt; 10</Code.Root>. A condition compares
+		<em>operands</em>:
 	</p>
+
+	<Table.Root>
+		<Table.Header>
+			<Table.Row>
+				<Table.Head>Operand</Table.Head>
+				<Table.Head>Meaning</Table.Head>
+			</Table.Row>
+		</Table.Header>
+		<Table.Body>
+			{#each operands as [operand, meaning] (operand)}
+				<Table.Row>
+					<Table.Cell><Code.Root class="whitespace-pre">{operand}</Code.Root></Table.Cell>
+					<Table.Cell>{meaning}</Table.Cell>
+				</Table.Row>
+			{/each}
+		</Table.Body>
+	</Table.Root>
+
+	<p>with these operators:</p>
 
 	<Table.Root>
 		<Table.Header>
@@ -250,8 +305,36 @@
 	</Table.Root>
 
 	<p>
-		For what <Code.Root>where</Code.Root> can't express, such as the signed-in user, write the filter
-		yourself:
+		<Code.Root>$user</Code.Root> is the user whose token came with the request. When nobody is signed
+		in, every <Code.Root>$user.&lt;field&gt;</Code.Root> is <Code.Root>null</Code.Root>, so
+		<Code.Root>$user.id != null</Code.Root> means "signed in". <Code.Root>$input</Code.Root> holds the
+		body of a create or update request, so a rule can check what is written as well as the record it is
+		written to. <Code.Root>any(…)</Code.Root> goes around a multiple relation or a list field and works
+		with every comparison: <Code.Root>any(tags) contains "news"</Code.Root>. Some examples:
+	</p>
+
+	<Table.Root>
+		<Table.Header>
+			<Table.Row>
+				<Table.Head>Condition</Table.Head>
+				<Table.Head>Matches</Table.Head>
+			</Table.Row>
+		</Table.Header>
+		<Table.Body>
+			{#each examples as [example, meaning] (example)}
+				<Table.Row>
+					<Table.Cell><Code.Root class="whitespace-nowrap">{example}</Code.Root></Table.Cell>
+					<Table.Cell>{meaning}</Table.Cell>
+				</Table.Row>
+			{/each}
+		</Table.Body>
+	</Table.Root>
+
+	<p>
+		A long rule can span several lines, with a <Code.Root>#</Code.Root> comment to explain a part. For
+		what the object form of <Code.Root>where</Code.Root> can't express, such as the signed-in user, write
+		the condition yourself with the <Code.Root>condition</Code.Root> tag, which escapes the values you
+		put in <Code.Root>{'${…}'}</Code.Root>:
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -271,11 +354,12 @@
 	</CodeBlock.Root>
 
 	<p>
-		Thumbnails are made for the sizes listed in the settings of <Code.Root>files</Code.Root>, in
-		PocketBase syntax: <Code.Root>100x100</Code.Root> crops from the center,
-		<Code.Root>100x100t</Code.Root> and <Code.Root>100x100b</Code.Root> from the top and bottom,
-		<Code.Root>100x100f</Code.Root> fits without cropping, and <Code.Root>100x0</Code.Root> or
-		<Code.Root>0x100</Code.Root> scale to one side. Only PNG, JPEG, GIF, WebP and AVIF images are shown
+		Thumbnails are made for the sizes listed in the settings of <Code.Root>files</Code.Root>, as
+		width by height: <Code.Root>100x100</Code.Root> crops from the center,
+		<Code.Root>100x100:top</Code.Root> and <Code.Root>100x100:bottom</Code.Root> crop from the top and
+		bottom, <Code.Root>100x100:fit</Code.Root> fits the image without cropping, and
+		<Code.Root>100x0</Code.Root> or <Code.Root>0x100</Code.Root> scale to one side. Ask for one with
+		<Code.Root>?size=100x100:fit</Code.Root>. Only PNG, JPEG, GIF, WebP and AVIF images are shown
 		inline; every other type is downloaded.
 	</p>
 
@@ -283,7 +367,7 @@
 
 	<p>
 		Collections can also be managed from code, for example in a deploy script, with an API key with
-		the <strong>service</strong> scope. <Code.Root>pb.collections</Code.Root> creates, changes and deletes
+		the <strong>service</strong> scope. <Code.Root>pouch.schema</Code.Root> creates, changes and deletes
 		collections with their fields, indexes and API rules, and exports and imports them as a JSON file
 		without records. The same export and import are in the menu next to
 		<strong>Collections</strong> in the admin.
@@ -343,13 +427,15 @@
 	</Table.Root>
 
 	<p>
-		A list takes <Code.Root>page</Code.Root> (default 1), <Code.Root>perPage</Code.Root> (default 30,
-		at most 500), <Code.Root>sort</Code.Root> (<Code.Root>-created_at,title</Code.Root>; a minus
-		sorts descending), <Code.Root>filter</Code.Root>, <Code.Root>fields</Code.Root>
-		(<Code.Root>id,title</Code.Root>) and <Code.Root>expand</Code.Root>
-		(<Code.Root>author,comments.author</Code.Root>, which every call but a delete takes), and
-		answers
-		<Code.Root>{'{ page, perPage, totalItems, totalPages, items }'}</Code.Root>. Validation errors
+		A list takes <Code.Root>where</Code.Root> (a <a href="#conditions">condition</a>),
+		<Code.Root>order</Code.Root> (<Code.Root>created_at:desc,title</Code.Root>; a field is sorted
+		ascending unless it ends in <Code.Root>:desc</Code.Root>), <Code.Root>select</Code.Root>
+		(<Code.Root>id,title</Code.Root>), <Code.Root>include</Code.Root>
+		(<Code.Root>author,comments.author</Code.Root>: relations replaced by their records, which every
+		call but a delete takes), <Code.Root>limit</Code.Root> (default 30, 1 to 500) and
+		<Code.Root>offset</Code.Root> (default 0), and answers
+		<Code.Root>{'{ items, total, limit, offset }'}</Code.Root>. An invalid parameter is a 400 with a
+		message such as <Code.Root>Invalid where: …</Code.Root>. Validation errors of a create or update
 		are a 400 with a message per field in <Code.Root>issues</Code.Root>.
 	</p>
 </DocsPage>

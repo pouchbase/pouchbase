@@ -26,7 +26,7 @@ export const docsNavigation: DocsGroup[] = [
 		links: [
 			{ label: 'Authentication', href: resolve('/docs/authentication') },
 			{ label: 'Collections and records', href: resolve('/docs/collections') },
-			{ label: 'Realtime', href: resolve('/docs/realtime') },
+			{ label: 'Live updates', href: resolve('/docs/live-updates') },
 			{ label: 'Functions', href: resolve('/docs/functions') },
 			{ label: 'Email templates', href: resolve('/docs/email') }
 		]

@@ -12,7 +12,7 @@ import { fieldOptionsSchema, snapshotCollectionSchema } from './environments';
  */
 export const COLLECTION_NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** Names taken by the collections API itself (`/api/collections/export` and `/import`). */
+/** Names taken by the collections API itself (`/api/schema/export` and `/import`). */
 export const RESERVED_COLLECTION_NAMES = ['export', 'import'];
 
 export const collectionName = z
@@ -43,17 +43,20 @@ export const deleteCollectionSchema = z.object({
 	name: z.string()
 });
 
-/** Version of the export file format. */
-export const COLLECTION_EXPORT_FORMAT = 1;
+/**
+ * Version of the export file format. Files of format 1 (before Pouchbase 0.9) are still read: their
+ * rules and thumbnail sizes are upgraded to the current syntax.
+ */
+export const COLLECTION_EXPORT_FORMAT = 2;
 
 /**
- * A file with collections as `GET /api/collections/export` and the Collections menu make it: their
+ * A file with collections as `GET /api/schema/export` and the Collections menu make it: their
  * fields, indexes, API rules and settings, without records. Relation fields point at collections
  * by id; `related` names the collections they point at that aren't in the file, so an import on
  * another instance finds them by name.
  */
 export const collectionExportSchema = z.object({
-	format: z.literal(COLLECTION_EXPORT_FORMAT),
+	format: z.union([z.literal(1), z.literal(COLLECTION_EXPORT_FORMAT)]),
 	exportedAt: z.string(),
 	collections: z.array(snapshotCollectionSchema),
 	related: z.array(z.object({ id: z.string(), name: z.string() })).default([])
@@ -112,7 +115,7 @@ const apiCollectionFields = {
 	})
 };
 
-/** Body of `POST /api/collections`. */
+/** Body of `POST /api/schema`. */
 export const apiCreateCollectionSchema = z.object({
 	name: collectionName,
 	fields: apiCollectionFields.fields.default([]),
@@ -121,7 +124,7 @@ export const apiCreateCollectionSchema = z.object({
 	thumbnails: apiCollectionFields.thumbnails.optional()
 });
 
-/** Body of `PATCH /api/collections/<name>`: only the given parts change. */
+/** Body of `PATCH /api/schema/<name>`: only the given parts change. */
 export const apiUpdateCollectionSchema = z.object({
 	name: collectionName.optional(),
 	fields: apiCollectionFields.fields.optional(),

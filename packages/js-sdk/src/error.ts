@@ -89,7 +89,7 @@ export type Result<T, F extends string = string> =
  * a `Result` that never throws, handy in forms:
  *
  * ```ts
- * const result = await pb.db.posts.insert(values).safe();
+ * const result = await pouch.db.posts.insert(values).safe();
  *
  * if (!result.ok) {
  * 	showErrors(result.error.issues); // { title?: string; … }

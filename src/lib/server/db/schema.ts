@@ -4,7 +4,16 @@ import type { CollectionSettings } from '../../files/thumbnails';
 import type { MailStyle } from '../../mail/layout';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { customType, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+
+import { upgradeSettings } from '../../collections/upgrade';
+
+/** JSON settings of a collection, upgraded to the current syntax when read (see `upgradeSettings`). */
+const collectionSettings = customType<{ data: CollectionSettings; driverData: string }>({
+	dataType: () => 'text',
+	toDriver: (value) => JSON.stringify(value),
+	fromDriver: (value) => upgradeSettings(JSON.parse(value) as CollectionSettings)
+});
 
 export const users = sqliteTable('users', {
 	id: text('id')
@@ -41,7 +50,7 @@ export const collections = sqliteTable('collections', {
 	/** Built-in collections (like `users`) can't be renamed or deleted. */
 	system: integer('system', { mode: 'boolean' }).notNull().default(false),
 	/** Collection-specific settings, e.g. thumbnail sizes for `files`. */
-	settings: text('settings', { mode: 'json' }).$type<CollectionSettings>().notNull().default({}),
+	settings: collectionSettings('settings').notNull().default({}),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.notNull()
 		.$defaultFn(() => new Date())

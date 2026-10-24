@@ -43,7 +43,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 
 ## Sync schema changes
 
-1. Change the collections here (dashboard, or `pb.collections` with the service key) and the site code that uses them, and test them locally.
+1. Change the collections here (dashboard, or `pouch.schema` with the service key) and the site code that uses them, and test them locally.
 2. Under **System → Environments**, **Publish** to the linked instance. The plan lists every change first; changes that delete fields or data need a confirmation.
 3. Publish before the site version that needs the change is deployed (merging the Version Packages pull request deploys the site), and update the collections table in `site/README.md`.
 

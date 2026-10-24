@@ -9,7 +9,7 @@
  * form submissions over plain http are rejected as cross-site.
  *
  * It also calls `POST /internal/tick` once a minute, which runs scheduled backups (the Worker uses a
- * Cron Trigger for this instead), and hands the WebSocket upgrades of `/api/realtime` to the
+ * Cron Trigger for this instead), and hands the WebSocket upgrades of `/api/live` to the
  * realtime hub (the Worker uses a Durable Object for this instead).
  *
  * The app reads where it runs from `globalThis[Symbol.for('pouchbase.runtime')]` (see
@@ -177,7 +177,7 @@ const server = createServer((request, response) => {
 	handler(request, response);
 });
 
-// The realtime WebSocket (`/api/realtime`). SvelteKit can't answer upgrades, so they go to the hub
+// The realtime WebSocket (`/api/live`). SvelteKit can't answer upgrades, so they go to the hub
 // that the app made when it loaded (src/lib/server/realtime/node-hub.ts).
 const realtimeHub = Symbol.for('pouchbase.realtime.hub');
 

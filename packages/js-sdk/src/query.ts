@@ -1,20 +1,20 @@
 /**
- * Typed queries for `pb.db`: `where` objects, `orderBy` and `select`, compiled to the query string
- * of the records API (`filter`, `sort`, `fields`). Values are always escaped, so a value from a
- * user can never change the query.
+ * Typed queries for `pouch.db`: `where` objects, `orderBy`, `select` and `include`, compiled to the
+ * query string of the records API (`where`, `order`, `select`, `include`). Values are always
+ * escaped, so a value from a user can never change the query.
  */
 
 /** A value of a JSON field. */
 export type JsonValue =
 	string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
-const FILTER: unique symbol = Symbol('pouchbase.filter');
+const CONDITION: unique symbol = Symbol('pouchbase.condition');
 
-/** A filter written by hand with `filter\`…\``; its values are escaped. */
-export type Filter = { readonly [FILTER]: string };
+/** A condition written by hand with `condition\`…\``; its values are escaped. */
+export type Condition = { readonly [CONDITION]: string };
 
-/** Values that can be put in a filter. */
-export type FilterValue = string | number | boolean | null | undefined | Date;
+/** Values that can be put in a condition. */
+export type ConditionValue = string | number | boolean | null | undefined | Date;
 
 /** The item type of an array field. */
 type ItemOf<V> = V extends readonly (infer I)[] ? I : never;
@@ -97,8 +97,11 @@ export type Selected<R, S> = S extends readonly FieldName<R>[] ? Pick<R, S[numbe
 
 const NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** A value as a literal of the filter syntax. */
-function literal(value: FilterValue): string {
+/** A condition that no record matches. */
+const NOTHING = '1 == 0';
+
+/** A value as a literal of the condition syntax. */
+function literal(value: ConditionValue): string {
 	if (value === null || value === undefined) {
 		return 'null';
 	}
@@ -109,7 +112,7 @@ function literal(value: FilterValue): string {
 
 	if (typeof value === 'number') {
 		if (!Number.isFinite(value)) {
-			throw new TypeError(`Can't filter on ${value}`);
+			throw new TypeError(`Can't compare with ${value}`);
 		}
 
 		return String(value);
@@ -123,7 +126,7 @@ function literal(value: FilterValue): string {
 		return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 	}
 
-	throw new TypeError(`Can't filter on a value of type ${typeof value}`);
+	throw new TypeError(`Can't compare with a value of type ${typeof value}`);
 }
 
 function fieldName(name: string) {
@@ -135,131 +138,132 @@ function fieldName(name: string) {
 }
 
 /**
- * A filter written by hand, for what `where` can't express, such as `@request.auth.id`. Values
- * in `${…}` are escaped, so they can come from users.
+ * A condition written by hand, in the syntax of the API rules, for what `where` can't express,
+ * such as the signed-in user (`$user.id`). Values in `${…}` are escaped, so they can come from
+ * users.
  *
  * ```ts
- * pb.db.posts.findMany({ where: filter`author = @request.auth.id || title ~ ${search}` });
+ * pouch.db.posts.findMany({ where: condition`author == $user.id or title contains ${search}` });
  * ```
  */
-export function filter(strings: TemplateStringsArray, ...values: FilterValue[]): Filter {
+export function condition(strings: TemplateStringsArray, ...values: ConditionValue[]): Condition {
 	return {
-		[FILTER]: strings.reduce(
+		[CONDITION]: strings.reduce(
 			(text, part, index) => text + part + (index < values.length ? literal(values[index]) : ''),
 			''
 		)
 	};
 }
 
-function isFilter(value: unknown): value is Filter {
-	return !!value && typeof value === 'object' && FILTER in value;
+function isCondition(value: unknown): value is Condition {
+	return !!value && typeof value === 'object' && CONDITION in value;
 }
 
-function isConditions(value: unknown) {
+function isComparisons(value: unknown) {
 	return (
 		!!value &&
 		typeof value === 'object' &&
 		!(value instanceof Date) &&
 		!Array.isArray(value) &&
-		!isFilter(value)
+		!isCondition(value)
 	);
 }
 
 const OPERATORS: Record<string, string> = {
-	eq: '=',
+	eq: '==',
 	not: '!=',
 	gt: '>',
 	gte: '>=',
 	lt: '<',
 	lte: '<=',
-	contains: '~',
-	notContains: '!~'
+	contains: 'contains',
+	notContains: 'not contains'
 };
 
-/** One field's conditions as filter parts. */
-function fieldParts(name: string, condition: unknown): string[] {
-	if (condition === undefined) {
+/** One field's comparisons as parts of a condition. */
+function fieldParts(name: string, comparisons: unknown): string[] {
+	if (comparisons === undefined) {
 		return [];
 	}
 
-	if (!isConditions(condition)) {
-		return [`${name} = ${literal(condition as FilterValue)}`];
+	if (!isComparisons(comparisons)) {
+		return [`${name} == ${literal(comparisons as ConditionValue)}`];
 	}
 
-	return Object.entries(condition as Record<string, unknown>).flatMap(([operator, value]) => {
+	return Object.entries(comparisons as Record<string, unknown>).flatMap(([operator, value]) => {
 		if (value === undefined) {
 			return [];
 		}
 
-		const values = value as FilterValue[];
+		const values = value as ConditionValue[];
 
 		switch (operator) {
 			case 'in':
 				// Nothing to match: no record matches.
 				return [
 					values.length
-						? `(${values.map((item) => `${name} = ${literal(item)}`).join(' || ')})`
-						: '1 = 0'
+						? `(${values.map((item) => `${name} == ${literal(item)}`).join(' or ')})`
+						: NOTHING
 				];
 			case 'notIn':
 				return values.map((item) => `${name} != ${literal(item)}`);
 			case 'has':
-				return [`${name} ?= ${literal(value as FilterValue)}`];
+				return [`any(${name}) == ${literal(value as ConditionValue)}`];
 			case 'isEmpty':
-				return [`${name} ${value ? '=' : '!='} ""`];
+				return [`${name} ${value ? '==' : '!='} ""`];
 			default: {
 				const symbol = OPERATORS[operator];
 
 				if (!symbol) {
-					throw new TypeError(`Unknown condition \`${operator}\` for \`${name}\``);
+					throw new TypeError(`Unknown comparison \`${operator}\` for \`${name}\``);
 				}
 
-				return [`${name} ${symbol} ${literal(value as FilterValue)}`];
+				return [`${name} ${symbol} ${literal(value as ConditionValue)}`];
 			}
 		}
 	});
 }
 
-/** A `where` object as a filter expression; `''` when it matches every record. */
+/** A `where` object as a condition; `''` when it matches every record. */
 export function compileWhere(where: object | undefined): string {
 	if (!where) {
 		return '';
 	}
 
-	if (isFilter(where)) {
-		return where[FILTER];
+	if (isCondition(where)) {
+		return where[CONDITION];
 	}
 
-	const parts = Object.entries(where).flatMap(([key, condition]): string[] => {
+	const parts = Object.entries(where).flatMap(([key, comparisons]): string[] => {
 		if (key === '$or' || key === '$and') {
-			const branches = (condition as object[] | undefined) ?? [];
+			const branches = (comparisons as object[] | undefined) ?? [];
 			const compiled = branches.map((branch) => compileWhere(branch));
 
 			// An empty `$or` matches nothing, an empty branch everything.
 			if (key === '$or' && (!compiled.length || compiled.some((part) => !part))) {
-				return compiled.length ? [] : ['1 = 0'];
+				return compiled.length ? [] : [NOTHING];
 			}
 
 			const filled = compiled.filter(Boolean);
 
-			return filled.length ? [`(${filled.join(key === '$or' ? ' || ' : ' && ')})`] : [];
+			return filled.length ? [`(${filled.join(key === '$or' ? ' or ' : ' and ')})`] : [];
 		}
 
-		return fieldParts(fieldName(key), condition);
+		return fieldParts(fieldName(key), comparisons);
 	});
 
-	return parts.join(' && ');
+	return parts.join(' and ');
 }
 
-/** An `orderBy` object as `sort` (`-created_at,title`). */
+/** An `orderBy` object as `order` (`created_at:desc,title:asc`). */
 export function compileOrderBy(orderBy: Record<string, string | undefined> | undefined): string {
 	return Object.entries(orderBy ?? {})
 		.filter(([, direction]) => direction)
-		.map(([name, direction]) => `${direction === 'desc' ? '-' : ''}${fieldName(name)}`)
+		.map(([name, direction]) => `${fieldName(name)}:${direction === 'desc' ? 'desc' : 'asc'}`)
 		.join(',');
 }
 
-/** A `select` list as `fields` (`id,title`). */
+/** A `select` list as `select` (`id,title`). */
 export function compileSelect(select: readonly string[] | undefined): string | undefined {
 	return select?.length ? select.map(fieldName).join(',') : undefined;
 }
@@ -267,7 +271,7 @@ export function compileSelect(select: readonly string[] | undefined): string | u
 /** What `include` holds per relation: `true`, or the relations of its records to include too. */
 type IncludeTree = { [field: string]: true | { include?: IncludeTree } | undefined };
 
-/** An `include` object as `expand` (`author,comments.author`). */
+/** An `include` object as `include` (`author,comments.author`). */
 export function compileInclude(include: IncludeTree | undefined): string | undefined {
 	const paths = (tree: IncludeTree, prefix: string): string[] =>
 		Object.entries(tree).flatMap(([name, option]) => {
@@ -281,7 +285,7 @@ export function compileInclude(include: IncludeTree | undefined): string | undef
 			return nested.length ? nested : [path];
 		});
 
-	const expand = paths(include ?? {}, '');
+	const included = paths(include ?? {}, '');
 
-	return expand.length ? expand.join(',') : undefined;
+	return included.length ? included.join(',') : undefined;
 }

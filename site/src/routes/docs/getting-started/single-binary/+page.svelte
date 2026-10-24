@@ -25,7 +25,7 @@
 
 <DocsPage
 	title="Single binary"
-	description="Like PocketBase, Pouchbase comes as one executable without dependencies. It keeps no files of its own: the data lives on Cloudflare."
+	description="Pouchbase also comes as one executable without dependencies: download it and run it. It keeps no files of its own: the data lives on Cloudflare."
 	{sections}
 >
 	<CredentialsNote />

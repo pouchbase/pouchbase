@@ -31,7 +31,7 @@
 		 * hovers for functions and keywords.
 		 */
 		completions?: Completion[];
-		/** For `filter`: the fields autocomplete offers, after a space and after `@request.*`. */
+		/** For `filter`: the fields autocomplete offers, after a space and after `$user.` and `$input.`. */
 		filterNames?: FilterNames;
 		/**
 		 * Problems to underline, checked after every edit, e.g. from a parser; for languages
@@ -185,7 +185,7 @@
 				monaco.editor.defineTheme('pouchbase', {
 					base: 'vs',
 					inherit: true,
-					// `variable`: `@request.*` and `@now` in filters.
+					// `variable`: `$user.*`, `$input.*` and `$now` in conditions.
 					rules: [{ token: 'variable', foreground: '7c3aed' }],
 					colors: {
 						'scrollbar.shadow': '#00000000',

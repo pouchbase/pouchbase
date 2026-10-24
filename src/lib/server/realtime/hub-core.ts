@@ -38,7 +38,7 @@ export type Subscription = {
 	record: string | null;
 	filter: string | null;
 	fields: string[] | null;
-	/** Relations to send as records, as `?expand=` of the records API. */
+	/** Relations to send as records, as `?include=` of the records API. */
 	expand: string[] | null;
 };
 
@@ -120,7 +120,7 @@ export type AuthorizeResult = {
 const ID_PATTERN = /^[\w-]{1,64}$/;
 const MAX_FIELDS = 100;
 /** Paths in `expand`, each at most three field names. */
-const MAX_EXPAND = 20;
+const MAX_INCLUDE = 20;
 const MAX_TEXT = 4096;
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -151,7 +151,7 @@ export function parseClientMessage(text: string): ClientMessage | { error: strin
 				? { type: 'auth', token: (message.token as string | undefined) || undefined }
 				: { error: '`token` must be a string' };
 		case 'subscribe': {
-			const { id, record, filter, fields, expand } = message;
+			const { id, record, where, select, include } = message;
 
 			if (typeof id !== 'string' || !ID_PATTERN.test(id)) {
 				return { error: '`id` must be 1 to 64 letters, digits, `_` or `-`' };
@@ -161,35 +161,35 @@ export function parseClientMessage(text: string): ClientMessage | { error: strin
 				return { error: '`record` must be a record id' };
 			}
 
-			if (!optionalText(filter, MAX_TEXT)) {
-				return { error: '`filter` must be a string' };
+			if (!optionalText(where, MAX_TEXT)) {
+				return { error: '`where` must be a string' };
 			}
 
 			if (
-				fields !== undefined &&
-				(!Array.isArray(fields) ||
-					fields.length > MAX_FIELDS ||
-					fields.some((name) => typeof name !== 'string' || name.length > 64))
+				select !== undefined &&
+				(!Array.isArray(select) ||
+					select.length > MAX_FIELDS ||
+					select.some((name) => typeof name !== 'string' || name.length > 64))
 			) {
-				return { error: '`fields` must be a list of field names' };
+				return { error: '`select` must be a list of field names' };
 			}
 
 			if (
-				expand !== undefined &&
-				(!Array.isArray(expand) ||
-					expand.length > MAX_EXPAND ||
-					expand.some((path) => typeof path !== 'string' || path.length > 200))
+				include !== undefined &&
+				(!Array.isArray(include) ||
+					include.length > MAX_INCLUDE ||
+					include.some((path) => typeof path !== 'string' || path.length > 200))
 			) {
-				return { error: '`expand` must be a list of relation fields, such as `author.team`' };
+				return { error: '`include` must be a list of relation fields, such as `author.team`' };
 			}
 
 			return {
 				type: 'subscribe',
 				id,
 				record: record as string | undefined,
-				filter: (filter as string | undefined)?.trim() || undefined,
-				fields: (fields as string[] | undefined)?.length ? (fields as string[]) : undefined,
-				expand: (expand as string[] | undefined)?.length ? (expand as string[]) : undefined
+				where: (where as string | undefined)?.trim() || undefined,
+				select: (select as string[] | undefined)?.length ? (select as string[]) : undefined,
+				include: (include as string[] | undefined)?.length ? (include as string[]) : undefined
 			};
 		}
 		case 'unsubscribe':
@@ -445,9 +445,9 @@ export class HubCore {
 		const subscription: Subscription = {
 			id: message.id,
 			record: message.record ?? null,
-			filter: message.filter ?? null,
-			fields: message.fields ?? null,
-			expand: message.expand ?? null
+			filter: message.where ?? null,
+			fields: message.select ?? null,
+			expand: message.include ?? null
 		};
 		const response = await this.#call('subscribe', {
 			collection: this.collection,

@@ -1,7 +1,7 @@
 import type { Pouchbase } from '../client.js';
 import { PouchbaseError } from '../error.js';
 
-/** Options for `pb.mail.send()`. */
+/** Options for `pouch.mail.send()`. */
 export type SendMailOptions<V extends Record<string, unknown> = Record<string, unknown>> = {
 	/** Name of the email template, as on the Mail page. */
 	template: string;
@@ -18,11 +18,11 @@ export type SendMailOptions<V extends Record<string, unknown> = Record<string, u
  * `env.POUCHBASE_API_KEY`; for other back-ends, create one on the API keys page.
  */
 export class MailService {
-	readonly #pb: Pouchbase<object>;
+	readonly #pouch: Pouchbase<object>;
 	readonly #apiKey: string | undefined;
 
-	constructor(pb: Pouchbase<object>, apiKey: string | undefined) {
-		this.#pb = pb;
+	constructor(pouch: Pouchbase<object>, apiKey: string | undefined) {
+		this.#pouch = pouch;
 		this.#apiKey = apiKey;
 	}
 
@@ -30,8 +30,8 @@ export class MailService {
 	 * Sends an email template and returns how many emails were sent.
 	 *
 	 * ```ts
-	 * const pb = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
-	 * await pb.mail.send({ template: 'welcome', to: 'ada@example.com', variables: { name: 'Ada' } });
+	 * const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
+	 * await pouch.mail.send({ template: 'welcome', to: 'ada@example.com', variables: { name: 'Ada' } });
 	 * ```
 	 *
 	 * @throws {PouchbaseError} Without an `apiKey`, and for a non-2xx response: `404` for an unknown
@@ -47,7 +47,7 @@ export class MailService {
 			);
 		}
 
-		return this.#pb.send<{ sent: number }>('/api/mail/send', {
+		return this.#pouch.request<{ sent: number }>('/api/mail/send', {
 			method: 'POST',
 			body: { template: options.template, to: options.to, variables: options.variables ?? {} },
 			headers: { Authorization: `Bearer ${this.#apiKey}` },

@@ -115,26 +115,26 @@ describe('authorizationChecks', () => {
 	});
 
 	it('checks owner rules on the event’s values', () => {
-		expect(allowed('author = @request.auth.id', { ADA, GRACE, ANONYMOUS })).toEqual(['ADA']);
+		expect(allowed('author == $user.id', { ADA, GRACE, ANONYMOUS })).toEqual(['ADA']);
 	});
 
 	it('never matches a signed-out user to a record with an empty owner', () => {
 		const row = { ...POST, author: null };
 
-		expect(allowed('author = @request.auth.id', { ANONYMOUS }, { row })).toEqual([]);
+		expect(allowed('author == $user.id', { ANONYMOUS }, { row })).toEqual([]);
 	});
 
-	it('checks multiple relations with `?=`', () => {
-		expect(allowed('members ?= @request.auth.id', { ADA, GRACE })).toEqual(['ADA']);
+	it('checks multiple relations with `any()`', () => {
+		expect(allowed('any(members) == $user.id', { ADA, GRACE })).toEqual(['ADA']);
 	});
 
 	it('checks rules on fields of the signed-in user', () => {
-		expect(allowed('@request.auth.role = "editor"', { ADA, GRACE, ANONYMOUS })).toEqual(['ADA']);
+		expect(allowed('$user.role == "editor"', { ADA, GRACE, ANONYMOUS })).toEqual(['ADA']);
 	});
 
 	it('combines the rule with the subscriber’s filter', () => {
 		expect(
-			allowed('published = true', {
+			allowed('published == true', {
 				many: [GRACE, 'views > 10'],
 				few: [ADA, 'views > 100'],
 				admin: [ADMIN, 'views > 100']
@@ -145,24 +145,24 @@ describe('authorizationChecks', () => {
 	it('hides records the rule doesn’t match (after an update, or on delete)', () => {
 		const row = { ...POST, published: 0 };
 
-		expect(allowed('published = true', { ADA, ADMIN }, { row })).toEqual(['ADMIN']);
-		expect(allowed('published = true', { ADA }, { action: 'delete' })).toEqual(['ADA']);
+		expect(allowed('published == true', { ADA, ADMIN }, { row })).toEqual(['ADMIN']);
+		expect(allowed('published == true', { ADA }, { action: 'delete' })).toEqual(['ADA']);
 	});
 
-	it('compares `@now` with created fields in milliseconds', () => {
-		expect(allowed('created_at < @now', { ADA })).toEqual(['ADA']);
-		expect(allowed('created_at > @now', { ADA })).toEqual([]);
+	it('compares `$now` with created fields in milliseconds', () => {
+		expect(allowed('created_at < $now', { ADA })).toEqual(['ADA']);
+		expect(allowed('created_at > $now', { ADA })).toEqual([]);
 	});
 
 	it('lets nothing through a rule or filter that no longer compiles', () => {
-		expect(allowed('removed = 1', { ADA, ADMIN })).toEqual(['ADMIN']);
-		expect(allowed('', { ada: [ADA, 'removed = 1'] })).toEqual([]);
+		expect(allowed('removed == 1', { ADA, ADMIN })).toEqual(['ADMIN']);
+		expect(allowed('', { ada: [ADA, 'removed == 1'] })).toEqual([]);
 	});
 
 	it('only binds the fields the condition reads', () => {
 		const [check] = authorizationChecks({
 			action: 'update',
-			viewRule: 'author = @request.auth.id',
+			viewRule: 'author == $user.id',
 			viewOffered: true,
 			readable: FIELDS,
 			row: POST,
@@ -183,7 +183,7 @@ describe('authorizationChecks', () => {
 		const rule = readable
 			.slice(0, 30)
 			.map((field) => `${field.name} != "x"`)
-			.join(' && ');
+			.join(' and ');
 		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
 
 		const [update] = authorizationChecks({
@@ -201,7 +201,7 @@ describe('authorizationChecks', () => {
 					readable
 						.slice(30)
 						.map((field) => `${field.name} != "x"`)
-						.join(' && ')
+						.join(' and ')
 				)
 			]
 		});
@@ -223,7 +223,7 @@ describe('authorizationChecks', () => {
 					readable
 						.slice(30)
 						.map((field) => `${field.name} != "x"`)
-						.join(' && ')
+						.join(' and ')
 				)
 			]
 		});

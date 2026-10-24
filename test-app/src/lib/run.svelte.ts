@@ -1,5 +1,5 @@
-import { filter, isPouchbaseError } from '@pouchbasejs/js-sdk';
-import type { Filter } from '@pouchbasejs/js-sdk';
+import { condition, isPouchbaseError } from '@pouchbasejs/js-sdk';
+import type { Condition } from '@pouchbasejs/js-sdk';
 
 /** The outcome of the last call of a `Runner`, shown by `<Output>`. */
 export type Outcome =
@@ -52,7 +52,7 @@ export function parseJson(text: string): unknown {
 	return text.trim() === '' ? undefined : JSON.parse(text);
 }
 
-/** A hand-written filter expression as a `Filter`, without escaping (this is a test tool). */
-export function rawFilter(expression: string): Filter {
-	return filter(Object.assign([expression], { raw: [expression] }));
+/** A hand-written condition as a `Condition`, without escaping (this is a test tool). */
+export function rawCondition(expression: string): Condition {
+	return condition(Object.assign([expression], { raw: [expression] }));
 }

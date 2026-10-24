@@ -103,17 +103,17 @@ export function apiExamples(
 	const required = writable.filter((field) => field.required);
 	const created = fields.find((field) => field.type === 'created')?.name;
 	const textField = readable.find((field) => field.type === 'text')?.name;
-	const sort = created ? `-${created}` : undefined;
-	const filter = textField ? `${textField} ~ "hello"` : undefined;
+	const order = created ? `${created}:desc` : undefined;
+	const where = textField ? `${textField} contains "hello"` : undefined;
 
-	const path = `/api/collections/${collection.name}/records`;
+	const path = `/api/db/${collection.name}`;
 	const url = `${origin}${path}`;
-	const sdk = `pb.db.${collection.name}`;
+	const sdk = `pouch.db.${collection.name}`;
 	const setup = [
 		`import { createClient } from '@pouchbasejs/js-sdk';`,
 		`import type { Schema } from './pouchbase'; // from the Types page`,
 		'',
-		`const pb = createClient<Schema>('${origin}');`,
+		`const pouch = createClient<Schema>('${origin}');`,
 		'',
 		''
 	].join('\n');
@@ -123,14 +123,14 @@ export function apiExamples(
 		created && `\torderBy: { ${created}: 'desc' }`,
 		'\tlimit: 30'
 	].filter(Boolean);
-	const listQuery = new URLSearchParams({ page: '1', perPage: '30' });
+	const listQuery = new URLSearchParams({ limit: '30' });
 
-	if (sort) {
-		listQuery.set('sort', sort);
+	if (order) {
+		listQuery.set('order', order);
 	}
 
-	if (filter) {
-		listQuery.set('filter', filter);
+	if (where) {
+		listQuery.set('where', where);
 	}
 
 	const locked = {
@@ -158,8 +158,8 @@ export function apiExamples(
 		description: fieldValueType(field, relationTargets[field.name]).note ?? ''
 	}));
 
-	const fieldsParam = {
-		name: 'fields',
+	const selectParam = {
+		name: 'select',
 		type: 'string',
 		description: `Only return these fields, separated by commas, e.g. \`${readable
 			.slice(0, 2)
@@ -171,7 +171,7 @@ export function apiExamples(
 		list: {
 			action: 'list',
 			description:
-				'One page of records that match the filter and the list rule. Records the rule doesn’t match are left out.',
+				'One page of records that match `where` and the list rule. Records the rule doesn’t match are left out.',
 			method: 'GET',
 			path,
 			sdk: `${setup}// One page of records, typed by the schema
@@ -191,37 +191,41 @@ for await (const record of ${sdk}.iterate()) {
 const first = await ${sdk}.findFirst({ where: { ${textField ?? 'id'}: 'hello' } });`,
 			curl: `curl -G '${url}' \\\n\t${auth} \\\n\t${[...listQuery].map(([key, value]) => `--data-urlencode '${key}=${value.replace(/'/g, "'\\''")}'`).join(' \\\n\t')}`,
 			queryParams: [
-				{ name: 'page', type: 'number', description: 'The page, starting at 1. Defaults to 1.' },
 				{
-					name: 'perPage',
+					name: 'where',
+					type: 'string',
+					description:
+						'A condition in the syntax of the API rules, e.g. `status == "published" and views > 10`.'
+				},
+				{
+					name: 'order',
+					type: 'string',
+					description:
+						'Fields to order by, separated by commas, each with `:asc` (the default) or `:desc`, e.g. `created_at:desc,title`. Defaults to the order of creation.'
+				},
+				selectParam,
+				{
+					name: 'limit',
 					type: 'number',
-					description: 'Records per page, at most 500. Defaults to 30.'
+					description: 'Records to return, at most 500. Defaults to 30.'
 				},
 				{
-					name: 'sort',
-					type: 'string',
-					description:
-						'Fields to sort on, separated by commas; `-` in front sorts descending, e.g. `-created_at,title`. Defaults to the order of creation.'
-				},
-				{
-					name: 'filter',
-					type: 'string',
-					description:
-						'A filter in the syntax of the API rules, e.g. `status = "published" && views > 10`.'
-				},
-				fieldsParam
+					name: 'offset',
+					type: 'number',
+					description: 'Matching records to skip first. Defaults to 0.'
+				}
 			],
 			bodyParams: [],
 			responses: [
 				{
 					status: 200,
 					description: 'A page of records.',
-					body: json({ page: 1, perPage: 30, totalItems: 1, totalPages: 1, items: [record] })
+					body: json({ items: [record], total: 1, limit: 30, offset: 0 })
 				},
 				{
 					status: 400,
-					description: 'An invalid filter or sort.',
-					body: json({ message: 'Invalid filter: Unknown field `foo`' })
+					description: 'An invalid `where`, `order`, `select` or `include`.',
+					body: json({ message: 'Invalid where: Unknown field `foo`' })
 				},
 				locked
 			]
@@ -233,7 +237,7 @@ const first = await ${sdk}.findFirst({ where: { ${textField ?? 'id'}: 'hello' } 
 			path: `${path}/:id`,
 			sdk: `${setup}const record = await ${sdk}.find('RECORD_ID'); // null when not found`,
 			curl: `curl '${url}/RECORD_ID' \\\n\t${auth}`,
-			queryParams: [fieldsParam],
+			queryParams: [selectParam],
 			bodyParams: [],
 			responses: [{ status: 200, description: 'The record.', body: json(record) }, locked, notFound]
 		},
@@ -252,7 +256,7 @@ if (!result.ok) {
 	console.log(result.error.issues); // a message per field
 }`,
 			curl: `curl -X POST '${url}' \\\n\t${auth} \\\n\t-H 'Content-Type: application/json' \\\n\t-d '${JSON.stringify(body).replace(/'/g, "'\\''")}'`,
-			queryParams: [fieldsParam],
+			queryParams: [selectParam],
 			bodyParams,
 			responses: [
 				{ status: 200, description: 'The new record.', body: json(record) },
@@ -280,7 +284,7 @@ if (!result.ok) {
 			path: `${path}/:id`,
 			sdk: `${setup}const record = await ${sdk}.patch('RECORD_ID', ${objectLiteral(body, '')});`,
 			curl: `curl -X PATCH '${url}/RECORD_ID' \\\n\t${auth} \\\n\t-H 'Content-Type: application/json' \\\n\t-d '${JSON.stringify(body).replace(/'/g, "'\\''")}'`,
-			queryParams: [fieldsParam],
+			queryParams: [selectParam],
 			bodyParams: bodyParams.map((param) => ({ ...param, required: false })),
 			responses: [
 				{ status: 200, description: 'The updated record.', body: json(record) },

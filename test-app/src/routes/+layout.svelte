@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import { auth, baseUrl, pb, resetInstance, switchInstance } from '#lib/pouchbase.svelte.js';
+	import { auth, baseUrl, pouch, resetInstance, switchInstance } from '#lib/pouchbase.svelte.js';
 	import './layout.css';
 
 	let { children } = $props();
@@ -11,8 +11,8 @@
 	const links = [
 		{ href: resolve('/'), label: 'Health' },
 		{ href: resolve('/auth'), label: 'Auth' },
-		{ href: resolve('/records'), label: 'Records' },
-		{ href: resolve('/realtime'), label: 'Realtime' },
+		{ href: resolve('/database'), label: 'Database' },
+		{ href: resolve('/live'), label: 'Live' },
 		{ href: resolve('/functions'), label: 'Functions' },
 		{ href: resolve('/files'), label: 'Files' }
 	];
@@ -37,9 +37,9 @@
 			<button type="button" class="ghost" onclick={resetInstance}>Reset</button>
 		</form>
 		<span class="user">
-			{#if auth.state}
-				Signed in as <code>{auth.state.userId}</code>
-				<button type="button" class="ghost" onclick={() => pb.auth.signOut()}>Sign out</button>
+			{#if auth.session}
+				Signed in as <code>{auth.session.userId}</code>
+				<button type="button" class="ghost" onclick={() => pouch.auth.signOut()}>Sign out</button>
 			{:else}
 				Signed out
 			{/if}

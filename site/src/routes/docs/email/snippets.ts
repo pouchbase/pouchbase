@@ -21,7 +21,7 @@ export const variables = snippet(
 export const fn = snippet(
 	'typescript',
 	`
-import { Pouchbase } from '@pouchbasejs/js-sdk';
+import { createClient } from '@pouchbasejs/js-sdk';
 
 interface Env {
 	POUCHBASE_URL: string;
@@ -30,9 +30,9 @@ interface Env {
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
-		const pb = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
+		const pouch = createClient(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-		await pb.mail.send({
+		await pouch.mail.send({
 			template: 'welcome',
 			to: 'ada@example.com',
 			variables: { name: 'Ada', items: [{ title: 'Create a project' }] }

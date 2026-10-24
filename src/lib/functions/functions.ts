@@ -49,7 +49,7 @@ const TYPESCRIPT_TEMPLATE = `/** Variables and secrets of this function (Secrets
 interface Env {
 	/** URL of this Pouchbase installation. */
 	POUCHBASE_URL: string;
-	/** API key of this function, e.g. to send email templates (pb.mail.send of the JS SDK). */
+	/** API key of this function, e.g. to send email templates (pouch.mail.send of the JS SDK). */
 	POUCHBASE_API_KEY: string;
 }
 
@@ -69,7 +69,7 @@ const JAVASCRIPT_TEMPLATE = `export default {
 	/**
 	 * @param {Request} request
 	 * @param {{ POUCHBASE_URL: string, POUCHBASE_API_KEY: string }} env Variables and secrets of this
-	 *   function (Secrets tab); the API key can send email templates (pb.mail.send of the JS SDK).
+	 *   function (Secrets tab); the API key can send email templates (pouch.mail.send of the JS SDK).
 	 */
 	async fetch(request, env) {
 		// The signed-in app user, when the request has a valid token; otherwise null.

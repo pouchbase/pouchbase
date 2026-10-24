@@ -129,7 +129,7 @@
 
 	<p>
 		With the <a href="{resolve('/docs/authentication')}#the-sdk">SDK</a>, pass the key as
-		<Code.Root>apiKey</Code.Root> and call <Code.Root>pb.mail.send()</Code.Root>:
+		<Code.Root>apiKey</Code.Root> and call <Code.Root>pouch.mail.send()</Code.Root>:
 	</p>
 
 	<CodeBlock.Root title="function.ts">

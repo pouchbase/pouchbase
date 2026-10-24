@@ -34,8 +34,7 @@
 			href: resolve('/docs/getting-started/single-binary'),
 			icon: 'lucide:terminal',
 			badge: undefined,
-			description:
-				'Download one executable without dependencies, like PocketBase, and run it anywhere.'
+			description: 'Download one executable without dependencies and run it anywhere.'
 		}
 	];
 </script>

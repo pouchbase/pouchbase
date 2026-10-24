@@ -30,10 +30,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 					{ status: 403 }
 				);
 			case 22003:
-				return json(
-					{ code: 'invalid_filter', message: result.error.data.message },
-					{ status: 400 }
-				);
+				return json({ code: 'invalid_query', message: result.error.data.message }, { status: 400 });
 			default:
 				console.error('[realtime] subscribe failed', result.error);
 				return json({ message: result.error.message }, { status: 500 });

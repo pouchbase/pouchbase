@@ -16,13 +16,13 @@ function mockFetch(status: number, body: unknown) {
 	return { fetch: fetch as unknown as typeof globalThis.fetch, calls };
 }
 
-describe('pb.mail', () => {
+describe('pouch.mail', () => {
 	it('sends a template with the API key instead of the user token', async () => {
 		const { fetch, calls } = mockFetch(200, { sent: 2 });
-		const pb = new Pouchbase('https://pb.example.com', { fetch, apiKey: 'pbk_secret' });
-		pb.authStore.save({ token: 'user-token', userId: 'u1', user: null });
+		const pouch = new Pouchbase('https://pouch.example.com', { fetch, apiKey: 'pbk_secret' });
+		pouch.session.begin({ token: 'user-token', userId: 'u1' });
 
-		const result = await pb.mail.send({
+		const result = await pouch.mail.send({
 			template: 'welcome',
 			to: ['ada@example.com', 'alan@example.com'],
 			variables: { name: 'Ada' }
@@ -33,7 +33,7 @@ describe('pb.mail', () => {
 
 		const { url, init } = calls[0] ?? { url: '', init: {} };
 
-		expect(url).toBe('https://pb.example.com/api/mail/send');
+		expect(url).toBe('https://pouch.example.com/api/mail/send');
 		expect(init.method).toBe('POST');
 		expect((init.headers as Record<string, string>).Authorization).toBe('Bearer pbk_secret');
 		expect(JSON.parse(String(init.body))).toEqual({
@@ -45,8 +45,8 @@ describe('pb.mail', () => {
 
 	it('needs an API key', async () => {
 		const { fetch, calls } = mockFetch(200, { sent: 1 });
-		const pb = new Pouchbase('https://pb.example.com', { fetch });
-		const error = await pb.mail
+		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
+		const error = await pouch.mail
 			.send({ template: 'welcome', to: 'ada@example.com' })
 			.catch((e) => e);
 
@@ -60,8 +60,8 @@ describe('pb.mail', () => {
 			message: 'Missing variables: name',
 			issues: { 'variables.name': 'Required' }
 		});
-		const pb = new Pouchbase('https://pb.example.com', { fetch, apiKey: 'pbk_secret' });
-		const error = await pb.mail
+		const pouch = new Pouchbase('https://pouch.example.com', { fetch, apiKey: 'pbk_secret' });
+		const error = await pouch.mail
 			.send({ template: 'welcome', to: 'ada@example.com' })
 			.catch((e) => e);
 

@@ -44,35 +44,35 @@
 	> = {
 		list: {
 			title: 'List and search',
-			request: 'GET /records',
+			request: 'GET /api/db/:collection',
 			icon: 'lucide:list',
 			verb: 'list and search records',
 			destructive: false
 		},
 		view: {
 			title: 'View',
-			request: 'GET /records/:id',
+			request: 'GET /api/db/:collection/:id',
 			icon: 'lucide:eye',
 			verb: 'view records',
 			destructive: false
 		},
 		create: {
 			title: 'Create',
-			request: 'POST /records',
+			request: 'POST /api/db/:collection',
 			icon: 'lucide:plus',
 			verb: 'create records',
 			destructive: true
 		},
 		update: {
 			title: 'Update',
-			request: 'PATCH /records/:id',
+			request: 'PATCH /api/db/:collection/:id',
 			icon: 'lucide:pencil',
 			verb: 'update records',
 			destructive: true
 		},
 		delete: {
 			title: 'Delete',
-			request: 'DELETE /records/:id',
+			request: 'DELETE /api/db/:collection/:id',
 			icon: 'lucide:trash-2',
 			verb: 'delete records',
 			destructive: true
@@ -148,7 +148,7 @@
 
 		return checkFilter(text, {
 			fields: names.fields.map((field) => field.name),
-			authFields: names.authFields.length ? names.authFields.map((field) => field.name) : undefined
+			userFields: names.userFields.length ? names.userFields.map((field) => field.name) : undefined
 		});
 	}
 </script>
@@ -193,7 +193,7 @@
 			filterNames={names}
 			diagnostics={() => (problem && custom.trim() ? [problem] : [])}
 			lineNumbers={false}
-			placeholder="e.g. author = @request.auth.id"
+			placeholder="e.g. author == $user.id"
 			aria-label="{meta.title} rule"
 			aria-invalid={!!problem || !!issue}
 			class="h-[5.5rem]"
@@ -203,7 +203,7 @@
 	{#if access === CUSTOM && !custom.trim() && !issue}
 		<p class="flex items-start gap-1.5 text-sm text-zinc-500">
 			<Icon.Root icon="lucide:info" class="mt-0.5 size-4 shrink-0" />
-			Write a filter; the editor suggests fields as you type. To allow everyone, choose Everyone.
+			Write a condition; the editor suggests fields as you type. To allow everyone, choose Everyone.
 		</p>
 	{:else if issue || problem}
 		<p class="flex items-start gap-1.5 text-sm text-red-600" role="alert">

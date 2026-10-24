@@ -12,13 +12,13 @@ Everything in this project is **English**: code, identifiers, comments, UI text,
 
 ## Related projects
 
-| Project          | Path                 | What it is                                                                  |
-| ---------------- | -------------------- | --------------------------------------------------------------------------- |
-| Pouchbase        | `..`                 | The app and the public API this app talks to                                |
-| Pouchbase JS SDK | `../packages/js-sdk` | The SDK, linked as `workspace:*`, so SDK changes show up live               |
-| Test app         | `.` (this folder)    | One page per SDK area: health, auth, records, realtime, functions and files |
+| Project          | Path                 | What it is                                                               |
+| ---------------- | -------------------- | ------------------------------------------------------------------------ |
+| Pouchbase        | `..`                 | The app and the public API this app talks to                             |
+| Pouchbase JS SDK | `../packages/js-sdk` | The SDK, linked as `workspace:*`, so SDK changes show up live            |
+| Test app         | `.` (this folder)    | One page per SDK area: health, auth, database, live, functions and files |
 
-- Only talk to Pouchbase through the SDK (`pb` from `#lib/pouchbase.svelte.js`); when the SDK gains a method, add it to the page of its area.
+- Only talk to Pouchbase through the SDK (`pouch` from `#lib/pouchbase.svelte.js`); when the SDK gains a method, add it to the page of its area.
 - Keep it a test tool: no design system, no Tailwind, no icons. Each page wraps calls in a `Runner` (`#lib/run.svelte.js`) and shows the result or the `PouchbaseError` with `<Output>`.
 
 ## Code style

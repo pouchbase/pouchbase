@@ -29,38 +29,40 @@ The SDK is a workspace package in the Pouchbase repository; the app is at the re
 
 Sign-ins return `{ token, user_id }`; the token is a JWT (HS256, 7 days) sent as `Authorization: Bearer <token>`. Sign-ups return `{ token, user_id, verification_required }`; `token` is `null` when the instance requires a verified email. Errors are JSON `{ message, code?, issues? }` where `code` is a machine-readable reason (such as `email_not_verified`) and `issues` maps an input field to a message. The API allows any origin (CORS `*`) and never uses cookies.
 
-| Request                                               | SDK                                  |
-| ----------------------------------------------------- | ------------------------------------ |
-| `GET /api/health`                                     | `pb.health()`                        |
-| `GET /api/auth/providers` (`[{ provider, label, iconUrl }]`) | `pb.auth.providers()`                |
-| `POST /api/auth/password/sign-up`                     | `pb.auth.signUp()`                   |
-| `POST /api/auth/password/sign-in`                     | `pb.auth.signIn()`                   |
-| `POST /api/auth/password/request-reset`               | `pb.auth.requestPasswordReset()`     |
-| `POST /api/auth/password/confirm-reset`               | `pb.auth.confirmPasswordReset()`     |
-| `POST /api/auth/verification/request`                 | `pb.auth.requestVerification()`      |
-| `POST /api/auth/verification/confirm`                 | `pb.auth.confirmVerification()`      |
-| `GET /api/auth/oauth2/<provider>?state=…&challenge=…` | `pb.auth.signInWithOAuth()` (popup)  |
-| `POST /api/auth/oauth2/result`                        | `pb.auth.signInWithOAuth()` (polls)  |
-| `GET /api/auth/me`                                    | `pb.auth.me()`                       |
-| `GET /api/collections/<name>/records?page&perPage&sort&filter&fields&expand` | `pb.db.<name>.findMany()`, `findFirst()`, `count()`, `iterate()`, `findAll()` |
-| `GET /api/collections/<name>/records/<id>?fields&expand` | `pb.db.<name>.find()`, `findOrThrow()` |
-| `POST /api/collections/<name>/records?fields&expand`  | `pb.db.<name>.insert()`              |
-| `PATCH /api/collections/<name>/records/<id>?fields&expand` | `pb.db.<name>.patch()`               |
-| `DELETE /api/collections/<name>/records/<id>` (`204`) | `pb.db.<name>.remove()`              |
-| `GET /api/realtime?collection=<name>` (WebSocket; protocol mirrored in `src/realtime/protocol.ts`) | `pb.realtime.subscribe()`, `pb.db.<name>.subscribe()` |
-| `GET /api/files/<id>`                                 | `pb.files.url()`                     |
-| `<method> /api/functions/<name>/<path>`               | `pb.functions.invoke()`              |
-| `POST /api/mail/send` (API key as `Bearer pbk_…`)    | `pb.mail.send()` (needs `apiKey`)    |
-| `GET /api/plugins/<id>/assets/ui/<file>.svg` (public image, not JSON) | not wrapped: used as an image URL |
-| Records API with a `service` API key (`Bearer pbk_…`; API rules skipped, other keys `403`) | `pb.asService().db.<name>…` (needs `apiKey`) |
-| `GET /api/collections` (service API key)              | `pb.collections.list()` (needs `apiKey`) |
-| `GET /api/collections/<name>` (service API key)       | `pb.collections.find()`              |
-| `POST /api/collections` (`201`)                       | `pb.collections.create()`            |
-| `PATCH /api/collections/<name>?force`                 | `pb.collections.update()`            |
-| `DELETE /api/collections/<name>` (`204`)              | `pb.collections.remove()`            |
-| `GET /api/collections/export?collections=a,b`         | `pb.collections.export()`            |
-| `POST /api/collections/import?removeMissing&force&dryRun` | `pb.collections.import()`        |
-| `GET /api/types?token=…` (text, not JSON)             | `fetchTypes()`, `pouchbase types`    |
+| Request                                                                                                | SDK                                                                              |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `GET /api/health`                                                                                      | `pouch.health()`                                                                 |
+| `GET /api/auth/providers` (`[{ provider, label, iconUrl }]`)                                           | `pouch.auth.providers()`                                                         |
+| `POST /api/auth/password/sign-up`                                                                      | `pouch.auth.signUp()`                                                            |
+| `POST /api/auth/password/sign-in`                                                                      | `pouch.auth.signIn()`                                                            |
+| `POST /api/auth/password/forgot` (`{ email }`)                                                         | `pouch.auth.sendPasswordReset()`                                                 |
+| `POST /api/auth/password/reset` (`{ token, password }`)                                                | `pouch.auth.resetPassword()`                                                     |
+| `POST /api/auth/email/send-verification` (`{ email }`)                                                 | `pouch.auth.sendVerification()`                                                  |
+| `POST /api/auth/email/verify` (`{ token }`)                                                            | `pouch.auth.verifyEmail()`                                                       |
+| `GET /api/auth/oauth2/<provider>?state=…&challenge=…`                                                  | `pouch.auth.signInWithOAuth()` (popup)                                           |
+| `POST /api/auth/oauth2/result`                                                                         | `pouch.auth.signInWithOAuth()` (polls)                                           |
+| `GET /api/auth/me`                                                                                     | `pouch.auth.me()`                                                                |
+| `GET /api/db/<collection>?where&order&select&include&limit&offset` (`{ items, total, limit, offset }`) | `pouch.db.<name>.findMany()`, `findFirst()`, `count()`, `iterate()`, `findAll()` |
+| `GET /api/db/<collection>/<id>?select&include`                                                         | `pouch.db.<name>.find()`, `findOrThrow()`                                        |
+| `POST /api/db/<collection>?select&include`                                                             | `pouch.db.<name>.insert()`                                                       |
+| `PATCH /api/db/<collection>/<id>?select&include`                                                       | `pouch.db.<name>.patch()`                                                        |
+| `DELETE /api/db/<collection>/<id>` (`204`)                                                             | `pouch.db.<name>.remove()`                                                       |
+| `GET /api/live?collection=<name>` (WebSocket; protocol mirrored in `src/live/protocol.ts`)             | `pouch.live.watch()`, `pouch.db.<name>.watch()`                                  |
+| `GET /api/files/<id>?size&download` (`size`: `WxH`, `WxH:top`, `WxH:bottom`, `WxH:fit`, `Wx0`, `0xH`)  | `pouch.files.url()`                                                              |
+| `<method> /api/functions/<name>/<path>`                                                                | `pouch.functions.invoke()`                                                       |
+| `POST /api/mail/send` (API key as `Bearer pbk_…`)                                                      | `pouch.mail.send()` (needs `apiKey`)                                             |
+| `GET /api/plugins/<id>/assets/ui/<file>.svg` (public image, not JSON)                                  | not wrapped: used as an image URL                                                |
+| Records API with a `service` API key (`Bearer pbk_…`; API rules skipped, other keys `403`)             | `pouch.asService().db.<name>…` (needs `apiKey`)                                  |
+| `GET /api/schema` (service API key)                                                                    | `pouch.schema.list()` (needs `apiKey`)                                           |
+| `GET /api/schema/<name>` (service API key)                                                             | `pouch.schema.find()`                                                            |
+| `POST /api/schema` (`201`)                                                                             | `pouch.schema.create()`                                                          |
+| `PATCH /api/schema/<name>?force`                                                                       | `pouch.schema.update()`                                                          |
+| `DELETE /api/schema/<name>` (`204`)                                                                    | `pouch.schema.remove()`                                                          |
+| `GET /api/schema/export?collections=a,b` (`{ format: 2, exportedAt, collections, related }`)           | `pouch.schema.export()`                                                          |
+| `POST /api/schema/import?removeMissing&force&dryRun`                                                   | `pouch.schema.import()`                                                          |
+| `GET /api/types?token=…` (text, not JSON)                                                              | `fetchTypes()`, `pouchbase types`                                                |
+
+Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains`, `not contains`, `any(field) == value`, `and`, `or` and `$user.<field>` / `$now`; `src/query.ts` compiles `where` objects to them. `order` is `created_at:desc,title:asc`.
 
 ## Code style
 
@@ -68,9 +70,9 @@ Sign-ins return `{ token, user_id }`; the token is a JWT (HS256, 7 days) sent as
 - Put a blank line before and after every `if` statement (unless it is the first or last statement in its block).
 - Enforced by ESLint (`curly`, `padding-line-between-statements`); run `pnpm exec eslint . --fix` to apply.
 - Tabs, single quotes, no trailing commas, 100 columns (Prettier, same as the app).
-- The SDK must run everywhere `fetch` exists: no Node built-ins, no DOM access outside browser-only methods (`signInWithOAuth`, `LocalAuthStore`), and no runtime dependencies.
+- The SDK must run everywhere `fetch` exists: no Node built-ins, no DOM access outside browser-only methods (`signInWithOAuth`, `browserStorage()`), and no runtime dependencies.
 - Public methods return promises and throw a `PouchbaseError` for non-2xx responses; "not found" for lookups is `null`, not an error. Record calls return a `Pending` (`pending()` in `src/error.ts`), so `.safe()` works on them.
-- The records API is wrapped in our own terms (`pb.db`, `where` objects, `find`/`insert`/`patch`/`remove`) with types from the generated `Schema`; don't copy another SDK's method names or shapes.
+- The records API is wrapped in our own terms (`pouch.db`, `where` objects, `find`/`insert`/`patch`/`remove`) with types from the generated `Schema`; don't copy another SDK's method names or shapes.
 - Every exported function, class and type has a JSDoc comment; the declaration files are the reference docs.
 
 ## Changesets

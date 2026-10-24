@@ -30,7 +30,7 @@
 			<Sheet.Title>API</Sheet.Title>
 			<Sheet.Description>
 				The records API of <span class="font-mono">{collection.name}</span>:
-				<span class="font-mono">/api/collections/{collection.name}/records</span>
+				<span class="font-mono">/api/db/{collection.name}</span>
 			</Sheet.Description>
 		</Sheet.Header>
 

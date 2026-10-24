@@ -1,13 +1,13 @@
 export { createClient, Pouchbase } from './client.js';
 export type { PouchbaseOptions, RequestOptions } from './client.js';
-export { AuthStore, LocalAuthStore } from './auth-store.js';
-export type { AuthChangeListener, AuthState } from './auth-store.js';
+export { browserStorage, memoryStorage, Session } from './session.js';
+export type { SessionData, SessionListener, SessionStorage } from './session.js';
 export { isPouchbaseError, PouchbaseError } from './error.js';
 export type { ErrorKind, Pending, Result } from './error.js';
 export { decodeToken, isTokenValid } from './jwt.js';
 export { AuthService } from './services/auth.js';
 export type { OAuthOptions } from './services/auth.js';
-export { CollectionsService } from './services/collections.js';
+export { SchemaService } from './services/schema.js';
 export type {
 	ApiRules,
 	CollectionExport,
@@ -24,7 +24,7 @@ export type {
 	Severity,
 	ThumbnailSettings,
 	UpdateCollectionInput
-} from './services/collections.js';
+} from './services/schema.js';
 export { FilesService } from './services/files.js';
 export type { FileUrlOptions } from './services/files.js';
 export { FunctionsService } from './services/functions.js';
@@ -32,24 +32,24 @@ export type { InvokeOptions } from './services/functions.js';
 export { MailService } from './services/mail.js';
 export type { SendMailOptions } from './services/mail.js';
 export { CollectionClient } from './services/db.js';
-export { RealtimeService } from './services/realtime.js';
-export type { SubscribeOptions } from './services/realtime.js';
-export { RealtimeConnection } from './realtime/connection.js';
+export { LiveService } from './services/live.js';
+export type { WatchOptions } from './services/live.js';
+export { LiveConnection } from './live/connection.js';
 export type {
 	ConnectionState,
-	RealtimeEvent,
-	RealtimeSubscription,
+	LiveEvent,
+	LiveSubscription,
 	SubscriptionRequest,
 	WebSocketInstance,
 	WebSocketLike
-} from './realtime/connection.js';
-export type { RealtimeAction } from './realtime/protocol.js';
+} from './live/connection.js';
+export type { LiveAction } from './live/protocol.js';
 export type {
 	AnyInclude,
 	AnyRecord,
 	AnyRelations,
 	CallOptions,
-	CollectionSubscribeOptions,
+	CollectionWatchOptions,
 	CreateOf,
 	Db,
 	FindFirstOptions,
@@ -62,12 +62,12 @@ export type {
 	RelationsOf,
 	SelectOptions
 } from './services/db.js';
-export { filter } from './query.js';
+export { condition } from './query.js';
 export type {
+	Condition,
+	ConditionValue,
 	FieldCondition,
 	FieldName,
-	Filter,
-	FilterValue,
 	JsonValue,
 	OrderBy,
 	Selected,
