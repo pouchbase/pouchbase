@@ -164,7 +164,7 @@ export const devRegistry = snippet(
 	'bash',
 	`
 # Server variable of the Pouchbase installation you test with
-PLUGIN_REGISTRY_URL=http://localhost:4510`
+POUCHBASE_REGISTRY_URL=http://localhost:4510`
 );
 
 export const build = snippet(

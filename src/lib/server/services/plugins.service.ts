@@ -23,7 +23,7 @@ import {
 import { asc, eq, inArray } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
-import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE } from '$app/env/private';
+import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
 
 import { version as POUCHBASE_VERSION } from '../../../../package.json';
 import { generateToken } from '../crypto';
@@ -42,7 +42,7 @@ import { Service } from './base.service';
 
 /**
  * Plugins: those installed from a plugin registry (the public one on pouchbase.io, or
- * `PLUGIN_REGISTRY_URL`) and the built-in ones from `plugins/*` (`../plugins/embedded.ts`). The
+ * `POUCHBASE_REGISTRY_URL`) and the built-in ones from `plugins/*` (`../plugins/embedded.ts`). The
  * registry API, the manifest and the bundle format come from `@pouchbasejs/plugin-sdk`.
  *
  * Installing downloads the bundle, checks it against its integrity hash and the manifest rules,
@@ -114,7 +114,8 @@ type PluginRow = typeof plugins.$inferSelect;
 type ProviderRow = typeof pluginAuthProviders.$inferInsert;
 
 function registryUrl() {
-	return PLUGIN_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
+	// `PLUGIN_REGISTRY_URL` is the name the variable had up to 0.8.
+	return POUCHBASE_REGISTRY_URL ?? PLUGIN_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
 }
 
 const HOST = { version: POUCHBASE_VERSION, apiVersions: SUPPORTED_API_VERSIONS };

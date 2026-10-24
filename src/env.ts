@@ -39,9 +39,13 @@ export const variables = defineEnvVars({
 			'Password of the first admin (at least 10 characters), see `POUCHBASE_ADMIN_EMAIL`',
 		schema: z.string().optional()
 	},
-	PLUGIN_REGISTRY_URL: {
+	POUCHBASE_REGISTRY_URL: {
 		description:
-			'Plugin registry the Plugins page searches and installs from; defaults to the public registry on pouchbase.io. `pouchbase-plugin dev` prints the URL of a local one',
+			'Plugin registry the Plugins page searches and installs from; defaults to the public registry on pouchbase.io. `pouchbase-plugin dev` prints the URL of a local one, and `pouchbase-plugin publish` reads the same variable',
+		schema: z.url().optional()
+	},
+	PLUGIN_REGISTRY_URL: {
+		description: 'Deprecated: the old name of `POUCHBASE_REGISTRY_URL`, used when that is not set',
 		schema: z.url().optional()
 	},
 	POUCHBASE_LOG_TIMING: {

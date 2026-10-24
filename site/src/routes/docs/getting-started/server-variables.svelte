@@ -37,7 +37,7 @@
 			description: 'Password of the first admin, at least 10 characters'
 		},
 		{
-			name: 'PLUGIN_REGISTRY_URL',
+			name: 'POUCHBASE_REGISTRY_URL',
 			fallback: 'https://api.pouchbase.io',
 			description:
 				'Plugin registry the Plugins page searches and installs from, such as the local registry of pouchbase-plugin dev'

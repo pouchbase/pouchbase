@@ -25,7 +25,7 @@ pnpm dev
 
 Every template writes `$schema` and `categories` in the manifest and keeps `version` and `license` in `package.json`.
 
-`pnpm dev` rebuilds the plugin on every change and serves it from a local registry. Start Pouchbase with `PLUGIN_REGISTRY_URL=http://localhost:4510` (`pnpm dev` in the Pouchbase repository) and install the plugin from the Plugins page. Every build is served as a new prerelease, `<version>-dev.<n>`, so Pouchbase sees it as an update; `--exact-version` serves the version from the manifest instead.
+`pnpm dev` rebuilds the plugin on every change and serves it from a local registry. Start Pouchbase with `POUCHBASE_REGISTRY_URL=http://localhost:4510` (`pnpm dev` in the Pouchbase repository) and install the plugin from the Plugins page. Every build is served as a new prerelease, `<version>-dev.<n>`, so Pouchbase sees it as an update; `--exact-version` serves the version from the manifest instead.
 
 Add more to a plugin with `add`, which appends the contribution to `pouchbase-plugin.json` and creates its files (it never overwrites one):
 

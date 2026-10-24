@@ -321,7 +321,7 @@ function readme(name: string) {
 A [Pouchbase](https://pouchbase.io) plugin.
 
 - \`pnpm dev\` builds the plugin on every change and serves it from a local registry; start
-  Pouchbase with the \`PLUGIN_REGISTRY_URL\` it prints and install the plugin on the Plugins page.
+  Pouchbase with the \`POUCHBASE_REGISTRY_URL\` it prints and install the plugin on the Plugins page.
 - \`pnpm validate\` checks the manifest, the files it points to and the server code.
 - \`pnpm build\` writes the bundle to \`dist/\`.
 - \`pnpm release\` publishes it to the registry (needs \`POUCHBASE_REGISTRY_TOKEN\`).

@@ -355,7 +355,7 @@
 		checks it against the integrity hash (<Code.Root>sha256-…</Code.Root>) the registry lists for
 		that version and refuses it when it doesn't match. An installation uses another registry when
 		its
-		<Code.Root>PLUGIN_REGISTRY_URL</Code.Root> server variable is set. Browse what's published on the
+		<Code.Root>POUCHBASE_REGISTRY_URL</Code.Root> server variable is set. Browse what's published on the
 		<a href={resolve('/plugins')}>plugins page</a>.
 	</p>
 

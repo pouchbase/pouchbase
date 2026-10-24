@@ -18,7 +18,7 @@ import { printError, printWarnings } from './output.js';
 
 /**
  * A local registry that serves the plugin being developed, so a Pouchbase started with
- * `PLUGIN_REGISTRY_URL=http://localhost:<port>` can find and install it. Rebuilds on every change;
+ * `POUCHBASE_REGISTRY_URL=http://localhost:<port>` can find and install it. Rebuilds on every change;
  * when a build fails, the last good one stays available.
  *
  * Every build is served as a new prerelease, `<version>-dev.<n>`, so Pouchbase sees it as an
@@ -209,7 +209,9 @@ export async function startDevServer(
 
 	server.listen(port, () => {
 		console.log(`\nDev registry on ${base}`);
-		console.log(`Start Pouchbase with PLUGIN_REGISTRY_URL=${base} to install the plugin from it.`);
+		console.log(
+			`Start Pouchbase with POUCHBASE_REGISTRY_URL=${base} to install the plugin from it.`
+		);
 		console.log(
 			exactVersion
 				? 'Serving the version from the manifest.\n'
