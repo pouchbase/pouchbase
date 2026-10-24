@@ -74,6 +74,35 @@ describe('diff', () => {
 		expect(plan.steps[1]).toMatchObject({ collectionId: 'c-posts', field: { id: 'f-id' } });
 	});
 
+	it('creates the id fields of new collections before relations to them', () => {
+		// Sorted by name, `plugin_versions` comes before the `plugins` collection its relation points at.
+		const versions = collection({
+			id: 'c-versions',
+			name: 'plugin_versions',
+			fields: [
+				field({ id: 'f-v-id', name: 'id', type: 'id', position: 0 }),
+				field({
+					id: 'f-v-plugin',
+					name: 'plugin',
+					type: 'relation',
+					options: { collectionId: 'c-plugins' },
+					position: 1
+				})
+			]
+		});
+		const plugins = collection({
+			id: 'c-plugins',
+			name: 'plugins',
+			fields: [field({ id: 'f-p-id', name: 'id', type: 'id', position: 0 })]
+		});
+		const fields = diff(snapshot({ collections: [versions, plugins] }), snapshot())
+			.steps.filter((step) => step.kind === 'field.create')
+			.map((step) => step.field.id);
+
+		expect(fields.indexOf('f-p-id')).toBeLessThan(fields.indexOf('f-v-plugin'));
+		expect(fields.slice(0, 2)).toEqual(['f-v-id', 'f-p-id']);
+	});
+
 	it('recognises a renamed collection and field by id', () => {
 		const source = collection({
 			...posts,

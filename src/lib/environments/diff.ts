@@ -599,9 +599,22 @@ export function diffCollectionsOnly(
 	return sorted(steps, warnings);
 }
 
+/**
+ * Where a step runs. The `id` fields of new collections come right after the collections, before
+ * every other field: a relation can only point at a collection that has one, and the collection
+ * it points at may come later in the source.
+ */
+function rank(step: PlanStep) {
+	if (step.kind === 'field.create' && step.field.type === 'id') {
+		return STEP_ORDER.indexOf('collection.create') + 0.5;
+	}
+
+	return STEP_ORDER.indexOf(step.kind);
+}
+
 function sorted(steps: PlanStep[], warnings: PlanWarning[]): Plan {
 	// A stable sort keeps the order within a kind: fields in the order the source has them.
-	steps.sort((a, b) => STEP_ORDER.indexOf(a.kind) - STEP_ORDER.indexOf(b.kind));
+	steps.sort((a, b) => rank(a) - rank(b));
 
 	return { steps, warnings };
 }
