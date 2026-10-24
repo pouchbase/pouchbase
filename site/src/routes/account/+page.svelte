@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
+	import AccountSection from './account-section.svelte';
 	import { getUser, signOut } from './account.remote';
 	import PluginsTable from './plugins-table.svelte';
 	import PublishCard from './publish-card.svelte';
@@ -30,9 +31,13 @@
 		</Form.Root>
 	</div>
 
-	<PluginsTable />
+	<AccountSection title="Your plugins could not be loaded">
+		<PluginsTable />
+	</AccountSection>
 
 	<PublishCard />
 
-	<TokensCard />
+	<AccountSection title="Your publish tokens could not be loaded">
+		<TokensCard />
+	</AccountSection>
 </div>

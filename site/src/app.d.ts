@@ -9,7 +9,13 @@ declare global {
 			cf?: IncomingRequestCfProperties;
 		}
 
-		// interface Error {}
+		/** The error of the error page and of failed remote functions. */
+		interface Error {
+			/** What went wrong underneath, if it helps people, e.g. that a service is unreachable. */
+			reason?: string;
+			/** Reference of an unexpected error, to find it in the logs. */
+			id?: string;
+		}
 		interface Locals {
 			/** The signed-in user, once `currentUser()` loaded it; `null` when signed out. */
 			user?: import('@pouchbasejs/js-sdk').User | null;
