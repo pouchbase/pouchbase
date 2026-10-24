@@ -45,6 +45,7 @@ export const manifest = snippet(
 	"name": "Color picker",
 	"version": "1.0.0",
 	"description": "Adds a color field type.",
+	"icon": "ui/icon.svg",
 	"license": "MIT",
 	"categories": ["fields"],
 	"engines": { "pouchbase": ">=0.4.0" },
@@ -178,12 +179,21 @@ export const publish = snippet(
 	'bash',
 	`
 export POUCHBASE_REGISTRY_TOKEN=pbp_...
-npx pouchbase-plugin publish`
+npx pouchbase-plugin publish
+
+# › Publishing to https://api.pouchbase.io (the default)
+# › Reading pouchbase-plugin.json
+#   color-picker@1.2.0 (API version 1), contributes 1 field type
+# ...
+# › Looking up color-picker on the registry
+#   Latest published version: 1.1.0 (3 in total)
+# › Uploading color-picker@1.2.0 (14 KiB)
+# ✓ Published color-picker@1.2.0 in 1.4 s`
 );
 
 export const ci = snippet(
 	'bash',
 	`
 # For example in a GitHub Actions step, with the token as a repository secret
-POUCHBASE_REGISTRY_TOKEN=\${{ secrets.POUCHBASE_REGISTRY_TOKEN }} npx pouchbase-plugin publish`
+POUCHBASE_REGISTRY_TOKEN=\${{ secrets.POUCHBASE_REGISTRY_TOKEN }} npx pouchbase-plugin publish --quiet`
 );

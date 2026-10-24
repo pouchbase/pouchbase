@@ -8,8 +8,9 @@ import { manifestJsonSchema } from '../manifest.js';
 import { DEFAULT_REGISTRY_URL, createRegistryClient } from '../registry.js';
 import { CONTRIBUTION_KINDS, addContribution, isContributionKind } from './add.js';
 import { startDevServer } from './dev-server.js';
+import { elapsed, kib } from './format.js';
 import { askTemplate, initProject, parseTemplate } from './init.js';
-import { printError, printWarnings } from './output.js';
+import { CliError, createLogger, type Logger } from './output.js';
 import { buildBundle, bundleFileName } from './project.js';
 import { TEMPLATES } from './templates.js';
 
@@ -30,23 +31,97 @@ Options:
   --exact-version    Let dev serve the manifest's version instead of <version>-dev.<n>
   --registry <url>   Registry to publish to (default $POUCHBASE_REGISTRY_URL or ${DEFAULT_REGISTRY_URL})
   --token <token>    Publish token (default $POUCHBASE_REGISTRY_TOKEN)
+  -q, --quiet        Only print results, warnings and errors
+  -v, --verbose      Also print stack traces and every request of the dev registry
   -h, --help         Show this help
 `;
 
-async function main() {
-	const { positionals, values } = parseArgs({
-		allowPositionals: true,
-		options: {
-			template: { type: 'string' },
-			port: { type: 'string', default: '4510' },
-			'exact-version': { type: 'boolean' },
-			registry: { type: 'string' },
-			token: { type: 'string' },
-			help: { type: 'boolean', short: 'h' }
+/** The package manager that runs the CLI (`pnpm dlx`, `npx`, ...), for the commands it suggests. */
+function packageManager() {
+	const agent = process.env.npm_config_user_agent ?? '';
+
+	return ['pnpm', 'yarn', 'bun'].find((name) => agent.startsWith(name)) ?? 'npm';
+}
+
+/** How to run a script of the plugin's `package.json` with the package manager in use. */
+function runScript(script: string) {
+	const pm = packageManager();
+
+	return pm === 'npm' ? `npm run ${script}` : `${pm} ${script}`;
+}
+
+/** The registry to publish to, and where that setting comes from, so the user sees which is used. */
+function registrySource(flag: string | undefined) {
+	if (flag) {
+		return { url: flag, from: 'from --registry' };
+	}
+
+	if (process.env.POUCHBASE_REGISTRY_URL) {
+		return { url: process.env.POUCHBASE_REGISTRY_URL, from: 'from $POUCHBASE_REGISTRY_URL' };
+	}
+
+	return { url: DEFAULT_REGISTRY_URL, from: 'the default' };
+}
+
+async function publish(
+	root: string,
+	log: Logger,
+	options: { registry?: string; token?: string }
+): Promise<void> {
+	const start = performance.now();
+	const registry = registrySource(options.registry);
+	const token = options.token ?? process.env.POUCHBASE_REGISTRY_TOKEN;
+
+	// Checked before building, so a missing token doesn't come up only at the end.
+	if (!token) {
+		throw new CliError(
+			'A publish token is needed to publish',
+			'Pass it with --token or set $POUCHBASE_REGISTRY_TOKEN; create one under Publish tokens on https://pouchbase.io/account.'
+		);
+	}
+
+	log.step(`Publishing to ${registry.url} (${registry.from})`);
+	log.detail(`Token ${options.token ? 'from --token' : 'from $POUCHBASE_REGISTRY_TOKEN'}`);
+
+	const { bundle, bytes, warnings } = await buildBundle(root, { log });
+	const { id, version } = bundle.manifest;
+	const client = createRegistryClient({ url: registry.url, token });
+
+	log.warnings(warnings);
+	log.step(`Looking up ${id} on the registry`);
+
+	const existing = await client.get(id);
+
+	if (!existing) {
+		log.detail(`${id} isn't on the registry yet; this publishes its first version`);
+	} else {
+		log.detail(
+			`Latest published version: ${existing.version} (${existing.versions.length} in total)`
+		);
+
+		if (existing.versions.some((published) => published.version === version)) {
+			throw new CliError(
+				`${id}@${version} is already published`,
+				'Every version can be published once: raise "version" in package.json (or pouchbase-plugin.json) and publish again.'
+			);
 		}
-	});
+	}
+
+	log.step(`Uploading ${id}@${version} (${kib(bytes.byteLength)})`);
+
+	const published = await client.publish(id, bytes);
+
+	log.success(`Published ${id}@${published.version} in ${elapsed(start)}`);
+	log.detail(`API version ${published.apiVersion}, ${published.integrity}`);
+	log.next(`install or update ${id} from the Plugins page of Pouchbase.`);
+}
+
+type Values = Record<string, string | boolean | undefined>;
+
+async function main(log: Logger, positionals: string[], values: Values) {
 	const [command, target, name] = positionals;
 	const root = process.cwd();
+	const start = performance.now();
 
 	if (values.help || !command) {
 		console.log(HELP);
@@ -56,85 +131,149 @@ async function main() {
 	switch (command) {
 		case 'init': {
 			if (!target) {
-				throw new Error('Usage: pouchbase-plugin init <dir> [--template <name>]');
+				throw new CliError(
+					'Missing the directory for the plugin',
+					'Usage: pouchbase-plugin init <dir> [--template <name>], e.g. init color-picker'
+				);
 			}
 
 			// Check the flag before asking anything.
-			const template = values.template ? parseTemplate(values.template) : await askTemplate();
-			const { root: created, id } = await initProject(target, { template });
-			console.log(`✓ Created ${id} in ${relative(root, created) || '.'} (${template} template)`);
-			console.log('  Next: install the dependencies and run the dev command.');
+			const template =
+				typeof values.template === 'string' ? parseTemplate(values.template) : await askTemplate();
+
+			log.step(`Creating a plugin from the ${template} template`);
+
+			const { root: created, id, files } = await initProject(target, { template });
+			const dir = relative(root, created) || '.';
+
+			for (const file of files) {
+				log.detail(`Created ${file}`);
+			}
+
+			log.success(`Created ${id} in ${dir} (${template} template)`);
+
+			const install = packageManager() === 'yarn' ? 'yarn' : `${packageManager()} install`;
+
+			log.next(
+				`${dir === '.' ? '' : `cd ${dir}, `}run ${install}, then ${runScript('dev')} to try it in Pouchbase.`
+			);
 			break;
 		}
 
 		case 'add': {
 			if (!target || !name || !isContributionKind(target)) {
-				throw new Error(
+				throw new CliError(
+					target && !isContributionKind(target)
+						? `Unknown kind "${target}"`
+						: 'Missing what to add',
 					`Usage: pouchbase-plugin add <${CONTRIBUTION_KINDS.join('|')}> <id>, e.g. add field rating`
 				);
 			}
 
+			log.step(`Adding ${target} ${name}`);
+
 			const { created, hints } = await addContribution(root, target, name);
-			console.log(`✓ Added ${target} ${name}`);
+
+			log.detail('Updated pouchbase-plugin.json');
 
 			for (const file of created) {
-				console.log(`  Created ${file}`);
+				log.detail(`Created ${file}`);
 			}
 
+			log.success(`Added ${target} ${name}`);
+
 			for (const hint of hints) {
-				console.log(`  Next: ${hint}`);
+				log.next(hint);
+			}
+
+			if (!hints.length) {
+				log.next(`run ${runScript('validate')} to check the plugin.`);
 			}
 
 			break;
 		}
 
 		case 'validate': {
-			const { bundle, warnings } = await buildBundle(root);
-			printWarnings(warnings);
-			console.log(`✓ ${bundle.manifest.id}@${bundle.manifest.version} is valid`);
+			const { bundle, warnings } = await buildBundle(root, { log });
+
+			log.warnings(warnings);
+			log.success(
+				`${bundle.manifest.id}@${bundle.manifest.version} is valid${warnings.length ? `, with ${warnings.length} warning${warnings.length === 1 ? '' : 's'}` : ''} (${elapsed(start)})`
+			);
 			break;
 		}
 
 		case 'build': {
-			const { bundle, bytes, warnings } = await buildBundle(root);
+			const { bundle, bytes, warnings } = await buildBundle(root, { log });
 			const file = join(root, 'dist', bundleFileName(bundle.manifest));
 
-			printWarnings(warnings);
+			log.warnings(warnings);
+			log.step(`Writing ${relative(root, file)}`);
 			await mkdir(join(root, 'dist'), { recursive: true });
 			await writeFile(file, bytes);
-			console.log(`✓ ${relative(root, file)} (${Math.ceil(bytes.byteLength / 1024)} KiB)`);
-			console.log(`  ${await computeIntegrity(bytes)}`);
+			log.success(`Built ${relative(root, file)} (${kib(bytes.byteLength)}) in ${elapsed(start)}`);
+			log.detail(await computeIntegrity(bytes));
+			log.next(`publish it with ${runScript('release')}, or try it with ${runScript('dev')}.`);
 			break;
 		}
 
-		case 'dev':
-			await startDevServer(root, Number(values.port), {
-				exactVersion: values['exact-version'] ?? false
-			});
-			break;
+		case 'dev': {
+			const port = Number(values.port ?? 4510);
 
-		case 'publish': {
-			const { bundle, bytes, warnings } = await buildBundle(root);
-			printWarnings(warnings);
-			const client = createRegistryClient({
-				url: values.registry ?? process.env.POUCHBASE_REGISTRY_URL,
-				token: values.token ?? process.env.POUCHBASE_REGISTRY_TOKEN
+			if (!Number.isInteger(port) || port < 1 || port > 65535) {
+				throw new CliError(`Invalid port "${values.port}"`, 'Pass a number from 1 to 65535.');
+			}
+
+			await startDevServer(root, port, {
+				exactVersion: values['exact-version'] === true,
+				log
 			});
-			const version = await client.publish(bundle.manifest.id, bytes);
-			console.log(`✓ Published ${bundle.manifest.id}@${version.version}`);
 			break;
 		}
+
+		case 'publish':
+			await publish(root, log, {
+				registry: typeof values.registry === 'string' ? values.registry : undefined,
+				token: typeof values.token === 'string' ? values.token : undefined
+			});
+			break;
 
 		case 'schema':
 			console.log(JSON.stringify(manifestJsonSchema(), null, '\t'));
 			break;
 
 		default:
-			throw new Error(`Unknown command: ${command}\n\n${HELP}`);
+			throw new CliError(
+				`Unknown command "${command}"`,
+				'Run pouchbase-plugin --help for the commands.'
+			);
 	}
 }
 
-main().catch((error: unknown) => {
-	printError(error);
+let log = createLogger();
+
+try {
+	const { positionals, values } = parseArgs({
+		allowPositionals: true,
+		options: {
+			template: { type: 'string' },
+			port: { type: 'string' },
+			'exact-version': { type: 'boolean' },
+			registry: { type: 'string' },
+			token: { type: 'string' },
+			quiet: { type: 'boolean', short: 'q' },
+			verbose: { type: 'boolean', short: 'v' },
+			help: { type: 'boolean', short: 'h' }
+		}
+	});
+
+	log = createLogger({ quiet: values.quiet, verbose: values.verbose });
+	await main(log, positionals, values);
+} catch (error) {
+	log.error(
+		error instanceof TypeError && 'code' in error && String(error.code).startsWith('ERR_PARSE_ARGS')
+			? new CliError(error.message, 'Run pouchbase-plugin --help for the options.')
+			: error
+	);
 	process.exitCode = 1;
-});
+}

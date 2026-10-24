@@ -1,4 +1,5 @@
 import type { ManifestIssue, PluginManifest } from '../manifest.js';
+import type { Logger } from './output.js';
 
 import { readdir, readFile } from 'node:fs/promises';
 import { join, posix, relative, sep } from 'node:path';
@@ -23,6 +24,7 @@ import {
 	type PackageJson
 } from '../manifest.js';
 import { isHostModule } from '../ui.js';
+import { count, kib } from './format.js';
 
 /** Loading, checking and building a plugin project on disk. Functions throw `ProjectError`. */
 
@@ -31,7 +33,9 @@ export class ProjectError extends Error {
 
 	constructor(
 		message: string,
-		readonly issues: ManifestIssue[] = []
+		readonly issues: ManifestIssue[] = [],
+		/** How to fix it, when there is something the user can do. */
+		readonly hint?: string
 	) {
 		super(message);
 	}
@@ -130,14 +134,22 @@ function checkImports(path: string, source: string): ManifestIssue[] {
 }
 
 /** The `ui/` files of the bundle: path → contents, with TypeScript modules turned into `.js`. */
-async function collectUi(root: string): Promise<Record<string, string>> {
+async function collectUi(
+	root: string
+): Promise<{ files: Record<string, string>; compiled: number; skipped: string[] }> {
 	const files: Record<string, string> = {};
 	const issues: ManifestIssue[] = [];
+	const skipped: string[] = [];
+	let compiled = 0;
 
 	for (const file of await listFiles(join(root, UI_DIR))) {
 		const path = toPosix(relative(root, file));
 
 		if (!UI_SOURCE.test(path) || path.endsWith('.d.ts')) {
+			if (!path.endsWith('.d.ts')) {
+				skipped.push(path);
+			}
+
 			continue;
 		}
 
@@ -156,6 +168,7 @@ async function collectUi(root: string): Promise<Record<string, string>> {
 			}
 
 			files[path.replace(/\.ts$/, '.js')] = result.code;
+			compiled += 1;
 		} else {
 			files[path] = source;
 		}
@@ -165,7 +178,7 @@ async function collectUi(root: string): Promise<Record<string, string>> {
 		throw new ProjectError(`Problems in ${UI_DIR}/`, issues);
 	}
 
-	return files;
+	return { files, compiled, skipped };
 }
 
 /** The server entry bundled into one ES module without imports. */
@@ -189,8 +202,14 @@ async function bundleServer(root: string, entry: string): Promise<string> {
 	}
 
 	if (imports.length) {
+		const packages = imports.filter((name) => !name.startsWith('node:'));
+
 		throw new ProjectError(
-			`The server code imports ${imports.join(', ')}; it runs in a sandbox without Node.js or other modules`
+			`The server code imports ${imports.join(', ')}; it runs in a sandbox without Node.js or other modules`,
+			[],
+			packages.length
+				? `Packages are bundled into the server code, so they must be installed: run your package manager's install, or remove the import of ${packages.join(', ')}.`
+				: 'Use the APIs of the sandbox (fetch, crypto, ctx) instead of Node.js modules.'
 		);
 	}
 
@@ -313,18 +332,68 @@ export async function checkServer(
 	return { issues, warnings: [] };
 }
 
-/** Validates the project and builds its bundle; `warnings` are problems that don't stop it. */
-export async function buildBundle(root: string): Promise<{
+/** What the manifest contributes, e.g. `2 fields, 1 page`; `nothing` when it is empty. */
+function contributionSummary(manifest: PluginManifest) {
+	const { fields, pages, authProviders } = manifest.contributes;
+	const parts = [
+		fields.length && count(fields.length, 'field type'),
+		pages.length && count(pages.length, 'page'),
+		authProviders.length && count(authProviders.length, 'auth provider')
+	].filter(Boolean);
+
+	return parts.length ? parts.join(', ') : 'nothing yet';
+}
+
+/**
+ * Validates the project and builds its bundle; `warnings` are problems that don't stop it. `log`
+ * reports every step, so the CLI can show what it is doing.
+ */
+export async function buildBundle(
+	root: string,
+	{ log }: { log?: Logger } = {}
+): Promise<{
 	bundle: PluginBundle;
 	bytes: Uint8Array<ArrayBuffer>;
 	warnings: ManifestIssue[];
 }> {
+	log?.step(`Reading ${MANIFEST_FILE}`);
+
 	const manifest = await loadManifest(root);
-	const files = await collectUi(root);
+
+	log?.detail(
+		`${manifest.id}@${manifest.version} (API version ${manifest.apiVersion}), contributes ${contributionSummary(manifest)}`
+	);
+
+	if (manifest.permissions.network.length) {
+		log?.detail(`May reach ${manifest.permissions.network.join(', ')}`);
+	}
+
+	log?.step(`Checking ${UI_DIR}/`);
+
+	const ui = await collectUi(root);
+	const files = ui.files;
+	const uiCount = Object.keys(files).length;
+
+	log?.detail(
+		uiCount
+			? `${count(uiCount, 'file')}${ui.compiled ? `, ${ui.compiled} compiled from TypeScript` : ''}`
+			: `No files in ${UI_DIR}/`
+	);
+
+	for (const path of ui.skipped) {
+		log?.debug(`Left out ${path}: not a .svelte, .ts, .js, .css, .json or .svg file`);
+	}
+
 	const warnings: ManifestIssue[] = [];
 
 	if (manifest.server) {
+		log?.step(`Bundling ${manifest.server}`);
+
 		const code = await bundleServer(root, manifest.server);
+
+		log?.detail(`${kib(Buffer.byteLength(code))} of server code, in one module`);
+		log?.step('Checking the server handlers against the manifest');
+
 		const result = await checkServer(manifest, code);
 
 		if (result.issues.length) {
@@ -333,7 +402,11 @@ export async function buildBundle(root: string): Promise<{
 
 		warnings.push(...result.warnings);
 		files[SERVER_FILE] = code;
+	} else {
+		log?.debug('No server code (no "server" in the manifest)');
 	}
+
+	log?.step('Checking the bundle');
 
 	const draft = {
 		format: BUNDLE_FORMAT,
@@ -355,6 +428,8 @@ export async function buildBundle(root: string): Promise<{
 	if (!result.success) {
 		throw new ProjectError('The bundle is not valid', result.issues);
 	}
+
+	log?.detail(`${kib(bytes.byteLength)} of at most ${kib(MAX_BUNDLE_SIZE)}`);
 
 	return { bundle: result.bundle, bytes, warnings };
 }

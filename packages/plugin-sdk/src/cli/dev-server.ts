@@ -13,8 +13,9 @@ import { createServer, type ServerResponse } from 'node:http';
 import { computeIntegrity, serializeBundle } from '../bundle.js';
 import { effectiveCategories } from '../categories.js';
 import { REGISTRY_API_PREFIX } from '../registry.js';
+import { count, elapsed, kib } from './format.js';
+import { CliError, createLogger, type Logger } from './output.js';
 import { buildBundle } from './project.js';
-import { printError, printWarnings } from './output.js';
 
 /**
  * A local registry that serves the plugin being developed, so a Pouchbase started with
@@ -45,27 +46,41 @@ export function withDevVersion(
 export async function startDevServer(
 	root: string,
 	port: number,
-	{ exactVersion = false }: { exactVersion?: boolean } = {}
+	{ exactVersion = false, log = createLogger() }: { exactVersion?: boolean; log?: Logger } = {}
 ) {
 	const base = `http://localhost:${port}`;
 	let current: Build | null = null;
 	let builds = 0;
 
-	async function rebuild() {
-		try {
-			const built = await buildBundle(root);
+	async function rebuild(reason?: string) {
+		const start = performance.now();
 
-			printWarnings(built.warnings);
+		log.step(reason ? `${reason}, rebuilding` : 'Building the plugin');
+
+		try {
+			// The steps of the first build are shown; those of later ones only with --verbose.
+			const built = await buildBundle(root, { log: builds === 0 || log.verbose ? log : undefined });
+
+			log.warnings(built.warnings);
 
 			const { bundle, bytes } = exactVersion ? built : withDevVersion(built.bundle, builds + 1);
 
 			builds += 1;
 			current = { bundle, bytes, integrity: await computeIntegrity(bytes), at: new Date() };
-			console.log(
-				`✓ Built ${bundle.manifest.id}@${bundle.manifest.version} (${Math.ceil(bytes.byteLength / 1024)} KiB)`
+			log.success(
+				`Built ${bundle.manifest.id}@${bundle.manifest.version} in ${elapsed(start)} (${kib(bytes.byteLength)})`
 			);
+
+			if (builds > 1) {
+				log.detail('Update the plugin on the Plugins page of Pouchbase to try this build.');
+			}
 		} catch (error) {
-			printError(error);
+			log.error(error);
+			log.detail(
+				current
+					? `Still serving ${current.bundle.manifest.id}@${current.bundle.manifest.version}; fix the problem and save to rebuild.`
+					: 'Nothing to serve yet; fix the problem and save to rebuild.'
+			);
 		}
 	}
 
@@ -94,7 +109,9 @@ export async function startDevServer(
 			version: manifest.version,
 			apiVersion: manifest.apiVersion,
 			author: manifest.author?.name ?? null,
-			iconUrl: null,
+			iconUrl: manifest.icon
+				? `${base}${REGISTRY_API_PREFIX}/plugins/${manifest.id}/icon?v=${build.at.getTime()}`
+				: null,
 			keywords: manifest.keywords,
 			categories: effectiveCategories(manifest),
 			downloads: 0,
@@ -129,6 +146,18 @@ export async function startDevServer(
 
 	const server = createServer((request, response) => {
 		const url = new URL(request.url ?? '/', base);
+
+		response.on('finish', () => {
+			// A download is what the user waits for; other requests are only shown with --verbose.
+			if (url.pathname.endsWith('/bundle') && response.statusCode === 200 && current) {
+				log.success(
+					`Pouchbase downloaded ${current.bundle.manifest.id}@${current.bundle.manifest.version}`
+				);
+			} else {
+				log.debug(`${request.method} ${url.pathname}${url.search} → ${response.statusCode}`);
+			}
+		});
+
 		const parts = url.pathname.replace(REGISTRY_API_PREFIX, '').split('/').filter(Boolean);
 		const build = current;
 
@@ -177,6 +206,18 @@ export async function startDevServer(
 			return;
 		}
 
+		const icon = manifest.icon ? found.bundle.files[manifest.icon] : undefined;
+
+		if (parts.length === 3 && parts[2] === 'icon' && icon !== undefined) {
+			response.writeHead(200, {
+				'Content-Type': 'image/svg+xml',
+				'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+				'X-Content-Type-Options': 'nosniff'
+			});
+			response.end(icon);
+			return;
+		}
+
 		const matches =
 			parts[2] === 'versions' && (parts[3] === 'latest' || parts[3] === manifest.version);
 
@@ -194,28 +235,55 @@ export async function startDevServer(
 		notFound(response);
 	});
 
+	// The port first, so a port in use is reported before building.
+	await new Promise<void>((resolve, reject) => {
+		server.once('error', (error: NodeJS.ErrnoException) =>
+			reject(
+				error.code === 'EADDRINUSE'
+					? new CliError(`Port ${port} is already in use`, 'Pass another port with --port.')
+					: error
+			)
+		);
+		server.listen(port, resolve);
+	});
+
 	await rebuild();
 
 	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	// Files changed since the last rebuild, to say what triggered it.
+	let changed = new Set<string>();
 
 	watch(root, { recursive: true }, (_event, file) => {
 		if (file && IGNORED.test(file)) {
 			return;
 		}
 
+		if (file) {
+			changed.add(file.split('\\').join('/'));
+		}
+
 		clearTimeout(timer);
-		timer = setTimeout(() => void rebuild(), 100);
+		timer = setTimeout(() => {
+			const files = [...changed];
+
+			changed = new Set();
+			void rebuild(
+				files.length === 1
+					? `${files[0]} changed`
+					: `${files.length ? count(files.length, 'file') : 'Files'} changed`
+			);
+		}, 100);
 	});
 
-	server.listen(port, () => {
-		console.log(`\nDev registry on ${base}`);
-		console.log(
-			`Start Pouchbase with POUCHBASE_REGISTRY_URL=${base} to install the plugin from it.`
-		);
-		console.log(
-			exactVersion
-				? 'Serving the version from the manifest.\n'
-				: 'Every build is served as <version>-dev.<n>; --exact-version serves the version as is.\n'
-		);
-	});
+	log.success(`Dev registry on ${base}`);
+	log.detail(`Watching ${root} for changes (node_modules, dist and .git are ignored)`);
+	log.detail(
+		exactVersion
+			? 'Serving the version from the manifest.'
+			: 'Every build is served as <version>-dev.<n>; --exact-version serves the version as is.'
+	);
+	log.next(
+		`start Pouchbase with POUCHBASE_REGISTRY_URL=${base} and install the plugin from the Plugins page. Press Ctrl+C to stop.`
+	);
 }

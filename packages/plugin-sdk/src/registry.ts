@@ -160,7 +160,15 @@ export function createRegistryClient(options: RegistryClientOptions = {}): Regis
 				headers: { Accept: 'application/json', ...init.headers }
 			});
 		} catch (error) {
-			throw new RegistryError(0, 'unreachable', `Registry unreachable: ${String(error)}`);
+			// `fetch failed` says little; the cause has the reason, such as ECONNREFUSED or ENOTFOUND.
+			const cause = (error as { cause?: { code?: unknown; message?: unknown } }).cause;
+			const reason = cause?.code ?? cause?.message ?? (error as Error).message ?? error;
+
+			throw new RegistryError(
+				0,
+				'unreachable',
+				`Registry unreachable at ${base.slice(0, -REGISTRY_API_PREFIX.length)}: ${String(reason)}`
+			);
 		}
 
 		if (!response.ok && response.status !== 404) {

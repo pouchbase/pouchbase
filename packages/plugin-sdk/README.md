@@ -25,6 +25,8 @@ pnpm dev
 
 Every template writes `$schema` and `categories` in the manifest and keeps `version` and `license` in `package.json`.
 
+For a complete example with a field type, a page, routes, tests and every CLI command, see [`examples/plugin-demo`](https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-demo).
+
 `pnpm dev` rebuilds the plugin on every change and serves it from a local registry. Start Pouchbase with `POUCHBASE_REGISTRY_URL=http://localhost:4510` (`pnpm dev` in the Pouchbase repository) and install the plugin from the Plugins page. Every build is served as a new prerelease, `<version>-dev.<n>`, so Pouchbase sees it as an update; `--exact-version` serves the version from the manifest instead.
 
 Add more to a plugin with `add`, which appends the contribution to `pouchbase-plugin.json` and creates its files (it never overwrites one):
@@ -59,6 +61,7 @@ color-picker/
 	"name": "Color picker",
 	"version": "1.0.0",
 	"description": "Adds a color field type.",
+	"icon": "ui/icon.svg",
 	"license": "MIT",
 	"categories": ["fields", "pages", "auth"],
 	"engines": { "pouchbase": ">=0.4.0" },
@@ -93,6 +96,7 @@ color-picker/
 | `apiVersion`          | The plugin API version the plugin is written against.                                                                                                                |
 | `id`                  | Unique in the registry: lowercase words separated by dashes. Everything the plugin adds is namespaced by it (`color-picker:color`, `/plugins/color-picker/palette`). |
 | `version`             | Exact semver version of this release.                                                                                                                                |
+| `icon`                | Square SVG in `ui/` (e.g. `ui/icon.svg`), shown in the marketplace and the dashboard. Without one, Pouchbase shows a puzzle piece.                                   |
 | `categories`          | Up to three of `PLUGIN_CATEGORIES`, where the registry lists the plugin. See [Categories](#categories).                                                              |
 | `engines.pouchbase`   | Semver range of the Pouchbase versions the plugin works with.                                                                                                        |
 | `permissions.network` | Hosts the server code may reach over HTTPS; `*.example.com` matches its subdomains, not `example.com` itself. Shown to the admin before installing.                  |
@@ -250,6 +254,15 @@ Errors have the body `{ "error": { "code": "...", "message": "...", "issues": [.
 | `pouchbase-plugin dev [--port 4510] [--exact-version]`          | Rebuild on every change and serve the plugin from a local registry, as `<version>-dev.<n>` unless `--exact-version`.                                                                                            |
 | `pouchbase-plugin schema`                                       | Print the JSON Schema of `pouchbase-plugin.json`.                                                                                                                                                               |
 | `pouchbase-plugin publish [--registry <url>] [--token <token>]` | Build and publish; defaults to `$POUCHBASE_REGISTRY_URL` and `$POUCHBASE_REGISTRY_TOKEN`. Create a publish token under **Account** on [pouchbase.io](https://pouchbase.io/account), or upload the bundle there. |
+
+Every command reports what it does (`›`), what it found, how it ended (`✓` or `✗`, with a hint on how to fix an error) and what to do next. Results go to stdout, warnings (`!`) and errors to stderr, with colors only in a terminal (`NO_COLOR` turns them off). Two options apply to every command:
+
+| Option          | Effect                                                                       |
+| --------------- | ---------------------------------------------------------------------------- |
+| `-q, --quiet`   | Only results, warnings and errors, e.g. in CI.                               |
+| `-v, --verbose` | Also stack traces and every request to the dev registry, to debug a problem. |
+
+`publish` checks the token before building, shows the registry it uses and where that comes from, and looks the plugin up first, so a version that is already published fails before the upload.
 
 ## License
 
