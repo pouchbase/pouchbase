@@ -1,6 +1,6 @@
 ## Project
 
-`pouchbase-registry` (private) runs the development instance of the plugin registry: the Node build of the Pouchbase app (`../server.mjs`, `../build`) as its own instance (`registry-dev`, port 5175), configured by `registry/.env`. It has no code of its own besides `start.mjs`; the registry API and account pages are the site (`../site`), which talks to this instance in dev through `site/.env.development.local`. See `README.md`.
+`pouchbase-registry` (private) runs the development instance of the plugin registry: the Pouchbase app from this repository in Vite's dev server (`vite dev` in the root, with `POUCHBASE_DEV_DIR` keeping its generated files apart, see `../vite.config.ts`) as its own instance (`registry-dev`, port 5175), configured by `registry/.env`. It always runs the current code. It has no code of its own besides `start.mjs`; the registry API and account pages are the site (`../site`), which talks to this instance in dev through `site/.env.development.local`. See `README.md`.
 
 - Everything in English.
 - Data lives on Cloudflare (D1, R2) like every instance; never add a local database or disk storage.

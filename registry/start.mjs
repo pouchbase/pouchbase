@@ -1,15 +1,21 @@
 /**
- * Starts the development instance of the plugin registry: the Node build of Pouchbase as its own
- * instance (`registry-dev` by default), next to the one `pnpm dev:app` runs. The site's dev server
- * (`pnpm dev:site`) talks to it when `site/.env.development.local` points at it; see README.md.
+ * Starts the development instance of the plugin registry: the Pouchbase app from this repository
+ * in Vite's dev server, as its own instance (`registry-dev` by default), next to the one
+ * `pnpm dev:app` runs. It runs the current code, so changes to Pouchbase reach it right away, like
+ * they reach `pnpm dev:app`. The site's dev server (`pnpm dev:site`) talks to it when
+ * `site/.env.development.local` points at it; see README.md.
  */
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const server = fileURLToPath(new URL('../server.mjs', import.meta.url));
-const handler = fileURLToPath(new URL('../build/handler.js', import.meta.url));
+// The CLI of the app's own Vite; `vite/bin/...` isn't exported, its package.json is.
+const require = createRequire(join(root, 'package.json'));
+const vitePackage = require.resolve('vite/package.json');
+const vite = join(dirname(vitePackage), require(vitePackage).bin.vite);
 
 if (!existsSync('.env')) {
 	// `pnpm dev` starts every `dev:` script, so this stays quiet for people who don't need it.
@@ -17,26 +23,21 @@ if (!existsSync('.env')) {
 	process.exit(0);
 }
 
+// Variables already in the environment win over the root `.env`, which the app reads as well.
 process.loadEnvFile('.env');
 process.env.POUCHBASE_INSTANCE ||= 'registry-dev';
 process.env.PORT ||= '5175';
-process.env.ORIGIN ||= `http://localhost:${process.env.PORT}`;
-
-if (!existsSync(handler) || process.argv.includes('--build')) {
-	console.log('[registry] Building the Node version of Pouchbase…');
-
-	const build = spawnSync('pnpm', ['build:node'], { cwd: root, stdio: 'inherit', shell: true });
-
-	if (build.status !== 0) {
-		process.exit(build.status ?? 1);
-	}
-}
+// Generated files and Vite's cache apart from `pnpm dev:app` (see vite.config.ts).
+process.env.POUCHBASE_DEV_DIR = 'node_modules/.pouchbase-registry';
 
 console.log(
-	`[registry] ${process.env.POUCHBASE_INSTANCE} on ${process.env.ORIGIN} (the registry API is the site: http://localhost:5174/v1)`
+	`[registry] ${process.env.POUCHBASE_INSTANCE} on http://localhost:${process.env.PORT} (the registry API is the site: http://localhost:5174/v1)`
 );
 
-const child = spawn(process.execPath, [server], { stdio: 'inherit' });
+const child = spawn(process.execPath, [vite, 'dev', '--port', process.env.PORT, '--strictPort'], {
+	cwd: root,
+	stdio: 'inherit'
+});
 
 for (const signal of ['SIGINT', 'SIGTERM']) {
 	process.on(signal, () => child.kill(signal));

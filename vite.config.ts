@@ -21,8 +21,12 @@ import { realtime } from './vite/realtime.ts';
 export default defineConfig(({ mode }) => {
 	const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
 	const target: Target = env.POUCHBASE_TARGET === 'node' ? 'node' : 'cloudflare';
+	// A second dev server of this project (the development registry, `registry/start.mjs`) keeps its
+	// generated files and dependency cache apart, so it can run next to `pnpm dev:app`.
+	const devDir = env.POUCHBASE_DEV_DIR;
 
 	return {
+		...(devDir && { cacheDir: `${devDir}/vite` }),
 		plugins: [
 			platform(target),
 			realtime(),
@@ -40,6 +44,7 @@ export default defineConfig(({ mode }) => {
 				experimental: {
 					remoteFunctions: true
 				},
+				...(devDir && { outDir: `${devDir}/kit` }),
 				adapter: target === 'node' ? node() : cloudflare()
 			})
 		]

@@ -15,7 +15,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 ## Set up once
 
 1. `cp registry/.env.example registry/.env` and fill in the Cloudflare credentials (the ones from the root `.env` work). The instance creates its own D1 databases and R2 bucket, named after `POUCHBASE_INSTANCE`.
-2. `pnpm dev:registry` (or `pnpm --filter pouchbase-registry dev`). The first run builds the Node version of Pouchbase (`pnpm build:node`); open `http://localhost:5175` and install it.
+2. `pnpm dev:registry` (or `pnpm --filter pouchbase-registry dev`), then open `http://localhost:5175` and install it.
 3. Under **System → Environments**, set **This instance** to **Development**.
 4. Link the live registry: on `https://api.pouchbase.io`, under **System → Environments → Deploy tokens**, create a token; here, under **Linked instance**, link `https://api.pouchbase.io` with it.
 5. **Pull** from the linked instance. That creates the `plugins`, `plugin_versions` and `publish_tokens` collections with their fields, indexes and API rules, and takes over the auth and mail settings that travel with a snapshot.
@@ -30,7 +30,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 ## Use it
 
 - `pnpm dev` starts the app (`:5173`), the site (`:5174`) and this instance (`:5175`); without `registry/.env` the registry is skipped.
-- Let a Pouchbase instance install from the local registry with `PLUGIN_REGISTRY_URL=http://localhost:5174` in its `.env` (the root `.env` for `pnpm dev:app`).
+- Let a Pouchbase instance install from the local registry with `POUCHBASE_REGISTRY_URL=http://localhost:5174` in its `.env` (the root `.env` for `pnpm dev:app`).
 - Publish to it: sign up on `http://localhost:5174/account/sign-up`, create a publish token under **Account**, then
 
   ```sh
@@ -39,7 +39,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 
   or for all first-party plugins: `POUCHBASE_REGISTRY_URL=http://localhost:5174 POUCHBASE_REGISTRY_TOKEN=pbp_… pnpm release:plugins`.
 
-- Rebuild after pulling app changes: `pnpm --filter pouchbase-registry dev -- --build` (or `pnpm build:node`). The instance migrates its databases itself on the first request after a new build, like every Pouchbase update.
+- It runs the app from this repository in Vite's dev server, like `pnpm dev:app` but as the `registry-dev` instance (its generated files and Vite cache are in `node_modules/.pouchbase-registry`, so both run side by side). Changes to Pouchbase reach it right away; there is nothing to build or update. New migrations in `drizzle/` are applied on the next request after the server reloads; restart it if one doesn't.
 
 ## Sync schema changes
 
