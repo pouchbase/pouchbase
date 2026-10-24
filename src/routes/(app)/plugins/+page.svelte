@@ -11,6 +11,7 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Input from '#lib/components/ui/inputs/input/index.js';
 	import * as Page from '#lib/components/ui/page/index.js';
+	import * as ProviderIcon from '#lib/components/ui/provider-icon/index.js';
 	import * as Select from '#lib/components/ui/inputs/select/index.js';
 	import * as Segmented from '#lib/components/ui/segmented/index.js';
 	import * as Table from '#lib/components/ui/table/index.js';
@@ -189,9 +190,18 @@
 					{#each installed as plugin (plugin.id)}
 						<Table.Row>
 							<Table.Cell>
-								<div class="flex min-w-0 flex-col">
-									<span class="font-medium text-zinc-900">{plugin.name}</span>
-									<span class="truncate text-xs text-zinc-500">{plugin.description}</span>
+								<div class="flex min-w-0 items-center gap-3">
+									<Tile.Icon class="size-8 [&_svg]:size-4">
+										<ProviderIcon.Root
+											src={plugin.iconUrl}
+											fallback="lucide:puzzle"
+											class="size-4"
+										/>
+									</Tile.Icon>
+									<div class="flex min-w-0 flex-col">
+										<span class="font-medium text-zinc-900">{plugin.name}</span>
+										<span class="truncate text-xs text-zinc-500">{plugin.description}</span>
+									</div>
 								</div>
 							</Table.Cell>
 							<Table.Cell>

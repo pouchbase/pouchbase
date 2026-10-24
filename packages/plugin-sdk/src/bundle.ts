@@ -80,6 +80,7 @@ export const bundleSchema = z
 
 		const required = [
 			...(manifest.server ? [manifest.server] : []),
+			...(manifest.icon ? [manifest.icon] : []),
 			...manifest.contributes.fields.flatMap((field) => [field.input, field.cell ?? []].flat()),
 			...manifest.contributes.pages.map((page) => page.component),
 			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? [])

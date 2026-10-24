@@ -4,6 +4,7 @@
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as ProviderIcon from '#lib/components/ui/provider-icon/index.js';
 	import * as Tile from '#lib/components/ui/tile/index.js';
 	import InstallPluginDialog from './install-plugin-dialog.svelte';
 	import PluginCategories from './plugin-categories.svelte';
@@ -24,12 +25,12 @@
 
 <Tile.Root>
 	<Tile.Header>
-		<Tile.Icon class="overflow-hidden">
-			{#if plugin.iconUrl}
-				<img src={plugin.iconUrl} alt="" class="size-full object-cover" />
-			{:else}
-				<Icon.Root icon="lucide:puzzle" />
-			{/if}
+		<Tile.Icon>
+			<ProviderIcon.Root
+				src={plugin.iconUrl ?? installed?.iconUrl}
+				fallback="lucide:puzzle"
+				class="size-5"
+			/>
 		</Tile.Icon>
 
 		<div class="flex min-w-0 flex-1 flex-col">

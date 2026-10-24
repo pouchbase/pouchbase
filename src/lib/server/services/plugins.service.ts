@@ -24,6 +24,7 @@ import { asc, eq, inArray } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
+import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 
 import { version as POUCHBASE_VERSION } from '../../../../package.json';
 import { generateToken } from '../crypto';
@@ -66,6 +67,8 @@ export type InstalledPlugin = {
 	version: string;
 	apiVersion: number;
 	description: string;
+	/** The plugin's icon (`manifest.icon`), served by Pouchbase; `null` when it has none. */
+	iconUrl: string | null;
 	permissions: PluginPermissions;
 	contributes: PluginManifest['contributes'];
 	/** Built in: ships with Pouchbase, runs inside it and can't be removed. */
@@ -146,6 +149,7 @@ function toInstalled(row: {
 	return {
 		...rest,
 		description: manifest.description,
+		iconUrl: manifest.icon ? pluginImagePath(row.id, manifest.icon, row.version) : null,
 		permissions: manifest.permissions,
 		contributes: manifest.contributes,
 		embedded: false,
@@ -160,6 +164,7 @@ function embeddedToInstalled(manifest: PluginManifest): InstalledPlugin {
 		version: manifest.version,
 		apiVersion: manifest.apiVersion,
 		description: manifest.description,
+		iconUrl: manifest.icon ? pluginImagePath(manifest.id, manifest.icon, manifest.version) : null,
 		permissions: manifest.permissions,
 		contributes: manifest.contributes,
 		embedded: true,

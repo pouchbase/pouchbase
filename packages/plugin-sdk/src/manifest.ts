@@ -54,7 +54,7 @@ const componentPath = relativePath.refine(
 	`Must be a .svelte file in the ${UI_DIR}/ directory`
 );
 
-/** An SVG image in the `ui/` directory, e.g. a provider's logo. */
+/** An SVG image in the `ui/` directory, e.g. the plugin's icon or a provider's logo. */
 const imagePath = relativePath.refine(
 	(path) => path.startsWith(`${UI_DIR}/`) && path.endsWith('.svg'),
 	`Must be a .svg file in the ${UI_DIR}/ directory`
@@ -133,6 +133,11 @@ export const manifestSchema = z
 			.string()
 			.refine((value) => semver.valid(value) === value, 'Must be a semver version'),
 		description,
+		/**
+		 * The plugin's icon in the marketplace and the dashboard, e.g. `ui/icon.svg`; square, shown at
+		 * 40 pixels and smaller. Missing shows a puzzle piece.
+		 */
+		icon: imagePath.optional(),
 		/** SPDX license expression, e.g. `MIT`. */
 		license: z.string().trim().min(1).max(64),
 		author: z

@@ -3,6 +3,7 @@
 	"apiVersion": 1,
 	"id": "auth-microsoft",
 	"name": "Microsoft sign-in",
+	"icon": "ui/microsoft.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"

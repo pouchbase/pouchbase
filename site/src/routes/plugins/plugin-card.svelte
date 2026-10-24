@@ -3,6 +3,7 @@
 	import * as Badge from '#lib/components/ui/badge/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Thumbnail from '#lib/components/ui/thumbnail/index.js';
 	import { categoryLabel } from '#lib/plugin-categories.js';
 
 	let { plugin }: { plugin: PluginSummary } = $props();
@@ -12,16 +13,23 @@
 
 <Card.Root class="flex h-full flex-col">
 	<Card.Header>
-		<div class="flex flex-wrap items-center gap-2">
-			<Card.Title class="font-display">{plugin.name}</Card.Title>
-			{#if plugin.verified}
-				<Badge.Root variant="brand">
-					<Icon.Root icon="lucide:badge-check" />
-					Verified
-				</Badge.Root>
-			{/if}
+		<div class="flex items-center gap-3">
+			<Thumbnail.Root src={plugin.iconUrl} class="p-2">
+				<Icon.Root icon="lucide:puzzle" />
+			</Thumbnail.Root>
+			<div class="flex min-w-0 flex-col">
+				<div class="flex flex-wrap items-center gap-2">
+					<Card.Title class="font-display">{plugin.name}</Card.Title>
+					{#if plugin.verified}
+						<Badge.Root variant="brand">
+							<Icon.Root icon="lucide:badge-check" />
+							Verified
+						</Badge.Root>
+					{/if}
+				</div>
+				<span class="font-mono text-xs text-zinc-500">{plugin.id}</span>
+			</div>
 		</div>
-		<span class="font-mono text-xs text-zinc-500">{plugin.id}</span>
 	</Card.Header>
 
 	<Card.Content class="flex flex-1 flex-col gap-4">

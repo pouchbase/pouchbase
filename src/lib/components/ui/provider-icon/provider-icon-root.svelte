@@ -2,7 +2,7 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 
 	type Props = {
-		/** The provider's logo, e.g. a sign-in plugin's `ui/*.svg`; `null` shows `fallback`. */
+		/** The logo, e.g. a plugin's icon or a provider's `ui/*.svg`; `null` shows `fallback`. */
 		src: string | null | undefined;
 		/** Iconify name shown without a logo. Pass a literal, so the icon bundler finds it. */
 		fallback: string;
@@ -15,7 +15,7 @@
 	let failed = $state<string | null>(null);
 </script>
 
-<!-- A sign-in provider's logo, sized like an icon (1em unless `class` says otherwise). Decorative. -->
+<!-- A plugin's or sign-in provider's logo, sized like an icon (1em unless `class` says otherwise). Decorative. -->
 {#if src && src !== failed}
 	<img
 		{src}

@@ -312,6 +312,13 @@ export function objectKey(id: string) {
 
 // Projects
 
+/** Path of the plugin's own icon in new projects. */
+export const PLUGIN_ICON_PATH = 'ui/icon.svg';
+
+/** A placeholder for the plugin's icon in the marketplace; the author replaces it. */
+export const PLUGIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 8.7 5 8.7-5"/></svg>
+`;
+
 /** The `@pouchbasejs/ui` versions new plugins are written against. */
 export const UI_PACKAGE_RANGE = '^0.1.0';
 
@@ -342,7 +349,8 @@ export function projectFiles(id: string, template: PluginTemplate, sdkVersion: s
 		apiVersion: API_VERSION,
 		id,
 		name,
-		description: 'A Pouchbase plugin.'
+		description: 'A Pouchbase plugin.',
+		icon: PLUGIN_ICON_PATH
 	};
 	let files: Files = {};
 
@@ -401,6 +409,7 @@ export function projectFiles(id: string, template: PluginTemplate, sdkVersion: s
 
 	return {
 		[MANIFEST_FILE]: json(manifest),
+		[PLUGIN_ICON_PATH]: PLUGIN_ICON,
 		'package.json': json({
 			name: id,
 			version: '0.1.0',

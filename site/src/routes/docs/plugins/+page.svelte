@@ -140,6 +140,11 @@
 			in <Code.Root>ui/</Code.Root>.
 		</li>
 		<li>
+			<Code.Root>icon</Code.Root> is a square SVG in <Code.Root>ui/</Code.Root>, shown in the
+			marketplace, on pouchbase.io and in the list of installed plugins. Without one, the plugin
+			gets a puzzle piece.
+		</li>
+		<li>
 			<Code.Root>$schema</Code.Root> points editors at the
 			<a href={resolve('/schemas/plugin-manifest.json')}>JSON Schema of the manifest</a>, for
 			completion and checks while you type. <Code.Root>pouchbase-plugin schema</Code.Root> prints the

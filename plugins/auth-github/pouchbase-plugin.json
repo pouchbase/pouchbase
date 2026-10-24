@@ -3,6 +3,7 @@
 	"apiVersion": 1,
 	"id": "auth-github",
 	"name": "GitHub sign-in",
+	"icon": "ui/github.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"

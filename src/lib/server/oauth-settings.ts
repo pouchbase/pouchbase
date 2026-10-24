@@ -2,7 +2,7 @@ import type { OAuthProvider } from '#lib/auth/oauth-providers.js';
 import type { oauthProviders, pluginAuthProviders } from './db/schema';
 import type { ProviderConfig } from './plugins/runtime';
 
-import { providerIconPath } from '#lib/auth/oauth-providers.js';
+import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 
 import { embeddedPlugin } from './plugins/embedded';
 
@@ -69,7 +69,7 @@ export function toProviderSettings(row: ProviderJoinRow): OAuthProviderSettings 
 		label: provider.label,
 		consoleUrl: provider.consoleUrl,
 		iconUrl:
-			provider.icon && version ? providerIconPath(provider.pluginId, provider.icon, version) : null,
+			provider.icon && version ? pluginImagePath(provider.pluginId, provider.icon, version) : null,
 		enabled: credentials?.enabled ?? false,
 		clientId: credentials?.clientId ?? '',
 		hasSecret: !!credentials?.clientSecret

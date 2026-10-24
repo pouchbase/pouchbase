@@ -111,9 +111,10 @@ export function loadEmbeddedPlugins(sources: EmbeddedSources): {
 				.filter(([key]) => key.startsWith(`${dir}/`))
 				.map(([key, content]) => [key.slice(dir.length + 1), content])
 		);
-		const missing = manifest.contributes.authProviders
-			.flatMap((provider) => provider.icon ?? [])
-			.filter((icon) => !(icon in assets));
+		const missing = [
+			...(manifest.icon ? [manifest.icon] : []),
+			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? [])
+		].filter((icon) => !(icon in assets));
 
 		if (missing.length) {
 			issues.push({ dir, message: `Missing file: ${missing[0]}` });

@@ -144,6 +144,44 @@ describe('auth provider icons', () => {
 	});
 });
 
+describe('plugin icon', () => {
+	it('accepts an SVG in ui/ and rejects other paths', () => {
+		expect(parseManifest({ ...valid, icon: 'ui/icon.svg' }).success).toBe(true);
+		expect(parseManifest({ ...valid, icon: 'ui/icon.png' }).success).toBe(false);
+		expect(parseManifest({ ...valid, icon: 'icon.svg' }).success).toBe(false);
+	});
+
+	it('requires the icon in the bundle', () => {
+		const result = parseManifest({ ...valid, icon: 'ui/icon.svg', server: undefined });
+
+		expect(result.success).toBe(true);
+
+		if (!result.success) {
+			return;
+		}
+
+		const bundle = (files: Record<string, string>) =>
+			parseBundle(
+				serializeBundle({
+					format: BUNDLE_FORMAT,
+					bundleVersion: BUNDLE_VERSION,
+					manifest: result.manifest,
+					files: { 'ui/color-input.svelte': '', ...files }
+				})
+			);
+
+		expect(bundle({ 'ui/icon.svg': '<svg/>' }).success).toBe(true);
+
+		const missing = bundle({});
+
+		expect(missing.success).toBe(false);
+
+		if (!missing.success) {
+			expect(missing.issues[0]?.message).toBe('Missing file: ui/icon.svg');
+		}
+	});
+});
+
 describe('reserved provider ids', () => {
 	it('rejects the ids of the built-in sign-in methods', () => {
 		for (const id of ['password', 'email', 'otp']) {

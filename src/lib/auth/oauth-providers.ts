@@ -13,7 +13,10 @@ export function oauthCallbackPath(provider: OAuthProvider) {
 	return `/api/auth/oauth2/${provider}/callback`;
 }
 
-/** Path of a provider's logo, served by `/api/plugins/[id]/assets/[...path]`. */
-export function providerIconPath(pluginId: string, icon: string, version: string) {
+/**
+ * Path of a plugin's image (its icon or a provider's logo), served by
+ * `/api/plugins/[id]/assets/[...path]`.
+ */
+export function pluginImagePath(pluginId: string, icon: string, version: string) {
 	return `/api/plugins/${encodeURIComponent(pluginId)}/assets/${icon}?v=${encodeURIComponent(version)}`;
 }
