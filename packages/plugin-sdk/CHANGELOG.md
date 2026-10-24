@@ -1,5 +1,17 @@
 # @pouchbasejs/plugin-sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- [`c350354`](https://github.com/pouchbase/pouchbase/commit/c3503548ee4006a208c3d609966bda31dce6efb3) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Give clear feedback in every `pouchbase-plugin` command: each step of a build, where the registry and token come from, an early check for a missing token or an already published version, what changed and what Pouchbase downloaded in `dev`, hints on how to fix errors, and `--quiet` and `--verbose` options.
+
+- [`6758ac4`](https://github.com/pouchbase/pouchbase/commit/6758ac4612d3891cd27b6b9f80a088786a1c7106) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Plugins can have their own icon: `icon` in the manifest points to an SVG in `ui/`, shown in the marketplace, on pouchbase.io and in the list of installed plugins.
+
+### Patch Changes
+
+- [`d15310b`](https://github.com/pouchbase/pouchbase/commit/d15310b5950064879e920d510bde2eb9f727aa3f) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - The plugin registry of an instance is set with `POUCHBASE_REGISTRY_URL`, the same variable `pouchbase-plugin publish` reads; `PLUGIN_REGISTRY_URL` still works when it isn't set.
+
 ## 0.2.0
 
 ### Minor Changes

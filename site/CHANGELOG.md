@@ -1,5 +1,22 @@
 # pouchbase-site
 
+## 0.6.0
+
+### Minor Changes
+
+- [`6758ac4`](https://github.com/pouchbase/pouchbase/commit/6758ac4612d3891cd27b6b9f80a088786a1c7106) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Plugins can have their own icon: `icon` in the manifest points to an SVG in `ui/`, shown in the marketplace, on pouchbase.io and in the list of installed plugins.
+
+### Patch Changes
+
+- [`2578b98`](https://github.com/pouchbase/pouchbase/commit/2578b98fa707dc84bc321901e8960960c50ecb9b) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document the redesigned API and SDK: sessions, conditions, live updates, the database and schema routes, and the new thumbnail sizes.
+
+- [`d15310b`](https://github.com/pouchbase/pouchbase/commit/d15310b5950064879e920d510bde2eb9f727aa3f) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - The plugin registry of an instance is set with `POUCHBASE_REGISTRY_URL`, the same variable `pouchbase-plugin publish` reads; `PLUGIN_REGISTRY_URL` still works when it isn't set.
+
+- [`8d541f5`](https://github.com/pouchbase/pouchbase/commit/8d541f5bfad78721de811ef89207af74c2c30c40) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Show a styled error page instead of SvelteKit's default one, and keep the account page usable when your plugins or publish tokens can't be loaded, with the reason
+- Updated dependencies [[`c350354`](https://github.com/pouchbase/pouchbase/commit/c3503548ee4006a208c3d609966bda31dce6efb3), [`6758ac4`](https://github.com/pouchbase/pouchbase/commit/6758ac4612d3891cd27b6b9f80a088786a1c7106), [`d15310b`](https://github.com/pouchbase/pouchbase/commit/d15310b5950064879e920d510bde2eb9f727aa3f), [`2578b98`](https://github.com/pouchbase/pouchbase/commit/2578b98fa707dc84bc321901e8960960c50ecb9b)]:
+  - @pouchbasejs/plugin-sdk@0.3.0
+  - @pouchbasejs/js-sdk@0.7.0
+
 ## 0.5.0
 
 ### Minor Changes

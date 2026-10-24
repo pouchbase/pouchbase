@@ -1,5 +1,21 @@
 # pouchbase
 
+## 0.9.0
+
+### Minor Changes
+
+- [`6aba8ac`](https://github.com/pouchbase/pouchbase/commit/6aba8ac51e0b41325c9e1bb5227dca0f50f46b66) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Show errors on a Pouchbase error page instead of SvelteKit's default one, with a message that says what failed, the error code and, for admins, the underlying cause (also in error toasts)
+
+- [`2578b98`](https://github.com/pouchbase/pouchbase/commit/2578b98fa707dc84bc321901e8960960c50ecb9b) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: redesign the public API. Records move to `/api/db/<collection>` (`where`, `order`, `select`, `include`, `limit`, `offset` → `{ items, total, limit, offset }`), the schema to `/api/schema`, live updates to `/api/live`, and the password and email routes to `/api/auth/password/forgot|reset` and `/api/auth/email/send-verification|verify`. Conditions and API rules use a new syntax (`author == $user.id and any(tags) == "news"`), thumbnails are `100x100:fit` via `?size=`, and existing rules, thumbnail sizes and export files are upgraded automatically.
+
+- [`6758ac4`](https://github.com/pouchbase/pouchbase/commit/6758ac4612d3891cd27b6b9f80a088786a1c7106) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Plugins can have their own icon: `icon` in the manifest points to an SVG in `ui/`, shown in the marketplace, on pouchbase.io and in the list of installed plugins.
+
+### Patch Changes
+
+- [`4abc017`](https://github.com/pouchbase/pouchbase/commit/4abc017791fecc1f2291fb3651a3f05ca617262b) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Publishing or pulling new collections with a relation to another new collection no longer stops with `INVALID_RELATION`: the `id` fields of new collections are created first.
+
+- [`d15310b`](https://github.com/pouchbase/pouchbase/commit/d15310b5950064879e920d510bde2eb9f727aa3f) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - The plugin registry of an instance is set with `POUCHBASE_REGISTRY_URL`, the same variable `pouchbase-plugin publish` reads; `PLUGIN_REGISTRY_URL` still works when it isn't set.
+
 ## 0.8.0
 
 ### Minor Changes
