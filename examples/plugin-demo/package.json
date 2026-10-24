@@ -1,0 +1,34 @@
+{
+	"name": "pouchbase-plugin-demo",
+	"version": "0.1.0",
+	"private": true,
+	"description": "A reference plugin that uses every part of the Pouchbase plugin SDK and CLI.",
+	"license": "MIT",
+	"author": "Pouchbase (https://pouchbase.io)",
+	"homepage": "https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-demo",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/pouchbase/pouchbase.git",
+		"directory": "examples/plugin-demo"
+	},
+	"keywords": [
+		"example",
+		"rating",
+		"field"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "pouchbase-plugin dev",
+		"check": "tsc --noEmit",
+		"test": "vitest run",
+		"validate": "pouchbase-plugin validate",
+		"build": "pouchbase-plugin build"
+	},
+	"devDependencies": {
+		"@pouchbasejs/plugin-sdk": "workspace:*",
+		"@pouchbasejs/ui": "workspace:*",
+		"svelte": "^5.57.2",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5"
+	}
+}

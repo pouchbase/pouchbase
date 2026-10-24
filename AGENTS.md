@@ -9,11 +9,12 @@ This repository holds the app (at the root) and its workspace packages, each wit
 | `packages/js-sdk`     | `@pouchbasejs/js-sdk`, the TypeScript SDK for the public API   | MIT                 |
 | `packages/ui`         | `@pouchbasejs/ui`, the dashboard's Svelte UI primitives        | MIT                 |
 | `plugins/*`           | First-party plugins (`auth-google`, `auth-github`, ...)        | MIT                 |
+| `examples/*`          | Reference projects, e.g. `plugin-demo` for the plugin SDK      | MIT                 |
 | `registry`            | `pouchbase-registry`, the development instance of the registry | Private             |
 | `site`                | pouchbase.io, the marketing site and docs                      | All rights reserved |
 | `test-app`            | `pouchbase-test`, a test app on Pouchbase and the JS SDK       | Private             |
 
-Run a package's scripts from the root with `pnpm --filter <name> <script>` (`pouchbase-site`, `pouchbase-test`, `pouchbase-registry`, `@pouchbasejs/js-sdk`, `@pouchbasejs/plugin-sdk`, `@pouchbasejs/ui`, `@pouchbase-plugins/<id>`; all plugins with `pnpm plugins:test|validate|build`). There is one lockfile, at the root.
+Run a package's scripts from the root with `pnpm --filter <name> <script>` (`pouchbase-site`, `pouchbase-test`, `pouchbase-registry`, `@pouchbasejs/js-sdk`, `@pouchbasejs/plugin-sdk`, `@pouchbasejs/ui`, `@pouchbase-plugins/<id>`, `pouchbase-plugin-demo`; all plugins with `pnpm plugins:test|validate|build`). There is one lockfile, at the root.
 
 ## Project Configuration
 

@@ -336,6 +336,24 @@ importers:
         specifier: ^4.152.0
         version: 4.152.0(@cloudflare/workers-types@5.20261023.1)(@types/node@22.20.5)
 
+  examples/plugin-demo:
+    devDependencies:
+      '@pouchbasejs/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
+      '@pouchbasejs/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      svelte:
+        specifier: ^5.57.2
+        version: 5.57.2(@typescript-eslint/types@8.72.0)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@types/node@22.20.5)(happy-dom@20.14.6)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/js-sdk:
     devDependencies:
       '@eslint/js':
@@ -493,6 +511,8 @@ importers:
       vitest:
         specifier: ^5.0.5
         version: 5.0.5(@types/node@22.20.5)(happy-dom@20.14.6)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  registry: {}
 
   site:
     dependencies:
