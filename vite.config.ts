@@ -23,7 +23,8 @@ export default defineConfig(({ mode }) => {
 	const env = { ...loadEnv(mode, process.cwd(), ''), ...process.env };
 	const target: Target = env.POUCHBASE_TARGET === 'node' ? 'node' : 'cloudflare';
 	// A second dev server of this project (the development registry, `registry/start.mjs`) keeps its
-	// generated files and dependency cache apart, so it can run next to `pnpm dev:app`.
+	// generated files, dependency cache and local Miniflare state apart, so it can run next to
+	// `pnpm dev:app`.
 	const devDir = env.POUCHBASE_DEV_DIR;
 
 	return {
@@ -50,7 +51,13 @@ export default defineConfig(({ mode }) => {
 				adapter:
 					target === 'node'
 						? node()
-						: cloudflare({ platformProxy: { configPath: 'wrangler.dev.jsonc' } })
+						: cloudflare({
+								platformProxy: {
+									configPath: 'wrangler.dev.jsonc',
+									// Two Miniflare instances on the same `.wrangler/state` lock each other's SQLite files.
+									...(devDir && { persist: { path: `${devDir}/wrangler` } })
+								}
+							})
 			})
 		]
 	};

@@ -27,7 +27,7 @@ if (!existsSync('.env')) {
 process.loadEnvFile('.env');
 process.env.POUCHBASE_INSTANCE ||= 'registry-dev';
 process.env.PORT ||= '5175';
-// Generated files and Vite's cache apart from `pnpm dev:app` (see vite.config.ts).
+// Generated files, Vite's cache and Miniflare's state apart from `pnpm dev:app` (see vite.config.ts).
 process.env.POUCHBASE_DEV_DIR = 'node_modules/.pouchbase-registry';
 
 console.log(
