@@ -1,13 +1,18 @@
 import { snippet, type Language } from '#lib/highlight.js';
 
-// Files of the demo plugin (`examples/plugin-demo`), inlined at build time, so the samples that
-// say they come from the demo are always the demo's current code.
+// Files of the demo plugin (`examples/plugin-demo`) and the built-in GitHub sign-in
+// (`plugins/auth-github`), inlined at build time, so the samples that say they come from them are
+// always their current code.
+import demoPlugin from '../../../../../examples/plugin-demo/plugin.ts?raw';
 import demoGithubStatus from '../../../../../examples/plugin-demo/routes/github-status.ts?raw';
 import demoInfo from '../../../../../examples/plugin-demo/routes/info.ts?raw';
-import demoItem from '../../../../../examples/plugin-demo/routes/items/[id].ts?raw';
+import demoItem from '../../../../../examples/plugin-demo/routes/item.ts?raw';
 import demoMe from '../../../../../examples/plugin-demo/routes/me.ts?raw';
+import demoNotesCollection from '../../../../../examples/plugin-demo/collections/notes.ts?raw';
+import demoNotes from '../../../../../examples/plugin-demo/routes/notes.ts?raw';
+import githubProvider from '../../../../../plugins/auth-github/auth/github/provider.ts?raw';
 
-/** A file of the demo plugin as a snippet, with Unix line endings whatever the checkout has. */
+/** A file of a plugin in the repository as a snippet, with Unix line endings whatever the checkout has. */
 function demo(language: Language, source: string) {
 	return snippet(language, source.replace(/\r\n/g, '\n'));
 }
@@ -31,9 +36,10 @@ npx @pouchbasejs/plugin-sdk init auth-gitlab --template auth-provider   # create
 export const add = snippet(
 	'bash',
 	`
+# Each creates its files and adds the entry, with its import, to definePlugin({ ... }) in plugin.ts
 npx pouchbase-plugin add field rating            # fields/rating/field.ts, input.svelte, preview.svelte
 npx pouchbase-plugin add page reports/monthly    # pages/reports/monthly.svelte
-npx pouchbase-plugin add route items/:id         # routes/items/[id].ts
+npx pouchbase-plugin add route items/:id         # routes/items/[id].ts, at '/items/:id'
 npx pouchbase-plugin add auth-provider gitlab    # auth/gitlab/provider.ts, auth/gitlab/icon.svg
 npx pouchbase-plugin add setting api_key --type secret   # a setting in plugin.ts`
 );
@@ -61,29 +67,41 @@ export const layout = snippet(
 color-picker/
 ├── pouchbase-plugin.json        # id, name, permissions, ...: what isn't code
 ├── package.json                 # version, description, license, author, ...
-├── plugin.ts                    # definePlugin({ settings }): what an admin fills in (optional)
+├── plugin.ts                    # definePlugin({ ... }): everything the plugin adds
 ├── icon.svg                     # the plugin's icon (optional)
+├── tsconfig.json
+├── vitest.config.ts
 ├── fields/
 │   └── color/
-│       ├── field.ts             # defineField({ label, description, column, validate, ... })
-│       ├── input.svelte         # edits the value in the record form (required)
-│       ├── preview.svelte       # shows the value, read-only, in the records grid (optional)
-│       └── icon.svg             # the type's icon, unless defineField names one (optional)
+│       ├── field.ts             # defineField({ label, description, column, input, ... })
+│       ├── input.svelte         # edits the value in the record form
+│       └── preview.svelte       # shows the value, read-only, in the records grid
 ├── pages/
-│   ├── palette.svelte           # /plugins/color-picker/palette
-│   ├── palette.svg              # its icon in the sidebar, unless its meta names one (optional)
-│   └── reports/
-│       └── index.svelte         # /plugins/color-picker/reports
+│   └── palette.svelte           # a dashboard page
 ├── auth/
 │   └── gitlab/
 │       ├── provider.ts          # defineAuthProvider({ ... })
-│       └── icon.svg             # the provider's logo (optional)
+│       └── icon.svg             # the provider's logo
 ├── routes/
-│   ├── index.ts                 # /api/plugins/color-picker
-│   ├── stats.ts                 # /api/plugins/color-picker/stats
+│   ├── stats.ts                 # export const GET, POST, ...
 │   └── items/
-│       └── [id].ts              # /api/plugins/color-picker/items/:id
-└── lib/                         # code shared by the rest`
+│       └── [id].ts              # just a file name: the path is its key in plugin.ts
+├── lib/                         # code shared by the rest
+└── test/`
+);
+
+export const pluginFile = demo('typescript', demoPlugin);
+
+export const tsconfig = snippet(
+	'json',
+	`
+{
+	"compilerOptions": {
+		"types": ["svelte", "@pouchbasejs/plugin-sdk/env"],
+		"strict": true
+	},
+	"include": ["**/*.ts", "**/*.svelte"]
+}`
 );
 
 export const manifest = snippet(
@@ -97,6 +115,63 @@ export const manifest = snippet(
 	"engines": { "pouchbase": ">=0.10.0" },
 	"permissions": { "network": ["api.example.com"] }
 }`
+);
+
+/** `collections/notes.ts` of the demo plugin. */
+export const notesCollection = demo('typescript', demoNotesCollection);
+
+/** `routes/notes.ts` of the demo plugin. */
+export const notesRoute = demo('typescript', demoNotes);
+
+export const collectionsInPlugin = snippet(
+	'typescript',
+	`
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+
+import notes from './collections/notes.js';
+import * as notesRoute from './routes/notes.js';
+
+export default definePlugin({
+	// demo_notes in Pouchbase: the plugin id as prefix.
+	collections: { notes },
+	routes: { '/notes': notesRoute }
+});`
+);
+
+export const collectionPermissions = snippet(
+	'json',
+	`
+{
+	"id": "demo",
+	"permissions": {
+		"network": ["www.githubstatus.com"],
+		"collections": {
+			"read": ["users"],
+			"write": ["posts"]
+		}
+	}
+}`
+);
+
+export const testPouch = snippet(
+	'typescript',
+	`
+import { fakeContext, fakePouch } from '@pouchbasejs/plugin-sdk/testing';
+import { expect, it } from 'vitest';
+
+import { GET } from '../routes/notes.js';
+
+it('reads the notes through ctx.pouch', async () => {
+	const pouch = fakePouch(({ method, path }) =>
+		method === 'GET' && path === '/api/db/demo_notes'
+			? { items: [], total: 0, limit: 20, offset: 0 }
+			: new Response(null, { status: 404 })
+	);
+	const { ctx } = fakeContext({ pouch: pouch.client, user: { id: 'u1', /* … */ } as never });
+
+	expect((await GET(new Request('https://pouchbase.test'), ctx)).status).toBe(200);
+	expect(pouch.requests[0]?.query.get('where')).toBe('author == "u1"');
+});`
 );
 
 export const packageDefaults = snippet(
@@ -114,22 +189,26 @@ export const packageDefaults = snippet(
 export const manifestCommand = snippet(
 	'bash',
 	`
-npx pouchbase-plugin manifest > manifest.json   # the full manifest, with every contribution`
+npx pouchbase-plugin manifest > manifest.json   # the full manifest, with everything plugin.ts adds`
 );
 
 export const field = snippet(
 	'typescript',
 	`
-// fields/color/field.ts: the field type color-picker:color
 import { defineField } from '@pouchbasejs/plugin-sdk/server';
+
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
 export default defineField({
-	label: 'Color', // defaults to the folder name
+	label: 'Color',
 	description: 'A color as a hex code, e.g. #ff6600.',
 	column: 'TEXT', // TEXT, INTEGER, REAL or BLOB; fixed for the lifetime of each field
-	icon: 'lucide:palette', // an Iconify name, or the path of an .svg file
+	input: Input, // edits the value in the record form
+	preview: Preview, // shows it in the records grid (optional)
+	icon: 'lucide:palette', // an Iconify name, or an imported .svg file (optional)
 	validate(value) {
 		return typeof value === 'string' && HEX_COLOR.test(value)
 			? { valid: true }
@@ -141,8 +220,20 @@ export default defineField({
 });`
 );
 
+export const fieldPlugin = snippet(
+	'typescript',
+	`
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+
+import color from './fields/color/field.js';
+
+const plugin = definePlugin({
+	fields: { color } // the key is the type: color-picker:color
+});`
+);
+
 export const fieldInput = snippet(
-	'html',
+	'svelte',
 	`
 <script lang="ts">
 	import type { FieldInputProps } from '@pouchbasejs/plugin-sdk/ui';
@@ -162,7 +253,7 @@ export const fieldInput = snippet(
 );
 
 export const fieldPreview = snippet(
-	'html',
+	'svelte',
 	`
 <script lang="ts">
 	import type { FieldPreviewProps } from '@pouchbasejs/plugin-sdk/ui';
@@ -179,20 +270,8 @@ export const fieldPreview = snippet(
 );
 
 export const page = snippet(
-	'html',
+	'svelte',
 	`
-<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	// A literal: the CLI reads it without running the page.
-	export const page = {
-		title: 'Palette',
-		navigation: true,
-		order: 1,
-		icon: 'lucide:swatch-book'
-	} satisfies PageMeta;
-</script>
-
 <script lang="ts">
 	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
 
@@ -217,20 +296,62 @@ export const page = snippet(
 </Card.Root>`
 );
 
+export const pagePlugin = snippet(
+	'typescript',
+	`
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+
+import Palette from './pages/palette.svelte';
+import Monthly from './pages/reports/monthly.svelte';
+import settings from './pages/settings.js';
+
+const plugin = definePlugin({
+	pages: {
+		// /plugins/color-picker/palette, first in the sidebar
+		palette: { title: 'Palette', icon: 'lucide:swatch-book', component: Palette },
+		// /plugins/color-picker/reports/monthly, titled "Monthly"
+		'reports/monthly': { icon: 'lucide:calendar', component: Monthly },
+		// a page defined in a file of its own
+		settings
+	}
+});`
+);
+
+export const definePage = snippet(
+	'typescript',
+	`
+import { definePage } from '@pouchbasejs/plugin-sdk/server';
+
+import Settings from './settings.svelte';
+
+export default definePage({
+	component: Settings,
+	title: 'Color settings',
+	navigation: false // reached through a link on another page, not the sidebar
+});`
+);
+
 export const icons = snippet(
 	'typescript',
 	`
-// fields/color/field.ts: an icon of an Iconify set, turned into an SVG file of the bundle
-export default defineField({ label: 'Color', icon: 'lucide:palette' /* , ... */ });
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
 
-// fields/gradient/field.ts: an .svg file of the plugin, relative to field.ts
-export default defineField({ label: 'Gradient', icon: '../../lib/gradient.svg' /* , ... */ });
+import gradientIcon from './lib/gradient.svg';
+import Gradients from './pages/gradients.svelte';
+import Palette from './pages/palette.svelte';
 
-// fields/swatch/field.ts without icon: fields/swatch/icon.svg, when there is one`
+export default definePlugin({
+	pages: {
+		// An icon of an Iconify set, turned into an SVG file of the bundle
+		palette: { icon: 'lucide:swatch-book', component: Palette },
+		// An .svg file of the plugin, imported like a module
+		gradients: { icon: gradientIcon, component: Gradients }
+	}
+});`
 );
 
 export const iconSrc = snippet(
-	'html',
+	'svelte',
 	`
 <script lang="ts">
 	import * as Icon from '@pouchbasejs/ui/icon';
@@ -258,13 +379,31 @@ curl https://<your-pouchbase>/api/plugins/demo/info
 
 export const routeParams = demo('typescript', demoItem);
 
+export const routesPlugin = snippet(
+	'typescript',
+	`
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+
+import * as info from './routes/info.js';
+import * as item from './routes/item.js';
+
+const plugin = definePlugin({
+	routes: {
+		'/info': info, // a module that exports GET, POST, ...
+		'/items/:id': item, // :id is in ctx.params
+		'/health': { GET: () => Response.json({ ok: true }) } // or the handlers themselves
+	}
+});`
+);
+
 export const routeUser = demo('typescript', demoMe);
 
 export const authProvider = snippet(
 	'typescript',
 	`
-// auth/gitlab/provider.ts: the sign-in provider gitlab
 import { createOidcProvider, defineAuthProvider } from '@pouchbasejs/plugin-sdk/server';
+
+import logo from './icon.svg';
 
 export default defineAuthProvider({
 	...createOidcProvider({
@@ -272,44 +411,25 @@ export default defineAuthProvider({
 		tokenUrl: 'https://gitlab.com/oauth/token',
 		userinfoUrl: 'https://gitlab.com/oauth/userinfo'
 	}),
-	label: 'GitLab', // on the sign-in button; defaults to the folder name
+	label: 'GitLab', // on the sign-in button; defaults to the provider id
+	icon: logo, // the logo on the button, in its own colors; or an Iconify name
 	consoleUrl: 'https://gitlab.com/-/user_settings/applications' // where an admin registers the app
 });`
 );
 
-export const authProviderProfile = snippet(
+export const authProviderPlugin = snippet(
 	'typescript',
 	`
-// auth/github/provider.ts: a provider with its own profile API
-import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
+import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
 
-type GitHubUser = { id: number; login: string; name: string | null; avatar_url: string | null };
-type GitHubEmail = { email: string; primary: boolean; verified: boolean };
+import gitlab from './auth/gitlab/provider.js';
 
-export default defineAuthProvider({
-	label: 'GitHub',
-	consoleUrl: 'https://github.com/settings/developers',
-	authorizeUrl: 'https://github.com/login/oauth/authorize',
-	tokenUrl: 'https://github.com/login/oauth/access_token',
-	scopes: ['read:user', 'user:email'],
-	pkce: false,
-	async profile(accessToken, _credentials, ctx) {
-		const [user, emails] = await Promise.all([
-			fetchJson<GitHubUser>(ctx, 'https://api.github.com/user', accessToken),
-			fetchJson<GitHubEmail[]>(ctx, 'https://api.github.com/user/emails', accessToken)
-		]);
-		const primary = emails.find((email) => email.primary) ?? emails[0];
-
-		return {
-			id: String(user.id),
-			email: primary?.email ?? null,
-			emailVerified: primary?.verified === true,
-			name: user.name ?? user.login,
-			avatarUrl: user.avatar_url
-		};
-	}
+export default definePlugin({
+	authProviders: { gitlab } // the key is the provider id
 });`
 );
+
+export const authProviderProfile = demo('typescript', githubProvider);
 
 export const setting = snippet(
 	'typescript',
@@ -376,8 +496,9 @@ import { describe, expect, it } from 'vitest';
 
 import plugin from '../plugin.js';
 import manifest from '../pouchbase-plugin.json' with { type: 'json' };
-import { GET } from '../routes/stats.js';
 
+// The handler as plugin.ts registers it, typed
+const { GET } = plugin.routes['/stats'];
 const request = new Request('https://pouchbase.test/api/plugins/color-picker/stats');
 
 describe('GET /stats', () => {
@@ -412,10 +533,10 @@ import type { FieldTypeHandler } from '@pouchbasejs/plugin-sdk/server';
 import { fakeContext } from '@pouchbasejs/plugin-sdk/testing';
 import { expect, it } from 'vitest';
 
-import field from '../fields/color/field.js';
+import plugin from '../plugin.js';
 
 // Called the way Pouchbase calls it: with the field's options and the plugin context.
-const color: FieldTypeHandler = field;
+const color: FieldTypeHandler = plugin.fields.color;
 const { ctx } = fakeContext();
 
 it('stores colors in lowercase', async () => {
@@ -426,6 +547,16 @@ it('stores colors in lowercase', async () => {
 it('refuses what is not a color', async () => {
 	expect(await color.validate?.('orange', {}, ctx)).toMatchObject({ valid: false });
 });`
+);
+
+export const vitestConfig = snippet(
+	'typescript',
+	`
+import { pouchbasePlugin } from '@pouchbasejs/plugin-sdk/vite';
+import { defineConfig } from 'vitest/config';
+
+// Imports of .svelte and .svg files are references to the files, as when the plugin is built.
+export default defineConfig({ plugins: [pouchbasePlugin()] });`
 );
 
 export const testSettings = snippet(

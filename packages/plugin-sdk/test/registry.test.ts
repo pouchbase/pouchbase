@@ -68,7 +68,7 @@ describe('registry client', () => {
 			size: bytes.byteLength,
 			bundleUrl: 'https://registry.test/v1/plugins/hello/versions/1.0.0/bundle',
 			pouchbase: null,
-			permissions: { network: [] },
+			permissions: { network: [], collections: { read: [], write: [] } },
 			publishedAt: new Date().toISOString()
 		};
 		const client = createRegistryClient({
@@ -175,6 +175,7 @@ describe('contribution summary', () => {
 				fields: [{ type: 'rating', label: 'Rating' }],
 				pages: [{ path: 'hello', title: 'Hello' }],
 				authProviders: [],
+				collections: [],
 				routes: ['GET /stats', 'POST /sync'],
 				settings: [{ key: 'api_key', label: 'API key' }]
 			});
@@ -185,6 +186,13 @@ describe('contribution summary', () => {
 		expect(pluginVersionSchema.parse(version).contributes).toBeUndefined();
 		expect(
 			pluginVersionSchema.parse({ ...version, contributes: { routes: ['GET /x'] } }).contributes
-		).toEqual({ fields: [], pages: [], authProviders: [], routes: ['GET /x'], settings: [] });
+		).toEqual({
+			fields: [],
+			pages: [],
+			authProviders: [],
+			collections: [],
+			routes: ['GET /x'],
+			settings: []
+		});
 	});
 });

@@ -13,7 +13,7 @@ import { internalSecret } from './internal-secret.ts';
  * hibernation; the attachment of a socket would be too small for them.
  *
  * `scripts/worker-entry.mjs` exports the class from the Worker and sends the upgrades of
- * `/api/live` here, before SvelteKit (which can't answer them). The object runs the app's
+ * `/api/realtime` here, before SvelteKit (which can't answer them). The object runs the app's
  * handler in its own isolate for the internal routes, so it needs no network for them.
  *
  * Only relative imports: Wrangler bundles this file, not Vite.
@@ -198,7 +198,7 @@ export function realtimeHub(handler: Handler) {
 			ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING_FRAME, PONG_FRAME));
 		}
 
-		/** An upgrade of `/api/live?collection=<name>`, from the Worker entry. */
+		/** An upgrade of `/api/realtime?collection=<name>`, from the Worker entry. */
 		async fetch(request: Request): Promise<Response> {
 			const url = new URL(request.url);
 

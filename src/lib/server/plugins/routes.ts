@@ -1,7 +1,7 @@
 import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
 
 /**
- * Matching a request to the `routes` of a plugin's `definePlugin(...)`: keys are
+ * Matching a request to the `routes` of a plugin's server code (`ServerDefinition`): keys are
  * `"<METHOD> /<path>"`, e.g. `"GET /items/:id"`, where a `:name` segment matches any one segment
  * and ends up in `ctx.params`. Mirrored in the Worker's entry code (`worker.ts`); keep both in step.
  *

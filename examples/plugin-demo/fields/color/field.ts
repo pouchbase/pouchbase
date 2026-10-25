@@ -1,5 +1,7 @@
 import { defineField } from '@pouchbasejs/plugin-sdk/server';
 
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 import { FIELD_TYPES } from '../../lib/catalog.js';
 import { checkColor } from '../../lib/color.js';
 
@@ -12,6 +14,8 @@ export default defineField({
 	label: FIELD_TYPES.color.label,
 	description: FIELD_TYPES.color.description,
 	column: 'TEXT',
+	input: Input,
+	preview: Preview,
 	icon: 'lucide:pipette',
 	validate(value) {
 		const check = checkColor(value);

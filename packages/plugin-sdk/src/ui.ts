@@ -143,42 +143,7 @@ export type PluginApi = {
 	fetch(path: `/${string}`, init?: RequestInit): Promise<Response>;
 };
 
-/**
- * What a page component says about itself, in its `<script module>`:
- * `export const page = { title: 'Stats' } satisfies PageMeta` (with `import type { PageMeta } from
- * '@pouchbasejs/plugin-sdk/ui'`), or `export const page = definePage({ title: 'Stats' })`. The CLI
- * reads it without running the component, so it must be a literal: no other imports, variables
- * or function calls.
- */
-export type PageMeta = {
-	/** Title in the dashboard; missing uses the file name. */
-	title?: string;
-	/** Whether the page gets a link in the sidebar; default `true`. */
-	navigation?: boolean;
-	/**
-	 * Where the page comes among the plugin's pages, in the sidebar too: lower first. Pages without
-	 * one follow, by path.
-	 */
-	order?: number;
-	/**
-	 * The page's icon in the sidebar, drawn in one color like the dashboard's own links: an Iconify
-	 * name such as `lucide:chart-bar`, which the CLI turns into an SVG in the bundle, or the path of
-	 * an `.svg` file relative to the page. Missing uses the `.svg` file with the page's name next to
-	 * it (`stats.svg` for `stats.svelte`), else a puzzle piece.
-	 */
-	icon?: string;
-};
-
-/**
- * Types a page's metadata and returns it unchanged: in a page's `<script module>`,
- * `import { definePage } from '@pouchbasejs/plugin-sdk/ui'` and
- * `export const page = definePage({ title: 'Stats' })`. The argument must be a literal, which the
- * CLI reads without running the component.
- */
-export function definePage<T extends PageMeta>(meta: T): T {
-	return meta;
-}
-
+/** Props of a page, in `pages` of `definePlugin`. */
 export type PageProps = {
 	/** Path below the page, e.g. `['2026', '10']` for `/plugins/<plugin>/reports/2026/10`. */
 	params: string[];

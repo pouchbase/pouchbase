@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import adapter from '@sveltejs/adapter-cloudflare';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-import { iconify } from './vite/iconify.ts';
+import { iconify } from '@pouchbasejs/ui/vite';
 
 export default defineConfig({
 	// The app runs on 5173 during `pnpm dev` at the repository root.

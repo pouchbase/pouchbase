@@ -4,17 +4,17 @@ import { z } from 'zod';
 const email = z.string().trim().toLowerCase().pipe(z.email('Invalid email address'));
 
 /** Signing in with an email and a password. */
-export const signInSchema = z.object({
+export const loginSchema = z.object({
 	email: z.string().trim().min(1, 'Enter your email address'),
 	_password: z.string().min(1, 'Enter your password'),
 	redirectTo: z.string().optional()
 });
 
 /**
- * A new account, with the rules of the instance's sign-up (`passwordSignUpSchema` in the app), so
+ * A new account, with the rules of the instance's sign-up (`passwordRegisterSchema` in the app), so
  * mistakes show before the request; the instance checks that the email is unique.
  */
-export const signUpSchema = z.object({
+export const registerSchema = z.object({
 	name: z.string().trim().min(1, 'Enter your name').max(100, 'Name must be at most 100 characters'),
 	email,
 	_password: z

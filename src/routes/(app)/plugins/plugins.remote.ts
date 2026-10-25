@@ -8,6 +8,8 @@ import { pluginIdSchema, pluginSettingsSchema, searchPluginsSchema } from '#lib/
 import { listPluginFieldTypes, listPluginPages } from '#lib/remote/plugins.remote.js';
 import { fail } from '#lib/server/errors.js';
 
+import { listCollections } from '../collections.remote';
+
 function requireUser() {
 	const { locals } = getRequestEvent();
 
@@ -145,6 +147,14 @@ export const uninstallPlugin = form(pluginIdSchema, async ({ id }) => {
 			invalid('Built-in plugins ship with Pouchbase and cannot be removed');
 		}
 
+		if (result.error.code === 19023) {
+			const { collection, field, target } = result.error.data;
+
+			invalid(
+				`${collection}.${field} links to ${target}, a collection of the plugin. Delete or change that field first.`
+			);
+		}
+
 		fail(result.error);
 	}
 
@@ -155,8 +165,22 @@ export const uninstallPlugin = form(pluginIdSchema, async ({ id }) => {
 	void getInstalledPlugins().refresh();
 	void listPluginPages().refresh();
 	void listPluginFieldTypes().refresh();
+	void listCollections().refresh();
 
 	return { removed: true };
+});
+
+/** What the uninstall dialog warns about: the collections it deletes with the plugin. */
+export const getPluginCollections = query(z.string(), async (id) => {
+	const { services } = requireUser();
+
+	const result = await services.plugins().ownCollections(id);
+
+	if (result.isErr()) {
+		fail(result.error);
+	}
+
+	return result.value;
 });
 
 /** What the uninstall dialog warns about: the fields that have one of the plugin's types. */

@@ -19,9 +19,9 @@ const HELP = `Usage: pouchbase-plugin <command> [options]
 
 Commands:
   init <dir>             Create a plugin in a new directory; its name becomes the plugin id
-  add <kind> <id>        Add a field, page, auth-provider or route to the plugin (its files),
-                         or a setting to plugin.ts (add setting <key>)
-  validate               Check the plugin: its folders, pouchbase-plugin.json and the server code
+  add <kind> <id>        Add a field, page, auth-provider or route: its files and its entry in
+                         plugin.ts; or a setting (add setting <key>)
+  validate               Check the plugin: plugin.ts, pouchbase-plugin.json and the components
   manifest               Print the manifest the plugin builds into, as JSON
   build                  Build the bundle into dist/
   dev                    Rebuild on every change and serve the plugin from a local registry
@@ -199,7 +199,7 @@ async function main(log: Logger, positionals: string[], values: Values) {
 
 			if (layout === 'legacy') {
 				log.warn(
-					'This plugin uses the legacy layout ("contributes" in pouchbase-plugin.json), which is deprecated; see the README of @pouchbasejs/plugin-sdk for the convention layout.'
+					'This plugin uses the legacy layout ("contributes" in pouchbase-plugin.json), which is deprecated; move the contributions into definePlugin({ ... }) in plugin.ts (see the README of @pouchbasejs/plugin-sdk).'
 				);
 			}
 

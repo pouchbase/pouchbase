@@ -81,10 +81,10 @@ describe('Session', () => {
 		expect(session.expiresAt).toBeNull();
 	});
 
-	it('notifies watchers until they stop', () => {
+	it('notifies subscribers until they unsubscribe', () => {
 		const session = new Session();
 		const listener = vi.fn();
-		const stop = session.watch(listener, { immediate: true });
+		const unsubscribe = session.subscribe(listener, { immediate: true });
 
 		expect(listener).toHaveBeenLastCalledWith(null);
 
@@ -94,7 +94,7 @@ describe('Session', () => {
 		session.end();
 		expect(listener).toHaveBeenLastCalledWith(null);
 
-		stop();
+		unsubscribe();
 		session.begin({ token: 'def', userId: 'u2' });
 		expect(listener).toHaveBeenCalledTimes(3);
 	});

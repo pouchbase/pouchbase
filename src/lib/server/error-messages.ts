@@ -247,6 +247,10 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	19017: 'The plugin could not process the field values',
 	19018: [400, 'The plugin settings are invalid'],
 	19019: 'Could not save the plugin settings',
+	19020: [409, "A collection with the name of one of the plugin's collections already exists"],
+	19021: [400, "One of the plugin's collections is invalid"],
+	19022: "Could not create, update or delete the plugin's collections",
+	19023: [409, "Another collection links to one of the plugin's collections"],
 
 	// Environments
 	20000: 'Could not read the schema of this environment',
@@ -283,6 +287,7 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	23000: 'Could not load the API keys',
 	23001: [404, 'API key not found'],
 	23002: [409, 'The key of a function is renewed when the function is deployed'],
+	23003: [409, 'The key of a plugin is renewed when the plugin is installed or updated'],
 
 	// Mail templates
 	24000: 'Could not load the mail templates',

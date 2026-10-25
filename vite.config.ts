@@ -9,6 +9,7 @@ import node from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, loadEnv } from 'vite';
 import { embeddedPlugins } from './vite/embedded-plugins.ts';
+import { jsSdkModule } from './vite/js-sdk-module.ts';
 import { platform } from './vite/platform.ts';
 import { realtime } from './vite/realtime.ts';
 
@@ -33,6 +34,7 @@ export default defineConfig(({ mode }) => {
 			platform(target),
 			realtime(),
 			embeddedPlugins(),
+			jsSdkModule(),
 			iconify({ sets: [lucide, logos] }),
 			tailwindcss(),
 			sveltekit({

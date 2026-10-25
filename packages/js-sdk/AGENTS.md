@@ -33,21 +33,21 @@ Sign-ins return `{ token, user_id }`; the token is a JWT (HS256, 7 days) sent as
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 | `GET /api/health`                                                                                      | `pouch.health()`                                                                 |
 | `GET /api/auth/providers` (`[{ provider, label, iconUrl }]`)                                           | `pouch.auth.providers()`                                                         |
-| `POST /api/auth/password/sign-up`                                                                      | `pouch.auth.signUp()`                                                            |
-| `POST /api/auth/password/sign-in`                                                                      | `pouch.auth.signIn()`                                                            |
+| `POST /api/auth/password/register`                                                                      | `pouch.auth.register()`                                                            |
+| `POST /api/auth/password/login`                                                                      | `pouch.auth.login()`                                                            |
 | `POST /api/auth/password/forgot` (`{ email }`)                                                         | `pouch.auth.sendPasswordReset()`                                                 |
 | `POST /api/auth/password/reset` (`{ token, password }`)                                                | `pouch.auth.resetPassword()`                                                     |
 | `POST /api/auth/email/send-verification` (`{ email }`)                                                 | `pouch.auth.sendVerification()`                                                  |
 | `POST /api/auth/email/verify` (`{ token }`)                                                            | `pouch.auth.verifyEmail()`                                                       |
-| `GET /api/auth/oauth2/<provider>?state=…&challenge=…`                                                  | `pouch.auth.signInWithOAuth()` (popup)                                           |
-| `POST /api/auth/oauth2/result`                                                                         | `pouch.auth.signInWithOAuth()` (polls)                                           |
+| `GET /api/auth/oauth2/<provider>?state=…&challenge=…`                                                  | `pouch.auth.oauth()` (popup)                                           |
+| `POST /api/auth/oauth2/result`                                                                         | `pouch.auth.oauth()` (polls)                                           |
 | `GET /api/auth/me`                                                                                     | `pouch.auth.me()`                                                                |
 | `GET /api/db/<collection>?where&order&select&include&limit&offset` (`{ items, total, limit, offset }`) | `pouch.db.<name>.findMany()`, `findFirst()`, `count()`, `iterate()`, `findAll()` |
 | `GET /api/db/<collection>/<id>?select&include`                                                         | `pouch.db.<name>.find()`, `findOrThrow()`                                        |
 | `POST /api/db/<collection>?select&include`                                                             | `pouch.db.<name>.insert()`                                                       |
 | `PATCH /api/db/<collection>/<id>?select&include`                                                       | `pouch.db.<name>.patch()`                                                        |
 | `DELETE /api/db/<collection>/<id>` (`204`)                                                             | `pouch.db.<name>.remove()`                                                       |
-| `GET /api/live?collection=<name>` (WebSocket; protocol mirrored in `src/live/protocol.ts`)             | `pouch.live.watch()`, `pouch.db.<name>.watch()`                                  |
+| `GET /api/realtime?collection=<name>` (WebSocket; protocol mirrored in `src/realtime/protocol.ts`)     | `pouch.realtime.subscribe()`, `pouch.db.<name>.subscribe()`                      |
 | `GET /api/files/<id>?size&download` (`size`: `WxH`, `WxH:top`, `WxH:bottom`, `WxH:fit`, `Wx0`, `0xH`)  | `pouch.files.url()`                                                              |
 | `<method> /api/functions/<name>/<path>`                                                                | `pouch.functions.invoke()`                                                       |
 | `POST /api/mail/send` (API key as `Bearer pbk_…`)                                                      | `pouch.mail.send()` (needs `apiKey`)                                             |
@@ -70,7 +70,7 @@ Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains`
 - Put a blank line before and after every `if` statement (unless it is the first or last statement in its block).
 - Enforced by ESLint (`curly`, `padding-line-between-statements`); run `pnpm exec eslint . --fix` to apply.
 - Tabs, single quotes, no trailing commas, 100 columns (Prettier, same as the app).
-- The SDK must run everywhere `fetch` exists: no Node built-ins, no DOM access outside browser-only methods (`signInWithOAuth`, `browserStorage()`), and no runtime dependencies.
+- The SDK must run everywhere `fetch` exists: no Node built-ins, no DOM access outside browser-only methods (`oauth`, `browserStorage()`), and no runtime dependencies.
 - Public methods return promises and throw a `PouchbaseError` for non-2xx responses; "not found" for lookups is `null`, not an error. Record calls return a `Pending` (`pending()` in `src/error.ts`), so `.safe()` works on them.
 - The records API is wrapped in our own terms (`pouch.db`, `where` objects, `find`/`insert`/`patch`/`remove`) with types from the generated `Schema`; don't copy another SDK's method names or shapes.
 - Every exported function, class and type has a JSDoc comment; the declaration files are the reference docs.

@@ -29,7 +29,7 @@
 		},
 		{
 			id: 'sign-in',
-			label: 'POST /api/auth/password/sign-in',
+			label: 'POST /api/auth/password/login',
 			color: 'bg-emerald-500',
 			path: 'M 760 30 C 520 30, 420 150, 300 215',
 			duration: 7.5,

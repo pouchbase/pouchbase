@@ -201,24 +201,22 @@ describe('plugin.ts', () => {
 		});
 	});
 
-	it('only holds the settings, as a default export', async () => {
+	it('is a default export, with route paths rather than the keys of the server code', async () => {
 		const root = await project('bad-plugin-file', 'empty');
 
 		await write(root, {
 			'plugin.ts': "export default { settings: [], routes: { 'GET /x': () => new Response() } };\n"
 		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message:
-				"plugin.ts: definePlugin({ routes }) isn't read from plugin.ts; it only holds the settings",
-			hint: 'Field types, auth providers and routes come from fields/, auth/ and routes/.'
+			message: 'plugin.ts: routes["GET /x"]: starts with a slash, e.g. /GET /x'
 		});
 		await write(root, { 'plugin.ts': 'export const settings = [];\n' });
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message: 'plugin.ts: must default-export definePlugin({ settings: [...] })'
+			message: 'plugin.ts: must default-export definePlugin({ ... })'
 		});
 	});
 
-	it('refuses settings in pouchbase-plugin.json in the convention layout', async () => {
+	it('refuses settings in pouchbase-plugin.json', async () => {
 		const root = await project('manifest-settings', 'empty');
 		const manifest = JSON.parse(await readFile(join(root, 'pouchbase-plugin.json'), 'utf8'));
 
@@ -229,7 +227,8 @@ describe('plugin.ts', () => {
 			})
 		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message: 'pouchbase-plugin.json: "settings" belongs in plugin.ts in the convention layout',
+			message:
+				'pouchbase-plugin.json: "settings" belong in definePlugin({ settings }) in plugin.ts',
 			hint: expect.stringContaining('Move the settings to definePlugin({ settings }) in plugin.ts')
 		});
 	});
@@ -254,24 +253,19 @@ describe('plugin.ts', () => {
 	});
 
 	it('is part of the generated server entry', () => {
-		const source = generateServerEntry({
-			fields: [],
-			authProviders: [],
-			routes: [],
-			plugin: 'plugin.ts'
-		});
+		const source = generateServerEntry({ plugin: 'plugin.ts' });
 
 		expect(source).toContain('import plugin from "./plugin.ts";');
 		expect(source).toContain('settings: plugin?.settings ?? [],');
-		expect(generateServerEntry({ fields: [], authProviders: [], routes: [] })).not.toContain(
-			'settings'
-		);
 	});
 });
 
 describe('add setting', () => {
 	it('creates plugin.ts with the Register block, then appends settings to it', async () => {
 		const root = await project('my-plugin', 'empty');
+
+		await rm(join(root, 'plugin.ts'));
+
 		const first = await addContribution(root, 'setting', 'api_key', { type: 'secret' });
 
 		expect(first).toMatchObject({ created: ['plugin.ts'], manifestChanged: false });

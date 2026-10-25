@@ -9,13 +9,15 @@ import {
 	routeErrors,
 	testField,
 	testRoute,
-	testSettings
+	testSettings,
+	vitestConfig
 } from '../snippets';
 
 export const load: PageServerLoad = () => ({
 	code: highlightAll({
 		devRegistry,
 		devInRepo,
+		vitestConfig,
 		testRoute,
 		testField,
 		testSettings,

@@ -3,8 +3,8 @@ import { pending, PouchbaseError } from '../error.js';
 import type { Pending } from '../error.js';
 import { compileInclude, compileOrderBy, compileSelect, compileWhere } from '../query.js';
 import type { FieldName, Condition, OrderBy, Selected, Where } from '../query.js';
-import type { LiveEvent, LiveSubscription } from '../live/connection.js';
-import type { WatchOptions } from './live.js';
+import type { RealtimeEvent, RealtimeSubscription } from '../realtime/connection.js';
+import type { SubscribeOptions } from './realtime.js';
 
 /** A record of a collection without generated types. */
 export type AnyRecord = Record<string, unknown>;
@@ -117,9 +117,9 @@ export type IterateOptions<R, S, I = undefined> = Omit<
 	batchSize?: number;
 };
 
-/** Options for `pouch.db.<name>.watch()`. */
-export type CollectionWatchOptions<R, S, I = undefined> = Omit<
-	WatchOptions<R>,
+/** Options for `pouch.db.<name>.subscribe()`. */
+export type CollectionSubscribeOptions<R, S, I = undefined> = Omit<
+	SubscribeOptions<R>,
 	'select' | 'include'
 > & {
 	/** Only changes to this record. */
@@ -379,33 +379,33 @@ export class CollectionClient<
 
 	/**
 	 * Calls `callback` with every change to the records of this collection (or to record `id`) that
-	 * the view rule lets you see, as they are saved. See `pouch.live`.
+	 * the view rule lets you see, as they are saved. See `pouch.realtime`.
 	 *
 	 * ```ts
-	 * const watching = pouch.db.posts.watch((event) => console.log(event.action, event.record), {
+	 * const subscription = pouch.db.posts.subscribe((event) => console.log(event.action, event.record), {
 	 * 	where: { status: 'published' },
 	 * 	select: ['id', 'title']
 	 * });
-	 * watching.stop();
+	 * subscription.unsubscribe();
 	 * ```
 	 */
-	watch<
+	subscribe<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
 	>(
-		callback: (event: LiveEvent<Output<R, S, Schema, L, I>>) => void,
-		options: CollectionWatchOptions<R, S, I> = {}
-	): LiveSubscription {
+		callback: (event: RealtimeEvent<Output<R, S, Schema, L, I>>) => void,
+		options: CollectionSubscribeOptions<R, S, I> = {}
+	): RealtimeSubscription {
 		const { id, select, include, ...rest } = options;
 
-		return this.#pouch.live.watch<Output<R, S, Schema, L, I>>(
+		return this.#pouch.realtime.subscribe<Output<R, S, Schema, L, I>>(
 			id === undefined ? this.name : `${this.name}/${id}`,
 			callback,
 			{
 				...rest,
 				select: select as readonly string[] | undefined,
 				include: include as AnyInclude | undefined
-			} as WatchOptions<Output<R, S, Schema, L, I>>
+			} as SubscribeOptions<Output<R, S, Schema, L, I>>
 		);
 	}
 

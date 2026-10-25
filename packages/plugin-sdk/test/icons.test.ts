@@ -45,11 +45,19 @@ async function write(root: string, files: Record<string, string>) {
 	}
 }
 
-/** A field type `color` whose `defineField` has `icon` (left out when `undefined`). */
+/** `plugin.ts` with `imports` and `definition`, the argument of `definePlugin`. */
+function pluginFile(imports: string, definition: string) {
+	return `import { definePlugin } from '@pouchbasejs/plugin-sdk/server';\n${imports}\n\nexport default definePlugin(${definition});\n`;
+}
+
+/** A field type `color` with `icon` (left out when `undefined`). */
 function colorField(icon?: string) {
 	return {
-		'fields/color/field.ts': `export default { label: 'Color', description: 'A color.', column: 'TEXT'${icon === undefined ? '' : `, icon: ${JSON.stringify(icon)}`} };\n`,
-		'fields/color/input.svelte': '<input />\n'
+		'fields/color/input.svelte': '<input />\n',
+		'plugin.ts': pluginFile(
+			"import Input from './fields/color/input.svelte';",
+			`{ fields: { color: { label: 'Color', description: 'A color.', column: 'TEXT', input: Input${icon === undefined ? '' : `, icon: ${JSON.stringify(icon)}`} } } }`
+		)
 	};
 }
 
@@ -137,7 +145,7 @@ describe('icons of field types and pages', () => {
 		expect(bundle.manifest.contributes.fields[0]?.icon).toBe('ui/icons/lucide/palette.svg');
 		expect(bundle.files['ui/icons/lucide/palette.svg']).toMatch(/^<svg [^>]*viewBox="0 0 24 24">/);
 		expect(stdout).toContain(
-			'  Resolved icon lucide:palette for field color (@iconify-json/lucide of @pouchbasejs/plugin-sdk)'
+			'  Resolved icon lucide:palette for fields.color.icon (@iconify-json/lucide of @pouchbasejs/plugin-sdk)'
 		);
 		expect(fetch).not.toHaveBeenCalled();
 	});
@@ -176,7 +184,7 @@ describe('icons of field types and pages', () => {
 		expect(fetch).toHaveBeenCalledTimes(1);
 		expect(fetch.mock.calls[0]?.[0]).toBe('https://api.iconify.design/mdi/palette.svg');
 		expect(stdout).toContain(
-			'› Fetching icon mdi:palette for field color from https://api.iconify.design/mdi/palette.svg'
+			'› Fetching icon mdi:palette for fields.color.icon from https://api.iconify.design/mdi/palette.svg'
 		);
 		expect(bundle.files['ui/icons/mdi/palette.svg']).toBe(SVG);
 		expect(await readFile(join(root, ICON_CACHE_DIR, 'mdi', 'palette.svg'), 'utf8')).toBe(SVG);
@@ -194,14 +202,13 @@ describe('icons of field types and pages', () => {
 		await write(root, colorField('mdi:no-such-icon'));
 		await expect(discoverProject(root)).rejects.toMatchObject({
 			message:
-				"fields/color/field.ts: defineField icon: icon mdi:no-such-icon doesn't exist (https://api.iconify.design answered 404)",
-			hint: 'Look the name up on https://icon-sets.iconify.design. Install the icon set (pnpm add -D @iconify-json/mdi) or add an .svg file and use its path.'
+				"plugin.ts: fields.color.icon: icon mdi:no-such-icon doesn't exist (https://api.iconify.design answered 404)",
+			hint: 'Look the name up on https://icon-sets.iconify.design. Install the icon set (pnpm add -D @iconify-json/mdi) or import an .svg file of the plugin instead.'
 		});
 
 		await write(root, colorField('Lucide:Palette'));
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message:
-				'fields/color/field.ts: defineField icon: icon "Lucide:Palette" is not an Iconify name'
+			message: 'plugin.ts: fields.color.icon: icon "Lucide:Palette" is not an Iconify name'
 		});
 
 		vi.stubGlobal('fetch', async () => {
@@ -210,59 +217,71 @@ describe('icons of field types and pages', () => {
 		await write(root, colorField('mdi:palette'));
 		await expect(discoverProject(root)).rejects.toMatchObject({
 			message:
-				"fields/color/field.ts: defineField icon: can't fetch icon mdi:palette from https://api.iconify.design: getaddrinfo ENOTFOUND",
-			hint: 'Install the icon set (pnpm add -D @iconify-json/mdi) or add an .svg file and use its path.'
+				"plugin.ts: fields.color.icon: can't fetch icon mdi:palette from https://api.iconify.design: getaddrinfo ENOTFOUND",
+			hint: 'Install the icon set (pnpm add -D @iconify-json/mdi) or import an .svg file of the plugin instead.'
 		});
 	});
 
-	it('picks up icon.svg of a field type and the .svg of a page, or a path', async () => {
+	it('takes imported .svg files as icons', async () => {
 		const root = await project();
 
 		await write(root, {
-			...colorField(),
 			'fields/color/icon.svg': SVG,
+			'fields/color/input.svelte': '<input />\n',
+			'lib/report.svg': SVG,
 			'pages/stats.svelte': '<h1>Stats</h1>\n',
-			'pages/stats.svg': SVG,
-			'pages/reports/index.svelte': `<script module lang="ts">
-	export const page = { title: 'Reports', icon: '../../lib/report.svg' };
-</script>
-`,
-			'lib/report.svg': SVG
+			'plugin.ts': pluginFile(
+				`import colorIcon from './fields/color/icon.svg';
+import Input from './fields/color/input.svelte';
+import reportIcon from './lib/report.svg';
+import Stats from './pages/stats.svelte';`,
+				`{
+	fields: { color: { label: 'Color', description: 'A color.', column: 'TEXT', input: Input, icon: colorIcon } },
+	pages: { stats: { component: Stats, icon: reportIcon } }
+}`
+			)
 		});
 
 		const { bundle } = await buildBundle(root);
 
 		expect(bundle.manifest.contributes.fields[0]?.icon).toBe('ui/fields/color/icon.svg');
 		expect(bundle.manifest.contributes.pages).toMatchObject([
-			{ path: 'reports', icon: 'ui/lib/report.svg' },
-			{ path: 'stats', icon: 'ui/pages/stats.svg' }
+			{ path: 'stats', icon: 'ui/lib/report.svg' }
 		]);
 		expect(bundle.files['ui/fields/color/icon.svg']).toBe(SVG);
-		expect(bundle.files['ui/pages/stats.svg']).toBe(SVG);
 		expect(bundle.files['ui/lib/report.svg']).toBe(SVG);
 	});
 
-	it('refuses unsafe and missing icon files', async () => {
+	it('refuses unsafe icon files and paths given as text', async () => {
 		const root = await project();
 
 		await write(root, {
-			...colorField(),
 			'fields/color/icon.svg': '<svg onload="alert(1)"></svg>',
-			'pages/stats.svelte': `<script module lang="ts">
-	export const page = { icon: './missing.svg' };
-</script>
-`
+			'fields/color/input.svelte': '<input />\n',
+			'pages/stats.svelte': '<h1>Stats</h1>\n',
+			'pages/stats.svg': SVG,
+			'plugin.ts': pluginFile(
+				`import icon from './fields/color/icon.svg';
+import Input from './fields/color/input.svelte';
+import Stats from './pages/stats.svelte';`,
+				`{
+	fields: { color: { label: 'Color', description: 'A color.', column: 'TEXT', input: Input, icon } },
+	pages: { stats: { component: Stats, icon: './stats.svg' } }
+}`
+			)
 		});
 
 		await expect(discoverProject(root)).rejects.toMatchObject({
 			issues: [
 				{
 					path: 'fields/color/icon.svg',
-					message: 'has an event handler attribute (on...="..."); icons run no code'
+					message:
+						'has an event handler attribute (on...="..."); icons run no code (fields.color.icon)'
 				},
 				{
-					path: 'pages/stats.svelte',
-					message: "page.icon: ./missing.svg doesn't exist in the plugin"
+					path: 'plugin.ts',
+					message:
+						'pages.stats.icon must be an Iconify name, e.g. lucide:palette, or an imported .svg file'
 				}
 			]
 		});

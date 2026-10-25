@@ -1,5 +1,7 @@
 import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
 
+import logo from './icon.svg';
+
 type TwitchUsers = {
 	data: {
 		id: string;
@@ -12,6 +14,7 @@ type TwitchUsers = {
 
 export default defineAuthProvider({
 	label: 'Twitch',
+	icon: logo,
 	consoleUrl: 'https://dev.twitch.tv/console/apps',
 	authorizeUrl: 'https://id.twitch.tv/oauth2/authorize',
 	tokenUrl: 'https://id.twitch.tv/oauth2/token',

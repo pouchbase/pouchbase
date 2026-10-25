@@ -5,13 +5,13 @@ import type {
 	AuthResult,
 	OAuthProvider,
 	OAuthProviderInfo,
-	SignUpInput,
-	SignUpResult,
+	RegisterInput,
+	RegisterResult,
 	User,
 	UserOf
 } from '../types.js';
 
-/** Options for `pouch.auth.signInWithOAuth()`. */
+/** Options for `pouch.auth.oauth()`. */
 export type OAuthOptions = {
 	/**
 	 * Opens the provider's sign-in page. Defaults to a browser popup; pass your own to use, for
@@ -25,9 +25,9 @@ export type OAuthOptions = {
 	signal?: AbortSignal;
 };
 
-type SignInResponse = { token: string; user_id: string };
+type LoginResponse = { token: string; user_id: string };
 
-type SignUpResponse = { token: string | null; user_id: string; verification_required?: boolean };
+type RegisterResponse = { token: string | null; user_id: string; verification_required?: boolean };
 
 type OAuthError = 'access_denied' | 'email_in_use' | 'sign_in_failed';
 
@@ -63,8 +63,8 @@ export class AuthService<C extends object = { users: User }> {
 	 * @throws {PouchbaseError} `400`/`409` with `issues` per field, `403` when sign-up is off,
 	 * `503` when a verified email is required but mail isn't set up.
 	 */
-	async signUp(input: SignUpInput): Promise<SignUpResult> {
-		const response = await this.#pouch.request<SignUpResponse>('/api/auth/password/sign-up', {
+	async register(input: RegisterInput): Promise<RegisterResult> {
+		const response = await this.#pouch.request<RegisterResponse>('/api/auth/password/register', {
 			body: input,
 			auth: false
 		});
@@ -84,8 +84,8 @@ export class AuthService<C extends object = { users: User }> {
 	 * @throws {PouchbaseError} `401` for wrong credentials, `403` when password sign-in is off, or
 	 * `403` with `code` `email_not_verified` when the address must be verified first.
 	 */
-	async signIn(email: string, password: string): Promise<AuthResult> {
-		const response = await this.#pouch.request<SignInResponse>('/api/auth/password/sign-in', {
+	async login(email: string, password: string): Promise<AuthResult> {
+		const response = await this.#pouch.request<LoginResponse>('/api/auth/password/login', {
 			body: { email, password },
 			auth: false
 		});
@@ -102,7 +102,7 @@ export class AuthService<C extends object = { users: User }> {
 	 * @throws {PouchbaseError} With `code` `access_denied`, `email_in_use`, `sign_in_failed`,
 	 * `popup_blocked`, `popup_closed` or `timeout`.
 	 */
-	async signInWithOAuth(provider: OAuthProvider, options: OAuthOptions = {}): Promise<AuthResult> {
+	async oauth(provider: OAuthProvider, options: OAuthOptions = {}): Promise<AuthResult> {
 		// Opened before the first `await`, so it still counts as a direct result of the click.
 		const popup = options.open ? null : openPopup();
 		const state = randomString(24);
@@ -192,7 +192,7 @@ export class AuthService<C extends object = { users: User }> {
 	}
 
 	/** Signs out by ending the session. Tokens are stateless and expire by themselves. */
-	signOut(): void {
+	logout(): void {
 		this.#pouch.session.end();
 	}
 
@@ -234,7 +234,7 @@ export class AuthService<C extends object = { users: User }> {
 		await this.#pouch.request('/api/auth/email/verify', { body: { token }, auth: false });
 	}
 
-	#save(response: SignInResponse): AuthResult {
+	#save(response: LoginResponse): AuthResult {
 		this.#pouch.session.begin({ token: response.token, userId: response.user_id });
 
 		return { token: response.token, userId: response.user_id };

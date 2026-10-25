@@ -188,7 +188,7 @@
 		{#if isUsers}
 			<p class="text-sm text-zinc-500">
 				Users can't be created through the records API: they sign up through
-				<span class="font-mono">/api/auth/password/sign-up</span> or OAuth. Their
+				<span class="font-mono">/api/auth/password/register</span> or OAuth. Their
 				<span class="font-mono">email</span> and <span class="font-mono">verified</span> can't be changed
 				through it either.
 			</p>

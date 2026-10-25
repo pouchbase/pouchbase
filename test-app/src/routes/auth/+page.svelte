@@ -8,8 +8,8 @@
 	const runner = new Runner();
 
 	let providers = $state<OAuthProviderInfo[]>([]);
-	let signUp = $state({ name: '', email: '', password: '' });
-	let signIn = $state({ email: '', password: '' });
+	let register = $state({ name: '', email: '', password: '' });
+	let login = $state({ email: '', password: '' });
 	let email = $state('');
 	let token = $state('');
 	let newPassword = $state('');
@@ -38,8 +38,8 @@
 		<button class="ghost" disabled={!auth.session} onclick={() => pouch.session.end()}>
 			pouch.session.end()
 		</button>
-		<button class="ghost" disabled={!auth.session} onclick={() => pouch.auth.signOut()}>
-			pouch.auth.signOut()
+		<button class="ghost" disabled={!auth.session} onclick={() => pouch.auth.logout()}>
+			pouch.auth.logout()
 		</button>
 	</div>
 	<pre>{JSON.stringify(auth.session, null, 2)}</pre>
@@ -48,52 +48,56 @@
 <Output outcome={runner.outcome} />
 
 <div class="grid">
-	<Panel title="Sign up" description="POST /api/auth/password/sign-up">
+	<Panel title="Sign up" description="POST /api/auth/password/register">
 		<form
 			class="stack"
 			onsubmit={(event) => {
 				event.preventDefault();
 				runner.run(() =>
-					pouch.auth.signUp({
-						name: signUp.name,
-						email: signUp.email,
-						password: signUp.password
+					pouch.auth.register({
+						name: register.name,
+						email: register.email,
+						password: register.password
 					})
 				);
 			}}
 		>
-			<label>Name <input bind:value={signUp.name} autocomplete="name" /></label>
-			<label>Email <input bind:value={signUp.email} type="email" autocomplete="email" /></label>
+			<label>Name <input bind:value={register.name} autocomplete="name" /></label>
+			<label>Email <input bind:value={register.email} type="email" autocomplete="email" /></label>
 			<label>
-				Password <input bind:value={signUp.password} type="password" autocomplete="new-password" />
+				Password <input
+					bind:value={register.password}
+					type="password"
+					autocomplete="new-password"
+				/>
 			</label>
 			<button disabled={runner.loading}>Sign up</button>
 		</form>
 	</Panel>
 
-	<Panel title="Sign in" description="POST /api/auth/password/sign-in">
+	<Panel title="Sign in" description="POST /api/auth/password/login">
 		<form
 			class="stack"
 			onsubmit={(event) => {
 				event.preventDefault();
-				runner.run(() => pouch.auth.signIn(signIn.email, signIn.password));
+				runner.run(() => pouch.auth.login(login.email, login.password));
 			}}
 		>
-			<label>Email <input bind:value={signIn.email} type="email" autocomplete="email" /></label>
+			<label>Email <input bind:value={login.email} type="email" autocomplete="email" /></label>
 			<label>
 				Password
-				<input bind:value={signIn.password} type="password" autocomplete="current-password" />
+				<input bind:value={login.password} type="password" autocomplete="current-password" />
 			</label>
 			<button disabled={runner.loading}>Sign in</button>
 		</form>
 	</Panel>
 
-	<Panel title="OAuth" description="pouch.auth.signInWithOAuth() opens a popup">
+	<Panel title="OAuth" description="pouch.auth.oauth() opens a popup">
 		<div class="row">
 			{#each providers as provider (provider.provider)}
 				<button
 					disabled={runner.loading}
-					onclick={() => runner.run(() => pouch.auth.signInWithOAuth(provider.provider))}
+					onclick={() => runner.run(() => pouch.auth.oauth(provider.provider))}
 				>
 					{provider.label}
 				</button>

@@ -1,19 +1,39 @@
 /**
- * The server side of a plugin: `defineField(...)` in `fields/<type>/field.ts`,
- * `defineAuthProvider(...)` in `auth/<id>/provider.ts` and `export const GET` (and the other
- * methods) in `routes/<path>.ts`, and the settings of `definePlugin({ settings })` in `plugin.ts`,
- * which `pouchbase-plugin build` combines into one
- * `definePlugin({ ... })` (in the legacy layout, the file the manifest's `server` points to
- * default-exports it). The host runs it in its own Worker on your Cloudflare account
- * (built-in plugins, which ship with Pouchbase, run inside Pouchbase), so the only way out is
- * through `PluginContext`: `ctx.fetch` reaches the HTTPS hosts from `permissions.network`, and
- * nothing else. The Worker has no bindings, and its global `fetch` has the same limits.
+ * The plugin itself: `plugin.ts` default-exports `definePlugin({ ... })` with everything the plugin
+ * adds, by id: its settings, field types, pages, sign-in providers and routes. The files they live
+ * in are up to the plugin; `plugin.ts` imports them, components and icons included.
  *
- * Every key of `fields` and `authProviders` matches a contribution in the manifest.
+ * ```ts
+ * import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
  *
- * This module imports only `./ui.js` (for `definePage`) and uses only `fetch`-style Web APIs, so it
- * bundles into the sandboxed server code as is.
+ * import rating from './fields/rating/field.js';
+ * import Stats from './pages/stats.svelte';
+ * import * as items from './routes/items.js';
+ *
+ * export default definePlugin({
+ * 	fields: { rating },
+ * 	pages: { stats: { title: 'Stats', icon: 'lucide:chart-bar', component: Stats } },
+ * 	routes: { '/items': items }
+ * });
+ * ```
+ *
+ * `pouchbase-plugin build` runs `plugin.ts` in Node.js to write the manifest, compiles the
+ * components it imports for the dashboard, and bundles the rest into the server code: there an
+ * imported `.svelte` or `.svg` file is only a `PluginFile`, a reference to the file.
+ *
+ * The host runs the server code in its own Worker on your Cloudflare account (built-in plugins,
+ * which ship with Pouchbase, run inside Pouchbase), so the only ways out are through
+ * `PluginContext`: `ctx.fetch` reaches the HTTPS hosts from `permissions.network`, and
+ * `ctx.pouch` reaches the records API of Pouchbase, limited to the plugin's own collections and
+ * those in `permissions.collections`. The Worker has no access to the database, the storage or
+ * Pouchbase's secrets, and its global `fetch` has the same limits as `ctx.fetch`.
+ *
+ * This module imports only types and uses only `fetch`-style Web APIs, so it bundles into the
+ * sandboxed server code as is.
  */
+
+import type { Pouchbase } from '@pouchbasejs/js-sdk';
+import type { FieldInputProps, FieldPreviewProps, PageProps } from './ui.js';
 
 export type PluginLogger = {
 	info(message: string, data?: unknown): void;
@@ -198,6 +218,15 @@ export type PluginContext = {
 	 * Always `null` outside routes.
 	 */
 	user: PluginUser | null;
+	/**
+	 * A client of the JS SDK (`@pouchbasejs/js-sdk`) for this Pouchbase, signed in as the plugin:
+	 * `ctx.pouch.db.posts.findMany({ limit: 10 })`. It reaches the records API of the plugin's own
+	 * collections (`collections` of `definePlugin`, by their full name, e.g. `demo_reviews`) and of
+	 * those in `permissions.collections`; other collections fail with a `forbidden` error. The
+	 * collections' API rules don't apply to it, so check `ctx.user` before acting for a user.
+	 * Realtime, files, mail, functions and the schema API aren't available to plugins.
+	 */
+	pouch: Pouchbase;
 };
 
 /** A value read from or written to the field's column. */
@@ -208,6 +237,10 @@ export type FieldValidation = { valid: true } | { valid: false; message: string 
 /** SQLite storage class of the column that holds a field's value. */
 export type FieldColumn = 'TEXT' | 'INTEGER' | 'REAL' | 'BLOB';
 
+/**
+ * What the server does with a field type's values: the part of a `FieldDefinition` that runs in the
+ * server code, which the host calls.
+ */
 export type FieldTypeHandler = {
 	/** Name of the field type in the dashboard, e.g. `Rating`. */
 	label?: string;
@@ -215,13 +248,6 @@ export type FieldTypeHandler = {
 	description?: string;
 	/** Storage class of the column; fixed for the lifetime of each field of this type. */
 	column?: FieldColumn;
-	/**
-	 * The type's icon in the dashboard, drawn in one color like the built-in types' icons: an
-	 * Iconify name such as `lucide:palette`, which the CLI turns into an SVG in the bundle, or the
-	 * path of an `.svg` file relative to `field.ts`. Missing uses `icon.svg` next to `field.ts`, else
-	 * a puzzle piece.
-	 */
-	icon?: string;
 	/**
 	 * Checks a value from the record form or the API before it is saved. `options` are the field's
 	 * settings. Missing accepts every value.
@@ -235,6 +261,28 @@ export type FieldTypeHandler = {
 	serialize?(value: unknown, ctx: PluginContext): FieldValue | Promise<FieldValue>;
 	/** Turns the stored value into what the API returns. Missing returns it as stored. */
 	deserialize?(value: FieldValue, ctx: PluginContext): unknown;
+};
+
+/**
+ * A field type, in `fields` of `definePlugin`: its key is the type (`rating` becomes
+ * `<plugin>:rating`). `defineField(...)` types one written in a file of its own.
+ */
+export type FieldDefinition = FieldTypeHandler & {
+	label: string;
+	description: string;
+	column: FieldColumn;
+	/** The control in the record form: `import Input from './input.svelte'`. */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	input: PluginComponent<FieldInputProps<any>>;
+	/** Shows the value, read-only, in the records grid; missing shows it as text. */
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	preview?: PluginComponent<FieldPreviewProps<any>>;
+	/**
+	 * The type's icon in the dashboard, drawn in one color like the built-in types' icons: an
+	 * Iconify name such as `lucide:palette`, which the CLI turns into an SVG in the bundle, or an
+	 * imported `.svg` file (`import icon from './icon.svg'`). Missing uses a puzzle piece.
+	 */
+	icon?: PluginIcon;
 };
 
 /** The provider's user, the same shape the built-in providers return. */
@@ -266,14 +314,14 @@ export type AuthProviderHandler = {
 };
 
 /**
- * Handles requests to `/api/plugins/<plugin>/<path>`; keys are `"GET /stats"`, `"POST /sync"`.
- * Paths below `/assets/` are the host's: it serves the plugin's images there.
- * Requests from the dashboard come with the admin's session; other requests are anonymous.
+ * Handles requests to a route of the plugin, at `/api/plugins/<plugin>/<path>`. Paths below
+ * `/assets/` are the host's: it serves the plugin's images there. Requests from the dashboard come
+ * with the admin's session; other requests are anonymous.
  */
 export type RouteHandler = (
 	request: Request,
 	ctx: PluginContext & {
-		/** The `:param` segments of the route key, e.g. `{ id: '42' }` for `GET /items/:id`. */
+		/** The `:param` segments of the route's path, e.g. `{ id: '42' }` for `/items/:id`. */
 		params: Record<string, string>;
 	}
 ) => Response | Promise<Response>;
@@ -281,14 +329,122 @@ export type RouteHandler = (
 /** The HTTP methods a route can answer. */
 export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-/** A file of routes for one path: a handler per method it answers, e.g. `export const GET`. */
+/**
+ * The routes of one path, in `routes` of `definePlugin`: a handler per method it answers. A module
+ * that exports them (`export const GET: RouteHandler = ...`) is one: `import * as items from
+ * './routes/items.js'`. Its other exports are left alone.
+ */
 export type RouteModule = Partial<Record<RouteMethod, RouteHandler>>;
 
+/** A dashboard page, in `pages` of `definePlugin`: its key is its path below `/plugins/<id>/`. */
+export type PageDefinition = {
+	/** The page: `import Stats from './pages/stats.svelte'`. */
+	component: PluginComponent<PageProps>;
+	/** Title in the dashboard; missing uses the last segment of the path (`monthly` → `Monthly`). */
+	title?: string;
+	/** Whether the page gets a link in the sidebar; default `true`. */
+	navigation?: boolean;
+	/**
+	 * The page's icon in the sidebar, drawn in one color like the dashboard's own links: an Iconify
+	 * name such as `lucide:chart-bar`, or an imported `.svg` file. Missing uses a puzzle piece.
+	 */
+	icon?: PluginIcon;
+};
+
+/**
+ * A sign-in provider, in `authProviders` of `definePlugin`: its key is the provider id. Use
+ * `createOidcProvider` for an OpenID Connect provider.
+ */
+export type AuthProviderDefinition = AuthProviderHandler & {
+	/**
+	 * The logo on the sign-in button, in its own colors: an imported `.svg` file (`import logo from
+	 * './logo.svg'`) or an Iconify name such as `logos:gitlab-icon`. Missing shows no logo.
+	 */
+	icon?: PluginIcon;
+};
+
+/**
+ * A collection of the plugin, in `collections` of `definePlugin`: its key is its name without the
+ * prefix (`reviews` becomes `<plugin>_reviews`, see `pluginCollectionName`). Fields are in the
+ * shape of the schema API; a `relation` names its collection with `options.collection`.
+ *
+ * ```ts
+ * defineCollection({
+ * 	fields: [
+ * 		{ name: 'post', type: 'relation', options: { collection: 'posts' } },
+ * 		{ name: 'score', type: 'integer', required: true }
+ * 	],
+ * 	rules: { list: '', view: '' }
+ * });
+ * ```
+ */
+export type CollectionDefinition = {
+	fields?: CollectionFieldDefinition[];
+	indexes?: { columns: string[]; unique?: boolean }[];
+	/**
+	 * API rules for app users, per action (`list`, `view`, `create`, `update`, `delete`): `''`
+	 * allows everyone, a condition those it matches. Missing or `null` is admins only, so only the
+	 * plugin and the dashboard reach the records.
+	 */
+	rules?: Partial<Record<'list' | 'view' | 'create' | 'update' | 'delete', string | null>>;
+};
+
+/** A field of a `CollectionDefinition`. */
+export type CollectionFieldDefinition = {
+	name: string;
+	/** A built-in type (`text`, `integer`, `relation`, ...) or a plugin's `<plugin>:<type>`. */
+	type: string;
+	required?: boolean;
+	unique?: boolean;
+	/** The default value as a string, as the dashboard stores it. */
+	defaultValue?: string | null;
+	/**
+	 * The field's options, as `FieldOptions` of the JS SDK; for a `relation`, `collection` names the
+	 * related collection: one of the plugin's own by its name in `collections`, else the app's.
+	 */
+	options?: Record<string, unknown> & { collection?: string };
+};
+
+/** Everything the plugin adds, by id: the default export of `plugin.ts`. */
 export type PluginDefinition = {
 	/**
-	 * What an admin can set for the plugin on the Plugins page (`plugin.ts` in the convention
-	 * layout); the build puts them into the manifest.
+	 * What an admin can set for the plugin on the Plugins page; the build puts them into the
+	 * manifest.
 	 */
+	settings?: readonly PluginSettingDefinition[];
+	/**
+	 * Field types by type: `{ rating }` adds `<plugin>:rating`. Lowercase letters, numbers and
+	 * underscores.
+	 */
+	fields?: Record<string, FieldDefinition>;
+	/**
+	 * Dashboard pages by path: `stats` is `/plugins/<id>/stats`, `'reports/monthly'` a deeper one.
+	 * Lowercase words separated by dashes, with slashes between segments. The sidebar lists them in
+	 * this order.
+	 */
+	pages?: Record<string, PageDefinition>;
+	/** Sign-in providers by id: `{ gitlab }`. Lowercase words separated by dashes. */
+	authProviders?: Record<string, AuthProviderDefinition>;
+	/**
+	 * Collections by name, without the prefix: `{ reviews }` adds `<plugin>_reviews`. The host
+	 * creates them on install and brings them in line on every update, keeping the fields a later
+	 * version leaves out; they are deleted, with their records, when the plugin is removed.
+	 */
+	collections?: Record<string, CollectionDefinition>;
+	/**
+	 * Routes by path, served at `/api/plugins/<id><path>`: `{ '/items/:id': { GET } }`. A `:name`
+	 * segment is a parameter, in `ctx.params`; `'/'` is the plugin's root.
+	 */
+	routes?: Record<`/${string}`, RouteModule>;
+};
+
+/**
+ * What the server code of a bundle default-exports, and what the host runs: the handlers of
+ * `PluginDefinition` without their components and icons, with a key per route and method
+ * (`"GET /items/:id"`). The CLI generates it from `plugin.ts`; in the deprecated legacy layout, the
+ * manifest's `server` file default-exports it.
+ */
+export type ServerDefinition = {
 	settings?: readonly PluginSettingDefinition[];
 	fields?: Record<string, FieldTypeHandler>;
 	authProviders?: Record<string, AuthProviderHandler>;
@@ -296,29 +452,67 @@ export type PluginDefinition = {
 };
 
 /**
- * A page's metadata and its helper, defined in `@pouchbasejs/plugin-sdk/ui` (which a page can
- * import) and re-exported here for tests and tools.
- */
-export { definePage, type PageMeta } from './ui.js';
-
-/**
- * The plugin's own definition, default-exported from `plugin.ts`: `definePlugin({ settings: [...] })`
- * (in the legacy layout, the server entry's default export with `fields`, `authProviders` and
- * `routes`). Returns it unchanged, with literal keys and types, so `typeof plugin` can type
- * `ctx.settings` (see `Register`).
+ * The plugin, default-exported from `plugin.ts`: returns `definition` unchanged, with literal keys
+ * and types, so `typeof plugin` can type `ctx.settings` (see `Register`).
  */
 export function definePlugin<const T extends PluginDefinition>(definition: T): T {
 	return definition;
 }
 
-/** Types a field type handler written outside `definePlugin`; returns it unchanged. */
-export function defineField<T extends FieldTypeHandler>(handler: T): T {
-	return handler;
+/** Types a field type written outside `definePlugin`, e.g. in a file of its own; returns it unchanged. */
+export function defineField<T extends FieldDefinition>(definition: T): T {
+	return definition;
+}
+
+/** Types a collection written outside `definePlugin`; returns it unchanged. */
+export function defineCollection<T extends CollectionDefinition>(definition: T): T {
+	return definition;
+}
+
+/** Types a page written outside `definePlugin`; returns it unchanged. */
+export function definePage<T extends PageDefinition>(definition: T): T {
+	return definition;
 }
 
 /** Types an auth provider written outside `definePlugin`; returns it unchanged. */
-export function defineAuthProvider<T extends AuthProviderHandler>(handler: T): T {
-	return handler;
+export function defineAuthProvider<T extends AuthProviderDefinition>(definition: T): T {
+	return definition;
+}
+
+// Files
+
+/** The key of a `PluginFile`'s path; from `Symbol.for`, so every copy of the SDK has the same one. */
+export const PLUGIN_FILE: unique symbol = Symbol.for('pouchbase.plugin-file') as never;
+
+/**
+ * A file of the plugin that its server code imports but doesn't run: what an import of a
+ * `.svelte` or `.svg` file is when the CLI bundles `plugin.ts`, and in tests with the Vite plugin
+ * of `@pouchbasejs/plugin-sdk/vite`. `[PLUGIN_FILE]` is its path in the plugin, e.g.
+ * `fields/rating/input.svelte`.
+ */
+export type PluginFile = { readonly [PLUGIN_FILE]: string };
+
+/**
+ * A Svelte component of the plugin with props `Props`, imported in its server code
+ * (`import Stats from './stats.svelte'`): typed like the component, so its props are checked, and
+ * a `PluginFile` once bundled.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PluginComponent<Props = any> =
+	PluginFile | ((internals: never, props: Props) => unknown);
+
+/** An Iconify name such as `lucide:palette`, or an imported `.svg` file. */
+export type PluginIcon = string | PluginFile;
+
+/** The path in the plugin of a `PluginFile`, e.g. `pages/stats.svelte`; `null` for anything else. */
+export function pluginFilePath(value: unknown): string | null {
+	if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
+		return null;
+	}
+
+	const path = (value as Partial<PluginFile>)[PLUGIN_FILE];
+
+	return typeof path === 'string' ? path : null;
 }
 
 /**

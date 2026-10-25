@@ -1,5 +1,7 @@
 import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
 
+import logo from './icon.svg';
+
 type DiscordUser = {
 	id: string;
 	username: string;
@@ -11,6 +13,7 @@ type DiscordUser = {
 
 export default defineAuthProvider({
 	label: 'Discord',
+	icon: logo,
 	consoleUrl: 'https://discord.com/developers/applications',
 	authorizeUrl: 'https://discord.com/oauth2/authorize',
 	tokenUrl: 'https://discord.com/api/oauth2/token',

@@ -47,13 +47,19 @@
 			href: resolve('/docs/plugins/settings'),
 			icon: 'lucide:settings',
 			description: 'Typed values an admin fills in, such as an API key.'
+		},
+		{
+			title: 'Collections',
+			href: resolve('/docs/plugins/collections'),
+			icon: 'lucide:database',
+			description: 'Collections of the plugin, and records of the app through ctx.pouch.'
 		}
 	];
 </script>
 
 <DocsPage
 	title="Plugins"
-	description="Extend Pouchbase with field types, dashboard pages, routes, sign-in providers and settings, and publish them so any installation can install them without a rebuild."
+	description="Extend Pouchbase with field types, dashboard pages, routes, sign-in providers, settings and collections, and publish them so any installation can install them without a rebuild."
 	{sections}
 >
 	<Callout.Root variant="info">
@@ -70,8 +76,11 @@
 	<h2 id="what-a-plugin-can-add">What a plugin can add</h2>
 
 	<p>
-		A plugin is a folder: each file in it adds something to Pouchbase, and its place in the folder
-		says what (see <a href={resolve('/docs/plugins/project-structure')}>Project structure</a>).
+		A plugin's <Code.Root>plugin.ts</Code.Root> default-exports one
+		<Code.Root>definePlugin(&#123; … &#125;)</Code.Root> that lists everything it adds, by id: its settings,
+		field types, pages, sign-in providers, collections and routes. It imports their code and components
+		from wherever you keep them (see
+		<a href={resolve('/docs/plugins/project-structure')}>Project structure</a>).
 	</p>
 
 	<div class="not-prose grid gap-3 sm:grid-cols-2">

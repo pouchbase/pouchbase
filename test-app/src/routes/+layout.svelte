@@ -12,7 +12,7 @@
 		{ href: resolve('/'), label: 'Health' },
 		{ href: resolve('/auth'), label: 'Auth' },
 		{ href: resolve('/database'), label: 'Database' },
-		{ href: resolve('/live'), label: 'Live' },
+		{ href: resolve('/realtime'), label: 'Realtime' },
 		{ href: resolve('/functions'), label: 'Functions' },
 		{ href: resolve('/files'), label: 'Files' }
 	];
@@ -39,7 +39,7 @@
 		<span class="user">
 			{#if auth.session}
 				Signed in as <code>{auth.session.userId}</code>
-				<button type="button" class="ghost" onclick={() => pouch.auth.signOut()}>Sign out</button>
+				<button type="button" class="ghost" onclick={() => pouch.auth.logout()}>Sign out</button>
 			{:else}
 				Signed out
 			{/if}

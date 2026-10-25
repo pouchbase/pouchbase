@@ -1,12 +1,16 @@
 import type { HighlightedCode, HighlightedToken, Snippet } from '#lib/highlight.js';
 import type { HighlighterCore } from 'shiki/core';
 
+import { uiComponentHref } from '#lib/ui-components.js';
+
 import { createHighlighterCoreSync } from 'shiki/core';
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript';
 import bash from 'shiki/langs/bash.mjs';
+import css from 'shiki/langs/css.mjs';
 import html from 'shiki/langs/html.mjs';
 import javascript from 'shiki/langs/javascript.mjs';
 import json from 'shiki/langs/json.mjs';
+import svelte from 'shiki/langs/svelte.mjs';
 import typescript from 'shiki/langs/typescript.mjs';
 import theme from 'shiki/themes/github-dark-default.mjs';
 
@@ -20,11 +24,18 @@ let highlighter: HighlighterCore | null = null;
 function instance() {
 	highlighter ??= createHighlighterCoreSync({
 		themes: [theme],
-		langs: [typescript, javascript, bash, json, html],
+		langs: [typescript, javascript, bash, json, html, css, svelte],
 		engine: createJavaScriptRegexEngine()
 	});
 
 	return highlighter;
+}
+
+/** The docs page of an import of `@pouchbasejs/ui`, for a string token such as `'@pouchbasejs/ui/card'`. */
+function linkedImport(text: string) {
+	const specifier = /^(['"])(@pouchbasejs\/ui(?:\/[a-z/-]+)?)\1$/.exec(text)?.[2];
+
+	return specifier ? uiComponentHref(specifier) : undefined;
 }
 
 export function highlight({ language, code }: Snippet): HighlightedCode {
@@ -46,6 +57,14 @@ export function highlight({ language, code }: Snippet): HighlightedCode {
 			return merged;
 		}, [])
 	);
+
+	for (const token of lines.flat()) {
+		const href = linkedImport(token.text);
+
+		if (href) {
+			token.href = href;
+		}
+	}
 
 	return { text, lines };
 }

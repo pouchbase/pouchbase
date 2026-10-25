@@ -7,7 +7,7 @@
  *   minute, which starts scheduled backups and continues running ones (see
  *   `src/routes/internal/tick/+server.ts`);
  * - realtime: the `RealtimeHub` Durable Object (`src/lib/server/realtime/durable-object.ts`, bundled
- *   by Wrangler) and the WebSocket upgrades of `/api/live`, which go to the hub of their
+ *   by Wrangler) and the WebSocket upgrades of `/api/realtime`, which go to the hub of their
  *   collection before SvelteKit, because SvelteKit can't answer an upgrade.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -53,7 +53,7 @@ export default {
 		const url = new URL(request.url);
 
 		if (
-			url.pathname === '/api/live' &&
+			url.pathname === '/api/realtime' &&
 			request.headers.get('upgrade')?.toLowerCase() === 'websocket'
 		) {
 			const collection = url.searchParams.get('collection') ?? '';

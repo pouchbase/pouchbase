@@ -12,8 +12,8 @@
 	const message = $derived(
 		page.error?.message && page.error.message !== text.title ? page.error.message : null
 	);
-	const signIn = $derived(
-		`${resolve('/account/sign-in')}?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
+	const login = $derived(
+		`${resolve('/account/login')}?redirectTo=${encodeURIComponent(page.url.pathname + page.url.search)}`
 	);
 </script>
 
@@ -37,7 +37,7 @@
 
 		<ErrorState.Actions>
 			{#if status === 401}
-				<Button.Root variant="brand" href={signIn}>
+				<Button.Root variant="brand" href={login}>
 					<Icon.Root icon="lucide:log-in" />
 					Sign in
 				</Button.Root>

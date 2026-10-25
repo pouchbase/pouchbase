@@ -1,5 +1,7 @@
 import { defineField } from '@pouchbasejs/plugin-sdk/server';
 
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 import { FIELD_TYPES } from '../../lib/catalog.js';
 import { checkPhone } from '../../lib/phone.js';
 
@@ -13,6 +15,8 @@ export default defineField({
 	label: FIELD_TYPES.phone.label,
 	description: FIELD_TYPES.phone.description,
 	column: 'TEXT',
+	input: Input,
+	preview: Preview,
 	icon: 'lucide:phone-call',
 	validate(value) {
 		const check = checkPhone(value);

@@ -20,10 +20,13 @@ import type {
 	PluginPermissions
 } from '@pouchbasejs/plugin-sdk';
 import type { FieldColumn, PluginUser } from '@pouchbasejs/plugin-sdk/server';
+import type { PluginGrant } from '../plugins/grant';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { ResultAsync } from 'neverthrow';
 import type { PluginFieldTypeId } from '#lib/fields/field-types.js';
+import type { SnapshotCollection } from '#lib/schemas/environments.js';
 
+import { Pouchbase } from '@pouchbasejs/js-sdk';
 import {
 	DEFAULT_REGISTRY_URL,
 	RegistryError,
@@ -34,21 +37,24 @@ import {
 	contributionSummary,
 	createRegistryClient,
 	parseBundle,
+	pluginCollectionName,
 	pluginFieldTypeId,
 	previewOf,
 	resolveSettings,
 	splitPluginFieldType
 } from '@pouchbasejs/plugin-sdk';
-import { and, asc, eq, inArray, like } from 'drizzle-orm';
+import { and, asc, eq, inArray, like, notInArray, sql } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { dev } from '$app/env';
 import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
 import { pluginImagePath } from '#lib/auth/oauth-providers.js';
+import { apiCreateCollectionSchema } from '#lib/schemas/collections.js';
 
 import { version as POUCHBASE_VERSION } from '../../../../package.json';
 import { generateToken } from '../crypto';
 import {
+	apiKeys,
 	collections,
 	fields,
 	pluginAuthProviders,
@@ -65,7 +71,9 @@ import {
 	embeddedPlugins,
 	InProcessRuntime
 } from '../plugins/embedded';
+import { collectionFields, collectionIndexes } from '../plugins/collections';
 import { hasHooks, passThroughWrite, readInChunks } from '../plugins/field-values';
+import { internalKeyFor } from '../plugins/internal-keys';
 import { matchPage } from '../plugins/requests';
 import {
 	describePlugin,
@@ -242,6 +250,18 @@ type InvalidSettings = ServiceError<19018, 'INVALID_PLUGIN_SETTINGS'> & {
 };
 
 type SaveSettingsFailed = ServiceError<19019, 'SAVE_PLUGIN_SETTINGS_FAILED'>;
+
+type CollectionTaken = ServiceError<19020, 'PLUGIN_COLLECTION_TAKEN'> & { data: { name: string } };
+
+type InvalidCollection = ServiceError<19021, 'INVALID_PLUGIN_COLLECTION'> & {
+	data: { issues: ManifestIssue[] };
+};
+
+type CollectionsFailed = ServiceError<19022, 'PLUGIN_COLLECTIONS_FAILED'>;
+
+type CollectionInUse = ServiceError<19023, 'PLUGIN_COLLECTION_IN_USE'> & {
+	data: { collection: string; field: string; target: string };
+};
 
 type PluginRow = typeof plugins.$inferSelect;
 
@@ -472,6 +492,17 @@ function callContext(
 	return { settings: resolveSettings(manifest.settings, saved) };
 }
 
+/** Runs `steps` one after the other, until one fails. */
+function inSequence<E>(steps: (() => ResultAsync<unknown, E>)[]): ResultAsync<void, E> {
+	return steps.reduce<ResultAsync<void, E>>(
+		(chain, step) => chain.andThen(() => step().map(() => undefined)),
+		okAsync(undefined)
+	);
+}
+
+/** Built-in plugins whose collections this isolate brought in line, as `<id>@<version>`. */
+const appliedEmbedded = new Set<string>();
+
 /** Logos and other images in `ui/`; the only plugin files served to browsers. */
 const ASSET_PATH = /^ui\/(?:[\w-]+\/)*[\w.-]+\.svg$/;
 
@@ -568,171 +599,304 @@ export class PluginsService extends Service {
 		| CallFailed
 		| NoSubdomain
 		| UiCompileFailed
+		| CollectionTaken
+		| InvalidCollection
+		| CollectionsFailed
 	> {
-		return fromPromise(this.registry.getVersion(id, requested, SUPPORTED_API_VERSIONS), (error) =>
-			this.registryError(error)
-		)
-			.andThen((version) => {
-				if (!version) {
-					return errAsync(this.error(19002, 'PLUGIN_NOT_FOUND'));
-				}
-
-				const reason = incompatibility({
-					apiVersion: version.apiVersion,
-					engines: { pouchbase: version.pouchbase ?? undefined }
-				});
-
-				if (reason) {
-					return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
-				}
-
-				return fromPromise(this.registry.download(version), (error) =>
-					this.registryError(error)
-				).map((bytes) => ({ version, bytes }));
-			})
-			.andThen(({ version, bytes }) => {
-				const result = parseBundle(bytes);
-				const invalid = (issues: ManifestIssue[]): InvalidBundle => ({
-					...this.error(19004, 'INVALID_BUNDLE'),
-					data: { issues }
-				});
-
-				if (!result.success) {
-					return errAsync(invalid(result.issues));
-				}
-
-				const { bundle } = result;
-				const { manifest } = bundle;
-
-				// The registry must serve what it listed; anything else is a broken or hostile registry.
-				if (manifest.id !== id || manifest.version !== version.version) {
-					return errAsync(
-						invalid([
-							{
-								path: 'manifest',
-								message: `Expected ${id}@${version.version}, got ${manifest.id}@${manifest.version}`
-							}
-						])
-					);
-				}
-
-				// Checked again on the manifest itself, which may differ from what the registry listed.
-				const reason = incompatibility(manifest);
-
-				if (reason) {
-					return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
-				}
-
-				return okAsync({
-					version,
-					bytes,
-					manifest,
-					files: bundle.files,
-					server: bundle.files[SERVER_FILE] ?? null
-				});
-			})
-			.andThen((input) =>
-				this.checkProviderIds(input.manifest)
-					.andThen(() => this.findRow(input.manifest.id))
-					.map((existing) => ({ ...input, existing }))
+		return (
+			fromPromise(this.registry.getVersion(id, requested, SUPPORTED_API_VERSIONS), (error) =>
+				this.registryError(error)
 			)
-			.andThen((input) => this.compile(input.files).map((ui) => ({ ...input, ui })))
-			.andThen((input) =>
-				this.savedSettings([id]).map((saved) => ({
-					...input,
-					context: callContext(input.manifest, saved.get(id) ?? {}),
-					saved: saved.get(id) ?? {}
-				}))
-			)
-			.andThen(({ version, bytes, manifest, server, existing, ui, context, saved }) =>
-				this.runServer(manifest, server, existing, context).andThen(
-					({ worker, configs, description }) => {
-						const now = new Date();
-						const values = {
-							name: manifest.name,
-							version: manifest.version,
-							apiVersion: manifest.apiVersion,
-							manifest,
-							bundle: new TextDecoder().decode(bytes),
-							integrity: version.integrity,
-							registryUrl: registryUrl(),
-							workerUrl: worker?.url ?? null,
-							workerSecret: worker?.secret ?? null,
-							capabilities: description,
-							updatedAt: now
-						};
-						const providers = manifest.contributes.authProviders.map((contribution) =>
-							providerRow(manifest.id, contribution, configs.get(contribution.id)!, now)
-						);
-						const modules = moduleRows(manifest, ui, now);
+				.andThen((version) => {
+					if (!version) {
+						return errAsync(this.error(19002, 'PLUGIN_NOT_FOUND'));
+					}
 
-						return fromPromise(
-							this.db.batch([
-								this.db
-									.insert(plugins)
-									.values({ id, ...values, installedAt: now })
-									.onConflictDoUpdate({ target: plugins.id, set: values })
-									.returning(INSTALLED_COLUMNS),
-								// Replaces the providers of the previous version, or of the built-in plugin.
-								this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
-								...(providers.length
-									? [this.db.insert(pluginAuthProviders).values(providers)]
-									: []),
-								// Replaces the modules of the previous version.
-								this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
-								...chunks(modules, MODULE_ROWS_PER_INSERT).map((rows) =>
-									this.db.insert(pluginModules).values(rows)
-								)
-							]),
-							(error) => this.error(19005, 'INSTALL_FAILED', error)
-						).map(([[row]]) =>
-							toInstalled({ manifest, row: row! }, saved, description?.routes ?? [])
+					const reason = incompatibility({
+						apiVersion: version.apiVersion,
+						engines: { pouchbase: version.pouchbase ?? undefined }
+					});
+
+					if (reason) {
+						return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
+					}
+
+					return fromPromise(this.registry.download(version), (error) =>
+						this.registryError(error)
+					).map((bytes) => ({ version, bytes }));
+				})
+				.andThen(({ version, bytes }) => {
+					const result = parseBundle(bytes);
+					const invalid = (issues: ManifestIssue[]): InvalidBundle => ({
+						...this.error(19004, 'INVALID_BUNDLE'),
+						data: { issues }
+					});
+
+					if (!result.success) {
+						return errAsync(invalid(result.issues));
+					}
+
+					const { bundle } = result;
+					const { manifest } = bundle;
+
+					// The registry must serve what it listed; anything else is a broken or hostile registry.
+					if (manifest.id !== id || manifest.version !== version.version) {
+						return errAsync(
+							invalid([
+								{
+									path: 'manifest',
+									message: `Expected ${id}@${version.version}, got ${manifest.id}@${manifest.version}`
+								}
+							])
 						);
 					}
+
+					// Checked again on the manifest itself, which may differ from what the registry listed.
+					const reason = incompatibility(manifest);
+
+					if (reason) {
+						return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
+					}
+
+					return okAsync({
+						version,
+						bytes,
+						manifest,
+						files: bundle.files,
+						server: bundle.files[SERVER_FILE] ?? null
+					});
+				})
+				.andThen((input) =>
+					this.checkProviderIds(input.manifest)
+						.andThen(() => this.findRow(input.manifest.id))
+						.map((existing) => ({ ...input, existing }))
 				)
-			);
+				.andThen((input) => this.compile(input.files).map((ui) => ({ ...input, ui })))
+				// Before the Worker runs, so its first call finds the collections.
+				.andThen((input) => this.applyCollections(input.manifest).map(() => input))
+				.andThen((input) =>
+					this.savedSettings([id]).map((saved) => ({
+						...input,
+						context: callContext(input.manifest, saved.get(id) ?? {}),
+						saved: saved.get(id) ?? {}
+					}))
+				)
+				.andThen(({ version, bytes, manifest, server, existing, ui, context, saved }) =>
+					this.runServer(manifest, server, existing, context).andThen(
+						({ worker, configs, description }) => {
+							const now = new Date();
+							const values = {
+								name: manifest.name,
+								version: manifest.version,
+								apiVersion: manifest.apiVersion,
+								manifest,
+								bundle: new TextDecoder().decode(bytes),
+								integrity: version.integrity,
+								registryUrl: registryUrl(),
+								workerUrl: worker?.url ?? null,
+								workerSecret: worker?.secret ?? null,
+								capabilities: description,
+								updatedAt: now
+							};
+							const providers = manifest.contributes.authProviders.map((contribution) =>
+								providerRow(manifest.id, contribution, configs.get(contribution.id)!, now)
+							);
+							const modules = moduleRows(manifest, ui, now);
+
+							return fromPromise(
+								this.db.batch([
+									this.db
+										.insert(plugins)
+										.values({ id, ...values, installedAt: now })
+										.onConflictDoUpdate({ target: plugins.id, set: values })
+										.returning(INSTALLED_COLUMNS),
+									// Replaces the providers of the previous version, or of the built-in plugin.
+									this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
+									...(providers.length
+										? [this.db.insert(pluginAuthProviders).values(providers)]
+										: []),
+									// Replaces the modules of the previous version.
+									this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
+									...chunks(modules, MODULE_ROWS_PER_INSERT).map((rows) =>
+										this.db.insert(pluginModules).values(rows)
+									)
+								]),
+								(error) => this.error(19005, 'INSTALL_FAILED', error)
+							).map(([[row]]) =>
+								toInstalled({ manifest, row: row! }, saved, description?.routes ?? [])
+							);
+						}
+					)
+				)
+		);
 	}
 
 	/**
-	 * Removes an installed plugin with its Worker, sign-in providers, compiled UI and settings;
-	 * `null` when it isn't installed. A built-in plugin can't be removed; removing a plugin that
-	 * shadowed one brings the built-in plugin back. Fields with the plugin's types keep their data.
+	 * Removes an installed plugin with its collections and their records, its Worker, its API key,
+	 * sign-in providers, compiled UI and settings; `null` when it isn't installed. Fails with
+	 * `PLUGIN_COLLECTION_IN_USE`, changing nothing, while a relation field of another collection
+	 * points to one of its collections. A built-in plugin can't be removed; removing a plugin that
+	 * shadowed one brings the built-in plugin back, with collections of its own. Fields with the
+	 * plugin's types in other collections keep their data.
 	 */
 	uninstall(
 		id: string
-	): ResultAsync<{ id: string } | null, ListFailed | UninstallFailed | BuiltIn> {
+	): ResultAsync<
+		{ id: string } | null,
+		ListFailed | UninstallFailed | BuiltIn | CollectionInUse | CollectionsFailed
+	> {
 		return this.findRow(id).andThen((row) => {
 			if (!row) {
 				return embeddedPlugin(id) ? errAsync(this.error(19010, 'PLUGIN_BUILT_IN')) : okAsync(null);
 			}
 
-			return fromPromise(
-				(async () => {
-					if (row.workerUrl) {
-						await driver.delete(pluginScriptName(POUCHBASE_INSTANCE, id));
-					}
-
-					await this.db.batch([
-						this.db.delete(plugins).where(eq(plugins.id, id)),
-						this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
-						this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
-						this.db.delete(pluginSettings).where(eq(pluginSettings.pluginId, id))
-					]);
-
-					return { id };
-				})(),
-				(error) => this.error(19006, 'UNINSTALL_FAILED', error)
-			).andThen((removed) =>
-				embeddedPlugin(id)
-					? this.ensureEmbedded()
-							.orElse((failure) => {
-								console.error(`[plugins] Could not bring back the built-in ${id}`, failure);
-
-								return okAsync(undefined);
-							})
-							.map(() => removed)
-					: okAsync(removed)
+			// The collections go first: while one can't, the plugin stays installed and keeps working.
+			return this.deleteCollections(id).andThen(() =>
+				this.removeInstalled(id, row.workerUrl !== null)
 			);
+		});
+	}
+
+	/** The names of the plugin's collections (those with its `plugin_id`), sorted. */
+	ownCollections(pluginId: string): ResultAsync<string[], ListFailed> {
+		return fromPromise(
+			this.db
+				.select({ name: collections.name })
+				.from(collections)
+				.where(eq(collections.pluginId, pluginId))
+				.orderBy(asc(collections.name)),
+			(error) => this.listFailed(error)
+		).map((rows) => rows.map((row) => row.name));
+	}
+
+	/**
+	 * Deletes the plugin's collections with their records. Checks first that no relation field of
+	 * another collection points to one of them; relations between them are no obstacle, as each
+	 * round deletes those nothing points to anymore.
+	 */
+	private deleteCollections(
+		pluginId: string
+	): ResultAsync<void, ListFailed | CollectionInUse | CollectionsFailed> {
+		const failed = (error: unknown): CollectionsFailed =>
+			this.error(19022, 'PLUGIN_COLLECTIONS_FAILED', error);
+
+		return fromPromise(
+			this.db
+				.select({ id: collections.id, name: collections.name })
+				.from(collections)
+				.where(eq(collections.pluginId, pluginId)),
+			(error) => this.listFailed(error)
+		).andThen((own) => {
+			if (!own.length) {
+				return okAsync(undefined);
+			}
+
+			const ids = own.map((collection) => collection.id);
+
+			return fromPromise(
+				this.db
+					.select({
+						collection: collections.name,
+						field: fields.name,
+						target: sql<string>`json_extract(${fields.options}, '$.collectionId')`
+					})
+					.from(fields)
+					.innerJoin(collections, eq(fields.collectionId, collections.id))
+					.where(
+						and(
+							eq(fields.type, 'relation'),
+							notInArray(fields.collectionId, ids),
+							inArray(sql`json_extract(${fields.options}, '$.collectionId')`, ids)
+						)
+					)
+					.limit(1),
+				(error) => this.listFailed(error)
+			).andThen(([reference]) => {
+				if (reference) {
+					return errAsync<never, CollectionInUse>({
+						...this.error(19023, 'PLUGIN_COLLECTION_IN_USE'),
+						data: {
+							collection: reference.collection,
+							field: reference.field,
+							target: own.find((item) => item.id === reference.target)?.name ?? reference.target
+						}
+					});
+				}
+
+				const service = this.services.collections();
+
+				return fromPromise(
+					(async () => {
+						let pending = own.map((collection) => collection.name);
+
+						while (pending.length) {
+							const left: string[] = [];
+
+							for (const name of pending) {
+								const result = await service.delete(name);
+
+								// Another of the plugin's collections still points to it: the next round.
+								if (result.isErr() && result.error.code === 6009) {
+									left.push(name);
+								} else if (result.isErr() && result.error.code !== 6006) {
+									throw result.error;
+								}
+							}
+
+							if (left.length === pending.length) {
+								throw new Error(`The collections ${left.join(', ')} point to each other`);
+							}
+
+							pending = left;
+						}
+					})(),
+					failed
+				);
+			});
+		});
+	}
+
+	/** Removes the rows and the Worker of an installed plugin; see `uninstall`. */
+	private removeInstalled(
+		id: string,
+		hasWorker: boolean
+	): ResultAsync<{ id: string }, UninstallFailed> {
+		return fromPromise(
+			(async () => {
+				if (hasWorker) {
+					await driver.delete(pluginScriptName(POUCHBASE_INSTANCE, id));
+				}
+
+				await this.db.batch([
+					this.db.delete(plugins).where(eq(plugins.id, id)),
+					this.db.delete(apiKeys).where(eq(apiKeys.pluginId, id)),
+					this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
+					this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
+					this.db.delete(pluginSettings).where(eq(pluginSettings.pluginId, id))
+				]);
+
+				return { id };
+			})(),
+			(error) => this.error(19006, 'UNINSTALL_FAILED', error)
+		).andThen((removed) => {
+			if (!embeddedPlugin(id)) {
+				return okAsync(removed);
+			}
+
+			// The built-in plugin sets up its collections again, which went with the installed one.
+			for (const key of appliedEmbedded) {
+				if (key.startsWith(`${id}@`)) {
+					appliedEmbedded.delete(key);
+				}
+			}
+
+			return this.ensureEmbedded()
+				.orElse((failure) => {
+					console.error(`[plugins] Could not bring back the built-in ${id}`, failure);
+
+					return okAsync(undefined);
+				})
+				.map(() => removed);
 		});
 	}
 
@@ -822,9 +986,58 @@ export class PluginsService extends Service {
 				if (statements.length) {
 					await this.db.batch(statements as [BatchItem<'sqlite'>, ...BatchItem<'sqlite'>[]]);
 				}
+
+				// Once per version and isolate: a plugin's collections change only with the plugin.
+				for (const { manifest } of active) {
+					const key = `${manifest.id}@${manifest.version}`;
+
+					if (!manifest.contributes.collections.length || appliedEmbedded.has(key)) {
+						continue;
+					}
+
+					const applied = await this.applyCollections(manifest);
+
+					if (applied.isErr()) {
+						console.error(
+							`[plugins] Could not set up the collections of the built-in ${manifest.id}`,
+							applied.error
+						);
+						continue;
+					}
+
+					appliedEmbedded.add(key);
+				}
 			})(),
 			(error) => this.error(19012, 'SYNC_BUILT_IN_PLUGINS_FAILED', error)
 		);
+	}
+
+	/**
+	 * What the plugin may do through the records API (`ctx.pouch`): read and write the collections
+	 * of its `permissions.collections`, and its own collections (those with its `plugin_id`). `null`
+	 * when the plugin isn't there.
+	 */
+	grant(pluginId: string): ResultAsync<PluginGrant | null, ListFailed> {
+		return this.source(pluginId).andThen((source) => {
+			if (!source) {
+				return okAsync(null);
+			}
+
+			return fromPromise(
+				this.db
+					.select({ name: collections.name })
+					.from(collections)
+					.where(eq(collections.pluginId, pluginId)),
+				(error) => this.listFailed(error)
+			).map((rows) => {
+				const own = rows.map((row) => row.name);
+				const { read, write } = source.manifest.permissions.collections;
+				const names = (list: string[]): PluginGrant['read'] =>
+					list.includes('*') ? '*' : new Set([...list, ...own]);
+
+				return { pluginId, read: names(read), write: names(write) };
+			});
+		});
 	}
 
 	/**
@@ -1203,7 +1416,18 @@ export class PluginsService extends Service {
 
 		const plugin = embeddedPlugin(source.manifest.id);
 
-		return plugin?.manifest.server ? new InProcessRuntime(plugin) : null;
+		if (!plugin?.manifest.server) {
+			return null;
+		}
+
+		// `event.fetch` handles requests to Pouchbase itself in this isolate, without the network,
+		// with a key that only this isolate knows.
+		const pouch = new Pouchbase(this.ctx.url.origin, {
+			fetch: (input, init) => this.ctx.fetch(input, init),
+			headers: { authorization: `Bearer ${internalKeyFor(plugin.manifest.id)}` }
+		});
+
+		return new InProcessRuntime(plugin, { pouch });
 	}
 
 	/**
@@ -1238,6 +1462,147 @@ export class PluginsService extends Service {
 
 			return null;
 		}
+	}
+
+	/**
+	 * Creates the collections the plugin contributes (`<plugin>_<name>`, owned by the plugin) and
+	 * brings existing ones in line with the manifest. Fields and indexes the manifest leaves out
+	 * stay, so an update never loses data; a change the schema API counts as destructive fails.
+	 * Everything is checked before anything changes: a collection with one of the names that
+	 * isn't the plugin's fails with `PLUGIN_COLLECTION_TAKEN`, an invalid one with
+	 * `INVALID_PLUGIN_COLLECTION`.
+	 */
+	private applyCollections(
+		manifest: PluginManifest
+	): ResultAsync<void, CollectionTaken | InvalidCollection | CollectionsFailed> {
+		const contributions = manifest.contributes.collections;
+
+		if (!contributions.length) {
+			return okAsync(undefined);
+		}
+
+		const service = this.services.collections();
+		const failed = (error: unknown): CollectionsFailed =>
+			this.error(19022, 'PLUGIN_COLLECTIONS_FAILED', error);
+		const invalid = (issues: ManifestIssue[]): InvalidCollection => ({
+			...this.error(19021, 'INVALID_PLUGIN_COLLECTION'),
+			data: { issues }
+		});
+		const named = contributions.map((contribution) => ({
+			contribution,
+			name: pluginCollectionName(manifest.id, contribution.name)
+		}));
+
+		/** The collection as the schema API takes it, or its issues. */
+		const input = (
+			{ contribution, name }: (typeof named)[number],
+			ids: ReadonlyMap<string, string>,
+			current: SnapshotCollection | null
+		) => {
+			const result = collectionFields(manifest, contribution, ids, current);
+
+			if ('issue' in result) {
+				return { issues: [result.issue] };
+			}
+
+			const parsed = apiCreateCollectionSchema.safeParse({
+				name,
+				fields: result.fields,
+				indexes: collectionIndexes(contribution, current),
+				rules: contribution.rules
+			});
+
+			return parsed.success
+				? { collection: parsed.data }
+				: {
+						issues: parsed.error.issues.map((issue) => ({
+							path: `contributes.collections.${contribution.name}.${issue.path.join('.')}`,
+							message: issue.message
+						}))
+					};
+		};
+
+		return service
+			.list()
+			.mapErr(failed)
+			.andThen((existing) => {
+				const byName = new Map(existing.map((collection) => [collection.name, collection]));
+				const taken = named.find(({ name }) => {
+					const collection = byName.get(name);
+
+					return collection && collection.pluginId !== manifest.id;
+				});
+
+				if (taken) {
+					return errAsync<never, CollectionTaken>({
+						...this.error(19020, 'PLUGIN_COLLECTION_TAKEN'),
+						data: { name: taken.name }
+					});
+				}
+
+				// Checked with stand-in ids for the collections that don't exist yet.
+				const planned = new Map(existing.map((collection) => [collection.name, collection.id]));
+
+				for (const { name } of named) {
+					if (!planned.has(name)) {
+						planned.set(name, `new-${name}`);
+					}
+				}
+
+				const issues = named.flatMap((item) => input(item, planned, null).issues ?? []);
+
+				if (issues.length) {
+					return errAsync(invalid(issues));
+				}
+
+				// Created without fields first, so relations between them find each other's ids.
+				return inSequence(
+					named
+						.filter(({ name }) => !byName.has(name))
+						.map(
+							({ name }) =>
+								() =>
+									service
+										.createFromApi({ name, fields: [], indexes: [], rules: {} })
+										.mapErr(failed)
+										.andThen(() =>
+											fromPromise(
+												this.db
+													.update(collections)
+													.set({ pluginId: manifest.id })
+													.where(eq(collections.name, name)),
+												failed
+											)
+										)
+						)
+				)
+					.andThen(() => service.list().mapErr(failed))
+					.andThen((all) => {
+						const ids = new Map(all.map((collection) => [collection.name, collection.id]));
+
+						return inSequence(
+							named.map(
+								(item) => () =>
+									service
+										.schema(item.name)
+										.mapErr(failed)
+										.andThen((current) => {
+											const result = input(item, ids, current);
+
+											if (!result.collection) {
+												return errAsync(invalid(result.issues ?? []));
+											}
+
+											const { fields, indexes, rules } = result.collection;
+
+											return service
+												.updateFromApi(item.name, { fields, indexes, rules }, false)
+												.mapErr(failed);
+										})
+							)
+						);
+					});
+			});
 	}
 
 	private fieldCallFailed(error: unknown): FieldCallFailed {
@@ -1424,7 +1789,19 @@ export class PluginsService extends Service {
 				this.deleteWorkerLater(script, manifest.id);
 			}
 
-			return okAsync({ worker: null, configs: new Map(), description: null });
+			return this.services
+				.apiKeys()
+				.deletePluginKeys(manifest.id)
+				.orElse((error) => {
+					console.error(`[plugins] Could not remove the API keys of ${manifest.id}`, error);
+
+					return okAsync(undefined);
+				})
+				.map(() => ({
+					worker: null,
+					configs: new Map<string, ProviderConfig>(),
+					description: null
+				}));
 		}
 
 		const secret = existing?.workerSecret ?? generateToken();
@@ -1434,12 +1811,23 @@ export class PluginsService extends Service {
 				subdomain ? okAsync(subdomain) : errAsync(this.error(19011, 'NO_WORKERS_SUBDOMAIN'))
 			)
 			.andThen((subdomain) =>
+				this.services
+					.apiKeys()
+					.issuePluginKey(manifest.id)
+					.mapErr(deployFailed)
+					.map((apiKey) => ({ subdomain, apiKey }))
+			)
+			.andThen(({ subdomain, apiKey }) =>
 				fromPromise(
 					(async () => {
 						await driver.deploy(script, {
 							mainModule: ENTRY_MODULE,
 							modules: workerModules(manifest, server),
-							bindings: [{ type: 'secret_text', name: 'POUCHBASE_PLUGIN_SECRET', text: secret }],
+							bindings: [
+								{ type: 'secret_text', name: 'POUCHBASE_PLUGIN_SECRET', text: secret },
+								{ type: 'plain_text', name: 'POUCHBASE_URL', text: this.ctx.url.origin },
+								{ type: 'secret_text', name: 'POUCHBASE_API_KEY', text: apiKey.key }
+							],
 							message: `${manifest.id}@${manifest.version}`
 						});
 
@@ -1451,6 +1839,26 @@ export class PluginsService extends Service {
 					})(),
 					deployFailed
 				)
+					// The key of a Worker that didn't deploy is of no use.
+					.orElse((error) =>
+						this.services
+							.apiKeys()
+							.deleteFunctionKey(apiKey.id)
+							.orElse(() => okAsync(undefined))
+							.andThen(() => errAsync(error))
+					)
+					// The Worker that runs now has the new key, so the older keys stop working.
+					.andThen((worker) =>
+						this.services
+							.apiKeys()
+							.keepPluginKey(manifest.id, apiKey.id)
+							.orElse((error) => {
+								console.error(`[plugins] Could not remove old API keys of ${manifest.id}`, error);
+
+								return okAsync(undefined);
+							})
+							.map(() => worker)
+					)
 			)
 			.andThen((worker) =>
 				fromPromise(

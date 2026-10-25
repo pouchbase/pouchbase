@@ -2,7 +2,7 @@ import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
 
 /**
  * `GET /me`: the app user who made the request. Pouchbase fills `ctx.user` from the request's
- * bearer token (a token from `pouch.auth.signIn()`); without one it is `null`, and an invalid or
+ * bearer token (a token from `pouch.auth.login()`); without one it is `null`, and an invalid or
  * expired token never reaches the plugin (Pouchbase answers 401 itself).
  */
 export const GET: RouteHandler = async (_request, ctx) => {

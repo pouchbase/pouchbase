@@ -14,39 +14,46 @@ import {
 	pageContributionSchema,
 	type PluginSettingType
 } from '../manifest.js';
-import { PLUGIN_FILES, routeFileFor } from './discover.js';
+import { PLUGIN_FILES, routeFileFor, routePathFor } from './discover.js';
 import { ProjectError } from './project-error.js';
 import {
 	EXAMPLE_PROVIDER_HOST,
 	PLUGIN_FILE,
 	PROVIDER_ICON,
 	authProviderServer,
-	conventionFieldFiles,
-	conventionPageFiles,
-	conventionProviderFiles,
-	conventionRouteFiles,
+	camelCase,
+	entrySource,
+	fieldEntry,
 	fieldFiles,
+	freeName,
+	indented,
 	json,
 	objectKey,
+	pageEntry,
 	pageFiles,
+	pascalCase,
 	pluginFileSource,
+	providerEntry,
 	providerIconPath,
+	routeEntry,
 	settingSource,
 	title,
 	type Files,
+	type PluginEntry,
 	type SettingTemplate
 } from './templates.js';
 
 /**
- * `pouchbase-plugin add <kind> <id>`: creates the files of a contribution. In the convention
- * layout these files are the contribution, so the manifest only changes for an explicit
- * `categories` list or the example host of an auth provider. In the legacy layout (a manifest with
- * `contributes` or `server`) it also appends the contribution to `pouchbase-plugin.json`. It never
- * overwrites a file; the manifest keeps its key order and is written tab-indented.
+ * `pouchbase-plugin add <kind> <id>`: creates the files of a contribution and adds it to
+ * `definePlugin({ ... })` in `plugin.ts`, with the imports it needs; without `plugin.ts` it creates
+ * one (with the `Register` block that types `ctx.settings`). The manifest only changes for an
+ * explicit `categories` list or the example host of an auth provider. In the legacy layout (a
+ * manifest with `contributes` or `server`) it appends the contribution to `pouchbase-plugin.json`
+ * instead. It never overwrites a file; the manifest keeps its key order and is written
+ * tab-indented.
  *
- * `add setting <key>` appends a setting to `definePlugin({ settings })` in `plugin.ts`, and creates
- * that file (with the `Register` block that types `ctx.settings`) when the plugin has none; in the
- * legacy layout it appends it to the manifest's `settings`.
+ * `add setting <key>` appends a setting to `definePlugin({ settings })`; in the legacy layout to
+ * the manifest's `settings`.
  */
 
 export const CONTRIBUTION_KINDS = ['field', 'page', 'auth-provider', 'route', 'setting'] as const;
@@ -120,7 +127,7 @@ export type AddResult = {
 	hints: string[];
 	/** Whether `pouchbase-plugin.json` was written. */
 	manifestChanged: boolean;
-	layout: 'convention' | 'legacy';
+	layout: 'plugin' | 'legacy';
 };
 
 type Manifest = Record<string, unknown> & {
@@ -198,16 +205,6 @@ async function writeNewFiles(root: string, files: Files, taken: readonly string[
 	}
 }
 
-/** `items/[id]`, `/items/:id` → `/items/:id`. */
-function routePath(id: string) {
-	const segments = id
-		.split('/')
-		.filter(Boolean)
-		.map((segment) => segment.replace(/^\[(.+)\]$/, ':$1'));
-
-	return `/${segments.join('/')}`;
-}
-
 export async function addContribution(
 	root: string,
 	kind: ContributionKind,
@@ -229,31 +226,44 @@ export async function addContribution(
 	}
 
 	if (manifest.contributes === undefined && manifest.server === undefined) {
-		return addConvention(root, manifest, kind, id);
+		return addToPlugin(root, manifest, kind, id);
 	}
 
 	if (kind === 'route') {
 		const server = typeof manifest.server === 'string' ? manifest.server : 'the server code';
 
 		throw new ProjectError(
-			`add route needs the convention layout; this plugin lists its contributions in ${MANIFEST_FILE}`,
+			`add route needs plugin.ts; this plugin lists its contributions in ${MANIFEST_FILE}`,
 			[],
-			`Add "GET ${routePath(id)}" to the routes in ${server}, or move the plugin to the convention layout (fields/, pages/, auth/, routes/) and remove "contributes" and "server" from ${MANIFEST_FILE}.`
+			`Add "GET ${routePathFor(id)}" to the routes in ${server}, or move the contributions into definePlugin({ ... }) in plugin.ts and remove "contributes" and "server" from ${MANIFEST_FILE}.`
 		);
 	}
 
 	return addLegacy(root, manifest, kind, id);
 }
 
-/** The convention layout: the new files are the contribution. */
-async function addConvention(
+/** `plugin.ts` (or `.js`) of the plugin in `root`, or `null` without one. */
+async function findPluginFile(root: string): Promise<string | null> {
+	for (const file of PLUGIN_FILES) {
+		if (await exists(join(root, file))) {
+			return file;
+		}
+	}
+
+	return null;
+}
+
+/**
+ * The plugin's own layout: creates the files of the contribution and adds it to
+ * `definePlugin({ ... })` in `plugin.ts`, with the imports it needs; creates `plugin.ts` without one.
+ */
+async function addToPlugin(
 	root: string,
 	manifest: Manifest,
 	kind: Exclude<ContributionKind, 'setting'>,
 	id: string
 ): Promise<AddResult> {
 	const hints: string[] = [];
-	let files: Files;
 	let taken: string[] = [];
 	let changed = false;
 
@@ -261,9 +271,15 @@ async function addConvention(
 		throw new ProjectError(INVALID_ID[kind](id));
 	}
 
+	const file = await findPluginFile(root);
+	const source = file ? await readFile(join(root, file), 'utf8') : '';
+	// A name for an import of `plugin.ts` that it doesn't use yet.
+	const used = (name: string) => new RegExp(`(?<![\\w$])${name}(?![\\w$])`).test(source);
+	let entry: PluginEntry;
+
 	switch (kind) {
 		case 'field':
-			files = conventionFieldFiles(id);
+			entry = fieldEntry(id, freeName(camelCase(id), 'Field', used));
 			taken = [`fields/${id}`];
 			changed = addCategory(manifest, 'fields', hints);
 			hints.push(
@@ -272,13 +288,12 @@ async function addConvention(
 			break;
 
 		case 'page':
-			files = conventionPageFiles(id);
-			taken = [`pages/${id}/index.svelte`];
+			entry = pageEntry(id, freeName(pascalCase(id), 'Page', used));
 			changed = addCategory(manifest, 'pages', hints);
 			break;
 
 		case 'auth-provider':
-			files = conventionProviderFiles(id);
+			entry = providerEntry(id, freeName(camelCase(id), 'Provider', used));
 			taken = [`auth/${id}`];
 			changed = addCategory(manifest, 'auth', hints);
 			changed = addExampleHost(manifest) || changed;
@@ -288,33 +303,119 @@ async function addConvention(
 			break;
 
 		case 'route': {
-			const file = routeFileFor(id);
+			const routeFile = routeFileFor(id);
+			const path = routePathFor(id);
 
-			if (!file) {
+			if (!routeFile) {
 				throw new ProjectError(INVALID_ID.route(id));
 			}
 
-			const path = routePath(id);
-
-			files = conventionRouteFiles(
-				file,
+			entry = routeEntry(
 				path,
+				routeFile,
+				freeName(camelCase(path) || 'root', 'Route', used),
 				typeof manifest.id === 'string' ? manifest.id : null
 			);
-			// `routes/items.ts` and `routes/items/index.ts` answer the same path.
-			taken = file.endsWith('/index.ts') ? [] : [file.replace(/\.ts$/, '/index.ts')];
-			hints.push(`export POST, PUT, PATCH or DELETE from ${file} to answer other methods.`);
+			hints.push(`export POST, PUT, PATCH or DELETE from ${routeFile} to answer other methods.`);
 			break;
 		}
 	}
 
-	await writeNewFiles(root, files, taken);
+	// Checked before any file is written, so a failure leaves the plugin as it was.
+	const updated = file ? addToDefinition(file, source, entry) : null;
+
+	await writeNewFiles(root, entry.files, taken);
+
+	if (file && updated !== null) {
+		await writeFile(join(root, file), updated);
+	} else {
+		await writeFile(join(root, PLUGIN_FILE), pluginFileSource([], [entry]));
+	}
 
 	if (changed) {
 		await writeFile(join(root, MANIFEST_FILE), json(manifest));
 	}
 
-	return { created: Object.keys(files), hints, manifestChanged: changed, layout: 'convention' };
+	return {
+		created: [...Object.keys(entry.files), ...(file ? [] : [PLUGIN_FILE])],
+		changed: file ? [file] : [],
+		hints,
+		manifestChanged: changed,
+		layout: 'plugin'
+	};
+}
+
+/**
+ * `source` (a `plugin.ts`) with `entry` added to its record in `definePlugin({ ... })` (which it
+ * creates when the definition has none) and its imports after the last import; a `ProjectError`
+ * when it can't find that call, or the id is taken.
+ */
+export function addToDefinition(
+	file: string,
+	source: string,
+	entry: Pick<PluginEntry, 'key' | 'id' | 'value' | 'imports'>
+): string {
+	const { definition, program } = findDefinition(file, source);
+	const snippet = `${entry.key}: { ${entrySource(entry).replace(/\s*\n\s*/g, ' ')} }`;
+	const hint = `Add it to definePlugin({ ... }) in ${file} by hand: ${entry.imports.join(' ')} ${snippet}`;
+
+	if (!definition) {
+		throw new ProjectError(`${file} has no definePlugin({ ... }) call`, [], hint);
+	}
+
+	const property = (definition.properties as AstNode[]).find(
+		(node) => propertyName(node) === entry.key
+	);
+	let result: string;
+
+	if (!property) {
+		// The record becomes the last property of the definition.
+		const indent = `${indentationAt(source, definition.start)}\t`;
+		const record = `${entry.key}: {\n${indent}\t${indented(entrySource(entry), `${indent}\t`)}\n${indent}}`;
+		const last = (definition.properties as AstNode[]).at(-1);
+
+		result = last
+			? `${source.slice(0, last.end)},\n${indent}${record}${source.slice(last.end)}`
+			: `${source.slice(0, definition.start)}{\n${indent}${record}\n${indentationAt(source, definition.start)}}${source.slice(definition.end)}`;
+	} else {
+		const record = property.value as AstNode;
+
+		if (record.type !== 'ObjectExpression') {
+			throw new ProjectError(`${entry.key} in ${file} is not an object literal`, [], hint);
+		}
+
+		const properties = record.properties as AstNode[];
+
+		if (properties.some((node) => propertyName(node) === entry.id)) {
+			throw new ProjectError(`${entry.key} in ${file} already has ${entry.id}`);
+		}
+
+		const last = properties.at(-1);
+
+		if (last) {
+			const indent = indentationAt(source, last.start);
+
+			result = `${source.slice(0, last.end)},\n${indent}${indented(entrySource(entry), indent)}${source.slice(last.end)}`;
+		} else {
+			const indent = indentationAt(source, property.start);
+
+			result = `${source.slice(0, record.start)}{\n${indent}\t${indented(entrySource(entry), `${indent}\t`)}\n${indent}}${source.slice(record.end)}`;
+		}
+	}
+
+	// The imports come before the definition, so its offsets still hold.
+	const imports = (program.body as AstNode[]).filter((node) => node.type === 'ImportDeclaration');
+	const last = imports.at(-1);
+	const lines = entry.imports.join('\n');
+
+	if (!last) {
+		return `${lines}\n\n${result}`;
+	}
+
+	// A blank line between packages and the plugin's own files, as the templates have it.
+	const ownFiles = String((last.source as AstNode | undefined)?.value ?? '').startsWith('.');
+
+	return `${result.slice(0, last.end)}${ownFiles ? '\n' : '\n\n'}${lines}${result.slice(last.end)}`;
 }
 
 /** The legacy layout: the manifest lists the contribution and points to its files. */
@@ -452,14 +553,17 @@ function indentationAt(source: string, offset: number) {
 }
 
 /**
- * `source` (a `plugin.ts`) with `setting` appended to the settings of its `definePlugin({ ... })`
- * call; a `ProjectError` when it can't find that call, or the key is taken.
+ * The parsed `source` (a `plugin.ts`) and the object literal of its `definePlugin({ ... })` call,
+ * when it has one.
  */
-export function appendSetting(file: string, source: string, setting: SettingTemplate): string {
-	let program: unknown;
+function findDefinition(
+	file: string,
+	source: string
+): { program: AstNode; definition: AstNode | undefined } {
+	let program: AstNode;
 
 	try {
-		program = parseAst(source, { lang: file.endsWith('.ts') ? 'ts' : 'js' }, file);
+		program = parseAst(source, { lang: file.endsWith('.ts') ? 'ts' : 'js' }, file) as never;
 	} catch (error) {
 		throw new ProjectError(`Can't parse ${file}: ${(error as Error).message}`);
 	}
@@ -471,9 +575,22 @@ export function appendSetting(file: string, source: string, setting: SettingTemp
 			(node.callee as AstNode).name === 'definePlugin'
 	);
 	const definition = (call?.arguments as AstNode[] | undefined)?.[0];
+
+	return {
+		program,
+		definition: definition?.type === 'ObjectExpression' ? definition : undefined
+	};
+}
+
+/**
+ * `source` (a `plugin.ts`) with `setting` appended to the settings of its `definePlugin({ ... })`
+ * call; a `ProjectError` when it can't find that call, or the key is taken.
+ */
+export function appendSetting(file: string, source: string, setting: SettingTemplate): string {
+	const { definition } = findDefinition(file, source);
 	const hint = `Add it to definePlugin({ settings: [...] }) in ${file} by hand: ${settingSource(setting, '').replace(/\s*\n\s*/g, ' ')}`;
 
-	if (!definition || definition.type !== 'ObjectExpression') {
+	if (!definition) {
 		throw new ProjectError(`${file} has no definePlugin({ ... }) call`, [], hint);
 	}
 
@@ -581,7 +698,7 @@ async function addSetting(
 
 	if (manifest.settings !== undefined) {
 		throw new ProjectError(
-			`${MANIFEST_FILE} has "settings"; in the convention layout they belong in ${PLUGIN_FILE}`,
+			`${MANIFEST_FILE} has "settings"; they belong in ${PLUGIN_FILE}`,
 			[],
 			`Move them to definePlugin({ settings }) in ${PLUGIN_FILE} and remove "settings" from ${MANIFEST_FILE}.`
 		);
@@ -590,14 +707,7 @@ async function addSetting(
 	const hints = [
 		`set the label${type === 'secret' ? ' and description' : ', description and default'} of ${key} in ${PLUGIN_FILE}; read it with ${read}.`
 	];
-	let existing: string | undefined;
-
-	for (const file of PLUGIN_FILES) {
-		if (await exists(join(root, file))) {
-			existing = file;
-			break;
-		}
-	}
+	const existing = await findPluginFile(root);
 
 	if (!existing) {
 		await writeFile(join(root, PLUGIN_FILE), pluginFileSource([setting]));
@@ -605,7 +715,7 @@ async function addSetting(
 			`make sure "include" in tsconfig.json has ${PLUGIN_FILE}, so its Register block types ctx.settings.`
 		);
 
-		return { created: [PLUGIN_FILE], hints, manifestChanged: false, layout: 'convention' };
+		return { created: [PLUGIN_FILE], hints, manifestChanged: false, layout: 'plugin' };
 	}
 
 	const source = await readFile(join(root, existing), 'utf8');
@@ -617,6 +727,6 @@ async function addSetting(
 		changed: [existing],
 		hints,
 		manifestChanged: false,
-		layout: 'convention'
+		layout: 'plugin'
 	};
 }

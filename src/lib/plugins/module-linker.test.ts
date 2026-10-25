@@ -276,7 +276,7 @@ describe('embeddedModulePath', () => {
 		});
 	});
 
-	it('maps convention folders under ui/', () => {
+	it('maps other files of the plugin under ui/', () => {
 		expect(embeddedModulePath('/plugins/demo/fields/rating/input.svelte')).toEqual({
 			pluginId: 'demo',
 			path: 'ui/fields/rating/input.svelte'

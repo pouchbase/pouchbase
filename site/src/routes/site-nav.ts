@@ -5,7 +5,7 @@ export const GITHUB_URL = 'https://github.com/pouchbase/pouchbase';
 export interface NavLink {
 	label: string;
 	href: string;
-	/** Iconify name, literal so `vite/iconify.ts` can bundle it. */
+	/** Iconify name, literal so the `iconify` Vite plugin can bundle it. */
 	icon?: string;
 	description?: string;
 }

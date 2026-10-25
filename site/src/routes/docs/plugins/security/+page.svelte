@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as Table from '#lib/components/ui/table/index.js';
 	import DocsPage, { type Section } from '../../docs-page.svelte';
@@ -26,6 +27,14 @@
 			limit: 'permissions.network',
 			value:
 				'At most 20 host names, such as api.example.com or *.example.com: no schemes, ports, paths, IP addresses or localhost.'
+		},
+		{
+			limit: 'permissions.collections',
+			value: 'At most 50 collection names (or *) for read and for write.'
+		},
+		{
+			limit: 'Collections',
+			value: '20 per plugin; the name with its prefix at most 63 characters.'
 		},
 		{ limit: 'Categories', value: 'At most 3.' }
 	];
@@ -67,8 +76,14 @@
 			<Code.Root>cloudflare:sockets</Code.Root>, aren't available.
 		</li>
 		<li>
-			<strong>No access to Pouchbase.</strong> The plugin's Worker has no bindings: it can't read the
-			database, storage or Pouchbase's secrets. It only gets the data of each call.
+			<strong>Data only through the records API.</strong> The plugin's Worker has no bindings to the
+			database, the storage or Pouchbase's secrets. <Code.Root>ctx.pouch</Code.Root> reaches the records
+			API with a key of the plugin's own, and only for the plugin's own collections and those in <Code.Root
+				>permissions.collections</Code.Root
+			>, which the admin sees before installing (see
+			<a href={resolve('/docs/plugins/collections')}>Collections</a>). The collections' API rules
+			don't apply to the plugin, so it checks <Code.Root>ctx.user</Code.Root> itself before acting for
+			a user. The key is renewed with every install and update and removed with the plugin.
 		</li>
 		<li>
 			<strong>Settings reach the Worker in plain text</strong>, secrets included, because the plugin

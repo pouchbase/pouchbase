@@ -15,11 +15,13 @@
 		},
 		{
 			command: 'add <field|page|auth-provider|route> <id>',
-			about: 'Create the files of a contribution, never overwriting one.'
+			about:
+				'Create the files of a field type, page, sign-in provider or route, never overwriting one, and add it with its import to definePlugin in plugin.ts.'
 		},
 		{
 			command: 'add setting <key> [--type <type>]',
-			about: 'Add a setting to plugin.ts: text (default), secret, number, boolean or url.'
+			about:
+				'Add a setting to definePlugin in plugin.ts: text (default), secret, number, boolean or url.'
 		},
 		{
 			command: 'dev [--port 4510] [--exact-version]',
@@ -35,7 +37,10 @@
 			command: 'publish [--registry <url>] [--token <token>]',
 			about: 'Build the plugin and upload it to the registry.'
 		},
-		{ command: 'manifest', about: 'Print the full manifest the plugin builds into, as JSON.' },
+		{
+			command: 'manifest',
+			about: 'Print the full manifest the plugin builds into, with what plugin.ts adds, as JSON.'
+		},
 		{ command: 'schema', about: 'Print the JSON Schema of the manifest.' }
 	];
 

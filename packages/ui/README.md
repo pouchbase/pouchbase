@@ -4,6 +4,8 @@ The Svelte 5 UI components of the [Pouchbase](https://pouchbase.io) dashboard: b
 
 Built on [Svelte 5](https://svelte.dev), [bits-ui](https://bits-ui.com), [Iconify](https://iconify.design) and [Tailwind CSS 4](https://tailwindcss.com).
 
+Every component, with a live preview, examples and its props, is documented at [pouchbase.io/docs/ui](https://pouchbase.io/docs/ui).
+
 ## Install
 
 ```bash

@@ -150,6 +150,93 @@ export const authProviderContributionSchema = z.object({
 	icon: imagePath.optional()
 });
 
+/** `posts`, `order_items`: a collection's name, as the host's records API has it. */
+export const COLLECTION_NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
+
+/** Longest collection name a host accepts, the plugin's prefix included. */
+export const MAX_COLLECTION_NAME_LENGTH = 63;
+
+/**
+ * The prefix of the collections a plugin contributes: its id with `_` for `-`, and a `_`
+ * (`plugin-demo` → `plugin_demo_`). It keeps them apart from the app's collections and those of
+ * other plugins.
+ */
+export function pluginCollectionPrefix(pluginId: string): string {
+	return `${pluginId.replaceAll('-', '_')}_`;
+}
+
+/** The host's name of a plugin's collection: `pluginCollectionName('plugin-demo', 'reviews')`. */
+export function pluginCollectionName(pluginId: string, name: string): string {
+	return `${pluginCollectionPrefix(pluginId)}${name}`;
+}
+
+/** The actions of the records API that an API rule covers. */
+export const COLLECTION_RULE_ACTIONS = ['list', 'view', 'create', 'update', 'delete'] as const;
+
+/**
+ * A field of a plugin's collection, in the shape of the schema API (`pouch.schema.create()`): a
+ * built-in type (`text`, `number`, `relation`, ...) or a plugin's `<plugin>:<type>`. The host checks
+ * the type and the options in full when it creates the collection.
+ */
+export const collectionFieldSchema = z.object({
+	name: z.string().min(1).max(63),
+	type: z.string().min(1).max(97),
+	required: z.boolean().default(false),
+	unique: z.boolean().default(false),
+	/** The default value, as the dashboard stores it (a string); `null` for none. */
+	defaultValue: z.string().nullable().default(null),
+	/**
+	 * The field's options, as `FieldOptions` of the JS SDK. A `relation` names the related
+	 * collection with `collection` instead of `collectionId`: one of the plugin's own collections by
+	 * its name in `collections` (`reviews`), else a collection of the app (`posts`).
+	 */
+	options: z.record(z.string(), z.unknown()).default({})
+});
+
+export const collectionIndexSchema = z.object({
+	columns: z.array(z.string().min(1)).min(1),
+	unique: z.boolean().default(false)
+});
+
+/**
+ * A collection the plugin contributes. The host creates it on install as
+ * `pluginCollectionName(plugin, name)` and brings it in line on every update; it keeps fields
+ * that a later version leaves out, and it deletes the collection with its records when the plugin
+ * is removed. The plugin can always read and write its own collections through `ctx.pouch`.
+ */
+export const collectionContributionSchema = z.object({
+	/** Without the prefix: `reviews` becomes `<plugin>_reviews`. */
+	name: z
+		.string()
+		.regex(
+			COLLECTION_NAME_PATTERN,
+			'Start with a letter and use only lowercase letters, numbers and underscores'
+		),
+	/** The fields in display order; `id`, `created_at` and `updated_at` are added when missing. */
+	fields: z.array(collectionFieldSchema).max(200).default([]),
+	indexes: z.array(collectionIndexSchema).max(100).default([]),
+	/**
+	 * API rules for app users, per action: `""` allows everyone, a condition those it matches.
+	 * Missing or `null` is admins only, so only the plugin and the dashboard reach the records.
+	 */
+	rules: z
+		.partialRecord(z.enum(COLLECTION_RULE_ACTIONS), z.string().max(2000).nullable())
+		.default({})
+});
+
+/** A collection in `permissions.collections`: its name, or `*` for every collection. */
+const collectionAccess = z
+	.array(
+		z
+			.string()
+			.refine(
+				(name) => name === '*' || COLLECTION_NAME_PATTERN.test(name),
+				'Must be a collection name or *'
+			)
+	)
+	.max(50)
+	.default([]);
+
 export const permissionsSchema = z.object({
 	/**
 	 * Hosts the server code may reach with `ctx.fetch`, over HTTPS; `*.example.com` allows the
@@ -159,7 +246,16 @@ export const permissionsSchema = z.object({
 	network: z
 		.array(z.string().regex(HOST_PATTERN, 'Must be a host name, e.g. api.example.com'))
 		.max(20)
-		.default([])
+		.default([]),
+	/**
+	 * The app's collections the server code may use through `ctx.pouch`, by name, or `*` for all
+	 * of them. `write` (create, update and delete) includes `read` (list and view). The collections'
+	 * API rules don't apply to the plugin. Its own collections (`contributes.collections`) need no
+	 * entry.
+	 */
+	collections: z
+		.object({ read: collectionAccess, write: collectionAccess })
+		.default({ read: [], write: [] })
 });
 
 /** `api_key`, `region`: a setting's key, as `ctx.settings.get(key)` reads it. */
@@ -220,7 +316,7 @@ export const pluginSettingSchema = z
 
 /**
  * The settings of a plugin: at most `MAX_PLUGIN_SETTINGS`, with unique keys. The manifest carries
- * them; in the convention layout they come from `definePlugin({ settings })` in `plugin.ts`.
+ * them; the CLI fills them in from `definePlugin({ settings })` in `plugin.ts`.
  */
 export const pluginSettingsSchema = z
 	.array(pluginSettingSchema)
@@ -289,11 +385,11 @@ export const manifestSchema = z
 			})
 			.partial()
 			.default({}),
-		permissions: permissionsSchema.default({ network: [] }),
+		permissions: permissionsSchema.default({ network: [], collections: { read: [], write: [] } }),
 		/**
 		 * What an admin can set for the plugin on the Plugins page; the server code reads the values
-		 * with `ctx.settings.get(key)`. Keys are unique. In the convention layout the CLI fills it
-		 * from `definePlugin({ settings })` in `plugin.ts`.
+		 * with `ctx.settings.get(key)`. Keys are unique. The CLI fills it in from
+		 * `definePlugin({ settings })` in `plugin.ts`.
 		 */
 		settings: pluginSettingsSchema.default([]),
 		/** Entry of the server code; it default-exports `definePlugin(...)`. */
@@ -304,12 +400,13 @@ export const manifestSchema = z
 			.object({
 				fields: z.array(fieldContributionSchema).max(20).default([]),
 				pages: z.array(pageContributionSchema).max(20).default([]),
-				authProviders: z.array(authProviderContributionSchema).max(10).default([])
+				authProviders: z.array(authProviderContributionSchema).max(10).default([]),
+				collections: z.array(collectionContributionSchema).max(20).default([])
 			})
-			.default({ fields: [], pages: [], authProviders: [] })
+			.default({ fields: [], pages: [], authProviders: [], collections: [] })
 	})
 	.superRefine((manifest, ctx) => {
-		const { fields, pages, authProviders } = manifest.contributes;
+		const { fields, pages, authProviders, collections } = manifest.contributes;
 
 		manifest.categories.forEach((category, index) => {
 			if (manifest.categories.indexOf(category) !== index) {
@@ -324,7 +421,8 @@ export const manifestSchema = z
 		for (const [key, ids] of [
 			['fields', fields.map((field) => field.type)],
 			['pages', pages.map((page) => page.path)],
-			['authProviders', authProviders.map((provider) => provider.id)]
+			['authProviders', authProviders.map((provider) => provider.id)],
+			['collections', collections.map((collection) => collection.name)]
 		] as const) {
 			ids.forEach((id, index) => {
 				if (ids.indexOf(id) !== index) {
@@ -336,6 +434,18 @@ export const manifestSchema = z
 				}
 			});
 		}
+
+		collections.forEach((collection, index) => {
+			const name = pluginCollectionName(manifest.id, collection.name);
+
+			if (name.length > MAX_COLLECTION_NAME_LENGTH) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['contributes', 'collections', index, 'name'],
+					message: `${name} is longer than ${MAX_COLLECTION_NAME_LENGTH} characters`
+				});
+			}
+		});
 
 		// Sign-in runs on the server: the provider's `profile` function maps the user.
 		if (authProviders.length && !manifest.server) {
@@ -363,6 +473,8 @@ export function previewOf(field: Pick<FieldContribution, 'preview' | 'cell'>) {
 export type PageContribution = z.output<typeof pageContributionSchema>;
 
 export type AuthProviderContribution = z.output<typeof authProviderContributionSchema>;
+
+export type CollectionContribution = z.output<typeof collectionContributionSchema>;
 
 export type PluginPermissions = z.output<typeof permissionsSchema>;
 
@@ -484,17 +596,17 @@ export function withPackageDefaults(
 }
 
 /**
- * Manifest keys that `pouchbase-plugin.json` no longer needs, and where they go now: the
- * convention layout refuses `settings` and reads `contributes` and `server` as the deprecated
+ * Manifest keys that `pouchbase-plugin.json` no longer needs, and where they go now: the CLI
+ * refuses `settings` next to `plugin.ts` and reads `contributes` and `server` as the deprecated
  * legacy layout. They stay in the manifest a bundle has, which the CLI generates.
  */
 export const DEPRECATED_MANIFEST_KEYS = {
 	settings:
-		'Deprecated: settings belong in definePlugin({ settings }) in plugin.ts; the convention layout refuses them here.',
+		'Deprecated: settings belong in definePlugin({ settings }) in plugin.ts; the CLI refuses them here.',
 	contributes:
-		'Deprecated: the legacy layout. Contributions come from the folders fields/, pages/, auth/ and routes/; the CLI fills this in the bundle.',
+		'Deprecated: the legacy layout. Contributions come from definePlugin({ ... }) in plugin.ts; the CLI fills this in the bundle.',
 	server:
-		'Deprecated: the legacy layout. Server code comes from field.ts, provider.ts and routes/; the CLI fills this in the bundle.'
+		'Deprecated: the legacy layout. Server code comes from plugin.ts; the CLI fills this in the bundle.'
 } as const;
 
 /**

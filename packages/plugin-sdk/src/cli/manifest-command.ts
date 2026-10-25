@@ -18,7 +18,7 @@ export async function printManifest(
 
 	log?.warnings(warnings);
 	log?.success(
-		`Generated the manifest of ${bundle.manifest.id}@${bundle.manifest.version} (${project.mode} layout)`
+		`Generated the manifest of ${bundle.manifest.id}@${bundle.manifest.version}${project.mode === 'legacy' ? ' (legacy layout)' : ''}`
 	);
 	write(json(bundle.manifest));
 

@@ -2,6 +2,8 @@
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
 	import * as Table from '#lib/components/ui/table/index.js';
+	import { uiComponentHref } from '#lib/ui-components.js';
+	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import DocsPage, { type Section } from '../../docs-page.svelte';
 
@@ -69,7 +71,8 @@
 	{sections}
 >
 	<p>
-		Pouchbase compiles a plugin's <Code.Root>.svelte</Code.Root> files with its own Svelte compiler when
+		The components a plugin's <Code.Root>plugin.ts</Code.Root> names (inputs, previews and pages), and
+		the files they import, are its UI files. Pouchbase compiles them with its own Svelte compiler when
 		the plugin is installed, and renders them in the dashboard, in the browser only. A component that
 		fails while rendering shows an error in its place instead of breaking the page.
 		<Code.Root>pouchbase-plugin validate</Code.Root> compiles them the same way, so you see compile errors
@@ -104,7 +107,16 @@
 					<Table.Cell class="whitespace-nowrap">{group}</Table.Cell>
 					<Table.Cell>
 						{#each modules as module, index (module)}
-							<Code.Root>{module}</Code.Root>{index < modules.length - 1 ? ', ' : ''}
+							{@const href = uiComponentHref(module)}
+
+							{#if href}
+								<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- built with resolve() -->
+								<a {href}><Code.Root>{module}</Code.Root></a>{index < modules.length - 1
+									? ', '
+									: ''}
+							{:else}
+								<Code.Root>{module}</Code.Root>{index < modules.length - 1 ? ', ' : ''}
+							{/if}
 						{/each}
 					</Table.Cell>
 				</Table.Row>
@@ -116,16 +128,20 @@
 		<li>
 			Nothing else: no other npm packages, no dynamic <Code.Root>import()</Code.Root>. Install
 			<Code.Root>svelte</Code.Root> and <Code.Root>@pouchbasejs/ui</Code.Root> as devDependencies for
-			type checking only (the templates do).
+			type checking only (the templates do). The <a href={resolve('/docs/ui')}>UI components</a>
+			docs show every component of <Code.Root>@pouchbasejs/ui</Code.Root> with a live preview.
 		</li>
 		<li>
 			Import TypeScript files by their <Code.Root>.js</Code.Root> name:
 			<Code.Root>../../lib/colors.js</Code.Root> for <Code.Root>lib/colors.ts</Code.Root>.
 		</li>
 		<li>
-			Server files (<Code.Root>field.ts</Code.Root>, <Code.Root>provider.ts</Code.Root>,
-			<Code.Root>routes/</Code.Root>, <Code.Root>plugin.ts</Code.Root>) can't be imported: move what
-			both need into <Code.Root>lib/</Code.Root>.
+			Server code can't be imported, directly or through another file: <Code.Root
+				>plugin.ts</Code.Root
+			>
+			and every file that imports <Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>, such as
+			<Code.Root>field.ts</Code.Root>. Move what both need into a shared file, such as
+			<Code.Root>lib/</Code.Root>.
 		</li>
 		<li>
 			Only JavaScript is linked: inline JSON data in a <Code.Root>.ts</Code.Root> module and SVG markup
@@ -152,10 +168,17 @@
 	<p>
 		Field types and pages get an icon in the dashboard, drawn like its built-in icons: in the text
 		color, at 16 pixels. Only the shape counts, so monochrome icons work best. Without one, they
-		show a puzzle piece.
+		show a puzzle piece. The logo of a <a href={resolve('/docs/plugins/sign-in-providers')}
+			>sign-in provider</a
+		> keeps its colors.
 	</p>
 
-	<CodeBlock.Root title="fields/*/field.ts">
+	<p>
+		<Code.Root>icon</Code.Root> in <Code.Root>defineField</Code.Root>, a page or
+		<Code.Root>defineAuthProvider</Code.Root> is one of two things:
+	</p>
+
+	<CodeBlock.Root title="plugin.ts">
 		<CodeBlock.Source code={data.code.icons} />
 	</CodeBlock.Root>
 
@@ -167,11 +190,8 @@
 			install <Code.Root>@iconify-json/&lt;set&gt;</Code.Root>.
 		</li>
 		<li>
-			A path is an <Code.Root>.svg</Code.Root> file of the plugin, relative to the file that names it.
-			Without <Code.Root>icon</Code.Root>, the CLI uses <Code.Root
-				>fields/&lt;type&gt;/icon.svg</Code.Root
-			>
-			or <Code.Root>pages/&lt;path&gt;.svg</Code.Root> when there is one.
+			An <Code.Root>.svg</Code.Root> file of the plugin, imported like a module:
+			<Code.Root>import icon from './icon.svg'</Code.Root>. A path as a string isn't accepted.
 		</li>
 		<li>
 			Icons are plain SVG of at most 32 KiB: no scripts, event handlers or external references.
@@ -181,7 +201,10 @@
 	<h3>Icons inside a component</h3>
 
 	<p>
-		Use <Code.Root>Icon.Root</Code.Root> from <Code.Root>@pouchbasejs/ui/icon</Code.Root> with
+		Use <a href={resolve('/docs/ui/[component]', { component: 'icon' })}
+			><Code.Root>Icon.Root</Code.Root></a
+		>
+		from <Code.Root>@pouchbasejs/ui/icon</Code.Root> with
 		<Code.Root>src</Code.Root>: a <Code.Root>data:</Code.Root> URL, or an icon of one of the plugin's
 		field types or pages, which Pouchbase serves. Avoid <Code.Root>icon="lucide:…"</Code.Root>:
 		names the dashboard doesn't bundle itself are fetched from the Iconify API, so they show late,

@@ -139,7 +139,13 @@ function toVersion(
 		size: row.size,
 		bundleUrl: bundleUrl(origin, slug, row.version),
 		pouchbase: row.pouchbase || null,
-		permissions: { network: row.permissions?.network ?? [] },
+		permissions: {
+			network: row.permissions?.network ?? [],
+			collections: {
+				read: row.permissions?.collections?.read ?? [],
+				write: row.permissions?.collections?.write ?? []
+			}
+		},
 		...(contributes ? { contributes } : {}),
 		publishedAt: iso(row.created_at)
 	};

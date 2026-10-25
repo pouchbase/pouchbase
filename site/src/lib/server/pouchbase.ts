@@ -57,7 +57,8 @@ export type PluginVersionRecord = {
 	size: number;
 	/** `engines.pouchbase` of the manifest. */
 	pouchbase: string | null;
-	permissions: { network: string[] };
+	/** `collections` is missing for versions published before plugins had it. */
+	permissions: { network: string[]; collections?: { read: string[]; write: string[] } };
 	/** The bundle as published (JSON text), served byte for byte. */
 	bundle: string;
 	created_at: string;

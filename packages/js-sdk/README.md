@@ -23,7 +23,7 @@ const pouch = createClient<Schema>('https://pouchbase.example.com', {
 });
 
 try {
-	await pouch.auth.signIn('ada@example.com', 'correct horse battery staple');
+	await pouch.auth.login('ada@example.com', 'correct horse battery staple');
 } catch (error) {
 	if (isPouchbaseError(error, 'unauthorized')) {
 		// Wrong email or password.
@@ -36,22 +36,22 @@ const { items } = await pouch.db.posts.findMany({ where: { status: 'published' }
 
 ### Auth
 
-| Method                                         | Request                                  |
-| ---------------------------------------------- | ---------------------------------------- |
-| `pouch.auth.providers()`                       | `GET /api/auth/providers`                |
-| `pouch.auth.signUp({ name, email, password })` | `POST /api/auth/password/sign-up`        |
-| `pouch.auth.signIn(email, password)`           | `POST /api/auth/password/sign-in`        |
-| `pouch.auth.signInWithOAuth(provider)`         | OAuth popup with PKCE, then polls        |
-| `pouch.auth.me()`                              | `GET /api/auth/me`                       |
-| `pouch.auth.signOut()`                         | Ends the session                         |
-| `pouch.auth.sendPasswordReset(email)`          | `POST /api/auth/password/forgot`         |
-| `pouch.auth.resetPassword(token, password)`    | `POST /api/auth/password/reset`          |
-| `pouch.auth.sendVerification(email)`           | `POST /api/auth/email/send-verification` |
-| `pouch.auth.verifyEmail(token)`                | `POST /api/auth/email/verify`            |
+| Method                                           | Request                                  |
+| ------------------------------------------------ | ---------------------------------------- |
+| `pouch.auth.providers()`                         | `GET /api/auth/providers`                |
+| `pouch.auth.register({ name, email, password })` | `POST /api/auth/password/register`       |
+| `pouch.auth.login(email, password)`              | `POST /api/auth/password/login`          |
+| `pouch.auth.oauth(provider)`                     | OAuth popup with PKCE, then polls        |
+| `pouch.auth.me()`                                | `GET /api/auth/me`                       |
+| `pouch.auth.logout()`                            | Ends the session                         |
+| `pouch.auth.sendPasswordReset(email)`            | `POST /api/auth/password/forgot`         |
+| `pouch.auth.resetPassword(token, password)`      | `POST /api/auth/password/reset`          |
+| `pouch.auth.sendVerification(email)`             | `POST /api/auth/email/send-verification` |
+| `pouch.auth.verifyEmail(token)`                  | `POST /api/auth/email/verify`            |
 
 ### Session
 
-Sign-ins begin a session in `pouch.session`, whose token is sent as `Authorization: Bearer <token>` on later requests; `pouch.auth.signOut()` ends it.
+Sign-ins begin a session in `pouch.session`, whose token is sent as `Authorization: Bearer <token>` on later requests; `pouch.auth.logout()` ends it.
 
 ```ts
 pouch.session.signedIn; // a token that hasn't expired (the server can still reject it)
@@ -59,7 +59,7 @@ pouch.session.userId; // string | null
 pouch.session.user; // from the last pouch.auth.me(), or null
 pouch.session.expiresAt; // Date | null
 
-const stop = pouch.session.watch(
+const unsubscribe = pouch.session.subscribe(
 	(session) => {
 		// { token, userId, user }, or null once the session ended
 	},
@@ -81,12 +81,12 @@ const pouch = createClient<Schema>(url, {
 
 ### OAuth
 
-Call `signInWithOAuth` directly from a click handler, so the browser allows the popup:
+Call `oauth` directly from a click handler, so the browser allows the popup:
 
 ```ts
 button.addEventListener('click', async () => {
 	try {
-		await pouch.auth.signInWithOAuth('github');
+		await pouch.auth.oauth('github');
 	} catch (error) {
 		// error.code: access_denied, email_in_use, sign_in_failed, popup_blocked, popup_closed or timeout
 	}
@@ -99,7 +99,7 @@ Sign-in providers come from plugins: Google, GitHub, Microsoft, Discord and Twit
 
 ```ts
 for (const { provider, label, iconUrl } of await pouch.auth.providers()) {
-	renderButton({ label, iconUrl, onclick: () => pouch.auth.signInWithOAuth(provider) });
+	renderButton({ label, iconUrl, onclick: () => pouch.auth.oauth(provider) });
 }
 ```
 
@@ -176,12 +176,12 @@ if (!result.ok) {
 
 What a caller may do depends on the collection's API rules in the Pouchbase admin: a locked rule fails with `forbidden`, and records a rule doesn't match are left out of lists and are "not found" otherwise (`null` from `find()`, `not_found` from `patch()` and `remove()`). The **API** panel of a collection shows these calls for its fields. Collections that aren't in your schema are reached with `pouch.db.$collection('name')`.
 
-### Live updates
+### Realtime
 
-Follow changes to records as they are saved, over a WebSocket. You get every create, update and delete that the collection's view rule lets you see:
+Subscribe to changes to records as they are saved, over a WebSocket. You get every create, update and delete that the collection's view rule lets you see:
 
 ```ts
-const watching = pouch.db.posts.watch(
+const subscription = pouch.db.posts.subscribe(
 	(event) => {
 		event.action; // 'create' | 'update' | 'delete'
 		event.record; // typed by `select`; for a delete, the record as it was
@@ -189,13 +189,13 @@ const watching = pouch.db.posts.watch(
 	{ where: { status: 'published' }, select: ['id', 'title'] }
 );
 
-await watching.ready; // rejects with `forbidden`, `not_found` or `invalid`
-watching.stop();
+await subscription.ready; // rejects with `forbidden`, `not_found` or `invalid`
+subscription.unsubscribe();
 ```
 
-Pass `id` to follow one record: `pouch.db.posts.watch(callback, { id })`, and `include` to get related records instead of ids, as with `find()`: `{ include: { author: true } }`. Without the schema, use `pouch.live.watch('posts', callback)` or `pouch.live.watch('posts/<id>', callback)`.
+Pass `id` to subscribe to one record: `pouch.db.posts.subscribe(callback, { id })`, and `include` to get related records instead of ids, as with `find()`: `{ include: { author: true } }`. Without the schema, use `pouch.realtime.subscribe('posts', callback)` or `pouch.realtime.subscribe('posts/<id>', callback)`.
 
-There is one connection per collection (`/api/live`). It opens with the first `watch()` and closes after the last one stops. It reconnects by itself, and when `pouch.session` changes it reconnects as the new user. `onError` in the options reports watching that fails later, for example when the rule changed. `pouch.live.onState()` reports the connection state, e.g. for a "live" indicator.
+There is one connection per collection (`/api/realtime`). It opens with the first `subscribe()` and closes after the last `unsubscribe()`. It reconnects by itself, and when `pouch.session` changes it reconnects as the new user. `onError` in the options reports a subscription that fails later, for example when the rule changed. `pouch.realtime.onState()` reports the connection state, e.g. for a connection indicator.
 
 `globalThis.WebSocket` is used by default (browsers, Node 22 and later, Deno, Bun, Workers). Elsewhere pass one: `new Pouchbase(url, { webSocket: WebSocket })`, for example from the `ws` package.
 

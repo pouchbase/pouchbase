@@ -7,11 +7,13 @@ import type {
 	PluginRuntime
 } from './runtime';
 
+import jsSdkCode from 'virtual:pouchbase/js-sdk-module';
+
 import { CALL_TIMEOUT, EMPTY_CALL_CONTEXT, PluginCallError, routeRequestHeaders } from './runtime';
 
 /**
  * The Worker of an installed plugin with server code: one per plugin, on the Cloudflare account,
- * deployed with the Script Upload API like the functions (`<instance>-plugin-<id>`). It has three
+ * deployed with the Script Upload API like the functions (`<instance>-plugin-<id>`). It has four
  * modules:
  *
  * - `ENTRY_MODULE`, the main module: answers `POST /__call` and `/__route/<path>` (any method,
@@ -19,9 +21,13 @@ import { CALL_TIMEOUT, EMPTY_CALL_CONTEXT, PluginCallError, routeRequestHeaders 
  *   and 404 to everything else;
  * - `GUARD_MODULE`, imported first so it runs before any plugin code: replaces `globalThis.fetch`
  *   (and `WebSocket`) with versions limited to `permissions.network`;
+ * - `SDK_MODULE`: the JS SDK of this Pouchbase (`vite/js-sdk-module.ts`), for `ctx.pouch`;
  * - `PLUGIN_MODULE`: the plugin's bundled `server.js`.
  *
- * The plugin gets no `env`: the Worker's only binding is the secret. A call is
+ * The Worker's bindings are the secret (`POUCHBASE_PLUGIN_SECRET`), the URL of Pouchbase
+ * (`POUCHBASE_URL`) and the plugin's API key (`POUCHBASE_API_KEY`, scope `plugin`). The plugin
+ * gets no `env`: the entry code builds `ctx.pouch` from the URL and the key, with a `fetch` that
+ * only reaches that origin, and the records API decides what the key may do. A call is
  * `{ call, context }` as JSON; the answer is `{ ok: true, value }` or `{ ok: false, error }`.
  * Bytes (`Uint8Array`, e.g. a BLOB field value) travel as `{ [BYTES_KEY]: <base64> }` both ways.
  *
@@ -33,12 +39,14 @@ import { CALL_TIMEOUT, EMPTY_CALL_CONTEXT, PluginCallError, routeRequestHeaders 
  * `ERROR_HEADER`.
  *
  * The allowlist covers `fetch` and `WebSocket`, the APIs plugin code is meant to use. It is not a
- * full sandbox (e.g. `cloudflare:sockets` is not covered): what keeps a plugin away from Pouchbase
- * is that its Worker has no bindings and Pouchbase only sends it the call's own data.
+ * full sandbox (e.g. `cloudflare:sockets` is not covered): what keeps a plugin away from Pouchbase's
+ * data is that its Worker has no bindings to the database, the storage or the secrets, its API key
+ * only reaches the collections it may use, and Pouchbase only sends it the call's own data.
  */
 
 export const ENTRY_MODULE = 'pouchbase.js';
 export const GUARD_MODULE = 'pouchbase-guard.js';
+export const SDK_MODULE = 'pouchbase-sdk.js';
 export const PLUGIN_MODULE = 'plugin.js';
 
 /** Request header with the plugin's secret, from Pouchbase to the Worker. */
@@ -183,6 +191,23 @@ export function restrictedFetch(input, init) {
 	}
 }
 
+// The fetch of ctx.pouch: only the origin of Pouchbase, which permissions.network doesn't cover.
+export function originFetch(origin) {
+	return (input, init) => {
+		try {
+			const request = new Request(input, init);
+
+			if (new URL(request.url).origin !== origin) {
+				return Promise.reject(new TypeError('ctx.pouch only reaches ' + origin));
+			}
+
+			return upstreamFetch(new Request(request, { redirect: 'manual' }));
+		} catch (error) {
+			return Promise.reject(error);
+		}
+	};
+}
+
 function replace(name, value) {
 	Object.defineProperty(globalThis, name, {
 		value,
@@ -236,7 +261,8 @@ export function entryCode(
 		...(fallback === undefined ? {} : { default: fallback })
 	}));
 
-	return `import { restrictedFetch } from './${GUARD_MODULE}';
+	return `import { originFetch, restrictedFetch } from './${GUARD_MODULE}';
+import { Pouchbase } from './${SDK_MODULE}';
 import definition from './${PLUGIN_MODULE}';
 
 const PLUGIN = Object.freeze(${JSON.stringify({ id: manifest.id, version: manifest.version })});
@@ -310,7 +336,33 @@ function settingValues(values) {
 	);
 }
 
-function context(input, route = {}) {
+let client = null;
+
+// ctx.pouch: the JS SDK with the plugin's key; one per isolate. Without the bindings (a Worker
+// deployed before plugins had them), every request fails until the plugin is updated.
+function pouch(env) {
+	if (!client) {
+		let origin = null;
+
+		try {
+			origin = new URL(env?.POUCHBASE_URL ?? '').origin;
+		} catch {}
+
+		client =
+			origin && env?.POUCHBASE_API_KEY
+				? new Pouchbase(origin, {
+						fetch: originFetch(origin),
+						headers: { authorization: 'Bearer ' + env.POUCHBASE_API_KEY }
+					})
+				: new Pouchbase('https://pouchbase.invalid', {
+						fetch: () => Promise.reject(new Error('ctx.pouch is not set up: update the plugin in Pouchbase'))
+					});
+	}
+
+	return client;
+}
+
+function context(input, route = {}, env = {}) {
 	const values = input && typeof input.settings === 'object' && input.settings ? input.settings : {};
 
 	return {
@@ -326,7 +378,8 @@ function context(input, route = {}) {
 		},
 		log: { info: log('info'), warn: log('warn'), error: log('error') },
 		admin: route.admin === true,
-		user: route.user && typeof route.user === 'object' ? route.user : null
+		user: route.user && typeof route.user === 'object' ? route.user : null,
+		pouch: pouch(env)
 	};
 }
 
@@ -520,7 +573,7 @@ function isHiddenRequestHeader(name) {
 	return lower === 'cookie' || lower === 'host' || lower.startsWith('x-pouchbase-plugin-');
 }
 
-async function route(request) {
+async function route(request, env) {
 	let input;
 
 	try {
@@ -560,7 +613,7 @@ async function route(request) {
 	}
 
 	try {
-		const response = await match.handler(original, { ...context(input, input ?? {}), params: match.params });
+		const response = await match.handler(original, { ...context(input, input ?? {}, env), params: match.params });
 
 		if (!(response instanceof Response)) {
 			throw new Error('The route handler did not return a Response');
@@ -587,7 +640,7 @@ export default {
 				return new Response('Not found', { status: 404 });
 			}
 
-			return route(request);
+			return route(request, env);
 		}
 
 		if (request.method !== 'POST' || pathname !== '${CALL_PATH}') {
@@ -603,7 +656,7 @@ export default {
 		}
 
 		try {
-			const value = await dispatch(body?.call, context(body?.context));
+			const value = await dispatch(body?.call, context(body?.context, {}, env));
 
 			return json({ ok: true, value: value ?? null });
 		} catch (error) {
@@ -616,13 +669,15 @@ export default {
 
 /** The modules of a plugin's Worker, for `functions.deploy`. */
 export function workerModules(
-	manifest: Pick<PluginManifest, 'id' | 'version' | 'permissions'> &
-		Partial<Pick<PluginManifest, 'settings'>>,
+	manifest: Pick<PluginManifest, 'id' | 'version'> & {
+		permissions: Pick<PluginManifest['permissions'], 'network'>;
+	} & Partial<Pick<PluginManifest, 'settings'>>,
 	server: string
 ) {
 	return [
 		{ name: ENTRY_MODULE, content: entryCode(manifest) },
 		{ name: GUARD_MODULE, content: guardCode(manifest.permissions.network) },
+		{ name: SDK_MODULE, content: jsSdkCode },
 		{ name: PLUGIN_MODULE, content: server }
 	];
 }

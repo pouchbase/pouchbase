@@ -4,12 +4,13 @@
 		"module": "ESNext",
 		"moduleResolution": "Bundler",
 		"lib": ["ES2022", "DOM"],
-		"types": [],
+		"types": ["svelte", "@pouchbasejs/plugin-sdk/env"],
 		"strict": true,
 		"verbatimModuleSyntax": true,
 		"skipLibCheck": true,
 		"noEmit": true,
 		"resolveJsonModule": true
 	},
-	"include": ["plugin.ts", "fields", "lib", "pages", "routes", "test", "components"]
+	"include": ["**/*.ts", "**/*.svelte"],
+	"exclude": ["node_modules", "dist"]
 }

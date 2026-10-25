@@ -13,10 +13,15 @@ import { Service } from './base.service';
  * app user can't, such as `/api/mail/send`. Keys are sent as `Authorization: Bearer pbk_…`.
  * Admins create keys on the API keys page; every deployed function gets a key of its own as
  * `POUCHBASE_API_KEY`, renewed on each deploy. A key with the `service` scope also uses the
- * records API as an admin: the collections' API rules don't apply to it.
+ * records API as an admin: the collections' API rules don't apply to it. The Worker of an
+ * installed plugin has a key with the `plugin` scope, also renewed on each deploy, which only
+ * reaches the records API of the collections the plugin may use; those keys aren't listed.
  */
 
-/** `standard`: the server-only endpoints; `service`: those and the records API without API rules. */
+/**
+ * `standard`: the server-only endpoints; `service`: those and the records API without API rules;
+ * `plugin`: the records API of a plugin's collections (see `PluginsService.grant`).
+ */
 export type ApiKeyScope = (typeof apiKeys.$inferSelect)['scope'];
 
 /** An API key as the API keys page lists it; the key itself is only shown once. */
@@ -28,6 +33,8 @@ export type ApiKey = {
 	scope: ApiKeyScope;
 	/** Set for the key of a function. */
 	functionName: string | null;
+	/** Set for the key of a plugin. */
+	pluginId: string | null;
 	createdAt: Date;
 	lastUsedAt: Date | null;
 };
@@ -44,6 +51,7 @@ const COLUMNS = {
 	prefix: apiKeys.prefix,
 	scope: apiKeys.scope,
 	functionName: functions.name,
+	pluginId: apiKeys.pluginId,
 	createdAt: apiKeys.createdAt,
 	lastUsedAt: apiKeys.lastUsedAt
 };
@@ -51,6 +59,7 @@ const COLUMNS = {
 type QueryFailed = ServiceError<23000, 'API_KEYS_QUERY_FAILED'>;
 type KeyNotFound = ServiceError<23001, 'API_KEY_NOT_FOUND'>;
 type FunctionKey = ServiceError<23002, 'FUNCTION_KEY'>;
+type PluginKey = ServiceError<23003, 'PLUGIN_KEY'>;
 
 function newKey() {
 	const key = `${API_KEY_PREFIX}${generateToken()}`;
@@ -59,13 +68,14 @@ function newKey() {
 }
 
 export class ApiKeysService extends Service {
-	/** Every key, newest first; the keys of functions too. */
+	/** Every key, newest first; the keys of functions too, not those of plugins. */
 	list(): ResultAsync<ApiKey[], QueryFailed> {
 		return fromPromise(
 			this.db
 				.select(COLUMNS)
 				.from(apiKeys)
 				.leftJoin(functions, eq(functions.id, apiKeys.functionId))
+				.where(ne(apiKeys.scope, 'plugin'))
 				.orderBy(desc(apiKeys.createdAt)),
 			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
 		);
@@ -88,6 +98,7 @@ export class ApiKeysService extends Service {
 					prefix: row.prefix,
 					scope: row.scope,
 					functionName: null,
+					pluginId: null,
 					createdAt: row.createdAt,
 					lastUsedAt: row.lastUsedAt,
 					key
@@ -97,15 +108,22 @@ export class ApiKeysService extends Service {
 		);
 	}
 
-	/** Deletes a key; the key of a function goes with the function. */
-	delete(id: string): ResultAsync<void, QueryFailed | KeyNotFound | FunctionKey> {
+	/** Deletes a key; the key of a function or a plugin goes with it. */
+	delete(id: string): ResultAsync<void, QueryFailed | KeyNotFound | FunctionKey | PluginKey> {
 		return fromPromise(
-			this.db.select({ functionId: apiKeys.functionId }).from(apiKeys).where(eq(apiKeys.id, id)),
+			this.db
+				.select({ functionId: apiKeys.functionId, pluginId: apiKeys.pluginId })
+				.from(apiKeys)
+				.where(eq(apiKeys.id, id)),
 			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
 		)
 			.andThen(([row]) => {
 				if (!row) {
 					return errAsync(this.error(23001, 'API_KEY_NOT_FOUND'));
+				}
+
+				if (row.pluginId) {
+					return errAsync(this.error(23003, 'PLUGIN_KEY'));
 				}
 
 				return row.functionId ? errAsync(this.error(23002, 'FUNCTION_KEY')) : okAsync(undefined);
@@ -186,6 +204,48 @@ export class ApiKeysService extends Service {
 
 	deleteFunctionKey(id: string): ResultAsync<void, QueryFailed> {
 		return fromPromise(this.db.delete(apiKeys).where(eq(apiKeys.id, id)), (error) =>
+			this.error(23000, 'API_KEYS_QUERY_FAILED', error)
+		).map(() => undefined);
+	}
+
+	/**
+	 * A new key for a plugin's Worker, for its next deploy. Once that deploy succeeds,
+	 * `keepPluginKey` removes the plugin's older keys; when it fails, `deleteFunctionKey` removes
+	 * the new one.
+	 */
+	issuePluginKey(pluginId: string): ResultAsync<{ id: string; key: string }, QueryFailed> {
+		const { key, prefix } = newKey();
+
+		return fromPromise(
+			(async () => {
+				const [row] = await this.db
+					.insert(apiKeys)
+					.values({
+						name: `Plugin ${pluginId}`,
+						prefix,
+						scope: 'plugin',
+						keyHash: await hashToken(key),
+						pluginId
+					})
+					.returning({ id: apiKeys.id });
+
+				return { id: row.id, key };
+			})(),
+			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
+		);
+	}
+
+	/** Removes the plugin's keys other than this one (the key of the Worker that runs). */
+	keepPluginKey(pluginId: string, id: string): ResultAsync<void, QueryFailed> {
+		return fromPromise(
+			this.db.delete(apiKeys).where(and(eq(apiKeys.pluginId, pluginId), ne(apiKeys.id, id))),
+			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
+		).map(() => undefined);
+	}
+
+	/** Removes every key of the plugin, e.g. when it is removed. */
+	deletePluginKeys(pluginId: string): ResultAsync<void, QueryFailed> {
+		return fromPromise(this.db.delete(apiKeys).where(eq(apiKeys.pluginId, pluginId)), (error) =>
 			this.error(23000, 'API_KEYS_QUERY_FAILED', error)
 		).map(() => undefined);
 	}

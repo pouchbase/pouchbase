@@ -23,25 +23,26 @@
 	{sections}
 >
 	<p>
-		A field type is a folder in <Code.Root>fields/</Code.Root>, such as
-		<Code.Root>fields/color/</Code.Root> for the type <Code.Root>&lt;plugin&gt;:color</Code.Root>:
+		A field type is a <Code.Root>defineField(...)</Code.Root> in <Code.Root>fields</Code.Root> of
+		<Code.Root>definePlugin</Code.Root>; its key is the type, so <Code.Root>color</Code.Root> is
+		<Code.Root>&lt;plugin&gt;:color</Code.Root>:
 	</p>
 
-	<ul>
-		<li><Code.Root>field.ts</Code.Root>: the label, the column type and the server hooks.</li>
-		<li><Code.Root>input.svelte</Code.Root> (required): edits the value in the record form.</li>
-		<li><Code.Root>preview.svelte</Code.Root> (optional): shows the value in the records grid.</li>
-		<li>
-			<Code.Root>icon.svg</Code.Root> (optional): the type's icon, unless <Code.Root
-				>field.ts</Code.Root
-			>
-			names one (see <a href="{resolve('/docs/plugins/components')}#icons">Icons</a>).
-		</li>
-	</ul>
+	<CodeBlock.Root title="plugin.ts">
+		<CodeBlock.Source code={data.code.fieldPlugin} />
+	</CodeBlock.Root>
+
+	<p>
+		The templates keep each type in a folder of its own, such as <Code.Root>fields/color/</Code.Root
+		>, but any file works.
+	</p>
 
 	<h2 id="the-server-side">The server side</h2>
 
-	<p><Code.Root>field.ts</Code.Root> default-exports <Code.Root>defineField(...)</Code.Root>:</p>
+	<p>
+		<Code.Root>field.ts</Code.Root> default-exports <Code.Root>defineField(...)</Code.Root>, which
+		names the components it imports:
+	</p>
 
 	<CodeBlock.Root title="fields/color/field.ts">
 		<CodeBlock.Source code={data.code.field} />
@@ -49,9 +50,19 @@
 
 	<ul>
 		<li>
+			<Code.Root>label</Code.Root> and <Code.Root>description</Code.Root> are shown when an admin picks
+			a type.
+		</li>
+		<li>
 			<Code.Root>column</Code.Root> is the SQLite column type: <Code.Root>TEXT</Code.Root>,
 			<Code.Root>INTEGER</Code.Root>, <Code.Root>REAL</Code.Root> or <Code.Root>BLOB</Code.Root>. It
 			is fixed when a field is created; changing it later only affects new fields.
+		</li>
+		<li>
+			<Code.Root>input</Code.Root> (required) and <Code.Root>preview</Code.Root> (optional) are Svelte
+			components, imported like modules; <Code.Root>icon</Code.Root> is an Iconify name or an imported
+			<Code.Root>.svg</Code.Root> file (see
+			<a href="{resolve('/docs/plugins/components')}#icons">Icons</a>).
 		</li>
 		<li>
 			<Code.Root>validate(value, options, ctx)</Code.Root> checks a value before it is saved. Values from
@@ -67,9 +78,9 @@
 			<Code.Root>serialize</Code.Root> too.
 		</li>
 		<li>
-			The CLI reads <Code.Root>label</Code.Root>, <Code.Root>description</Code.Root>,
-			<Code.Root>column</Code.Root> and <Code.Root>icon</Code.Root> by running the file in Node.js, so
-			keep its top level free of anything only a Worker has. The hooks run in the plugin's
+			The CLI reads the label, description, column, components and icon by running
+			<Code.Root>plugin.ts</Code.Root> in Node.js, so keep the top level of
+			<Code.Root>field.ts</Code.Root> free of anything only a Worker has. The hooks run in the plugin's
 			<a href="{resolve('/docs/plugins/routes')}#server-code">Worker</a>.
 		</li>
 	</ul>
@@ -77,8 +88,8 @@
 	<h2 id="the-input">The input</h2>
 
 	<p>
-		<Code.Root>input.svelte</Code.Root> gets <Code.Root>FieldInputProps</Code.Root> and must submit the
-		value with a form control named <Code.Root>name</Code.Root>. Use a hidden
+		The <Code.Root>input</Code.Root> component gets <Code.Root>FieldInputProps</Code.Root> and must submit
+		the value with a form control named <Code.Root>name</Code.Root>. Use a hidden
 		<Code.Root>&lt;input&gt;</Code.Root> when something else edits it:
 	</p>
 
@@ -86,10 +97,16 @@
 		<CodeBlock.Source code={data.code.fieldInput} />
 	</CodeBlock.Root>
 
+	<p>
+		<a href={resolve('/docs/ui/[component]', { component: 'input' })}>Input</a> comes from
+		<Code.Root>@pouchbasejs/ui</Code.Root>, so the input looks like the dashboard's own; see
+		<a href={resolve('/docs/ui')}>UI components</a> for the others.
+	</p>
+
 	<h2 id="the-preview">The preview</h2>
 
 	<p>
-		<Code.Root>preview.svelte</Code.Root> shows the value, read-only, in the records grid. It gets
+		The <Code.Root>preview</Code.Root> component shows the value, read-only, in the records grid. It gets
 		<Code.Root>FieldPreviewProps</Code.Root>; without one, the grid shows the value as text.
 	</p>
 

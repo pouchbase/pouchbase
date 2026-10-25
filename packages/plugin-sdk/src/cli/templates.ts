@@ -177,19 +177,77 @@ export default definePlugin({
 `;
 }
 
-/** `my-sso` → `mySso`. */
-function camelCase(id: string) {
-	return id.replace(/-([a-z0-9])/g, (_, char: string) => char.toUpperCase());
-}
-
 /** `acme` → `acme`, `my-sso` → `'my-sso'`. */
 export function objectKey(id: string) {
 	return /^[a-z_$][\w$]*$/i.test(id) ? id : `'${id}'`;
 }
 
-// Convention layout
+// plugin.ts and the files it imports
 
-/** The input of a field type in the convention layout, `fields/<type>/input.svelte`. */
+/** The file that default-exports `definePlugin({ ... })`. */
+export const PLUGIN_FILE = 'plugin.ts';
+
+/** Words that can't name an import. */
+const RESERVED_WORDS = new Set(
+	'arguments await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield'.split(
+		' '
+	)
+);
+
+/** `my-sso`, `rich_color`, `reports/monthly` → `mySso`, `richColor`, `reportsMonthly`. */
+export function camelCase(id: string) {
+	const name = id
+		.replace(/^[^a-z0-9]+/i, '')
+		.replace(/[^a-z0-9]+([a-z0-9])/gi, (_, char: string) => char.toUpperCase())
+		.replace(/[^a-z0-9]/gi, '');
+
+	return /^[0-9]/.test(name) ? `_${name}` : name;
+}
+
+/** `stats`, `reports/monthly` → `Stats`, `ReportsMonthly`: the name of a component. */
+export function pascalCase(id: string) {
+	const name = camelCase(id).replace(/^_/, '');
+
+	return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/**
+ * A name for an import: `name`, else `name` with `suffix`, else with a number, whichever `taken`
+ * doesn't refuse and isn't a reserved word.
+ */
+export function freeName(name: string, suffix: string, taken: (name: string) => boolean) {
+	const candidates = [name, `${name}${suffix}`];
+
+	for (let index = 2; ; index++) {
+		const candidate = candidates.shift() ?? `${name}${suffix}${index}`;
+
+		if (candidate && !RESERVED_WORDS.has(candidate) && !taken(candidate)) {
+			return candidate;
+		}
+	}
+}
+
+/**
+ * A contribution to add to `definePlugin({ ... })`: the files it lives in, the entry of its record
+ * and the imports that entry needs.
+ */
+export type PluginEntry = {
+	key: 'fields' | 'pages' | 'authProviders' | 'routes';
+	/** Its id: the key in the record. */
+	id: string;
+	/** The value's source, e.g. `color` or `{ title: 'Stats', component: Stats }`. */
+	value: string;
+	/** Import statements of `plugin.ts`, e.g. `import color from './fields/color/field.js';`. */
+	imports: string[];
+	files: Files;
+};
+
+/** `color` → `color`, `{ ... }` → `'my-page': { ... }`: an entry of a record. */
+export function entrySource(entry: Pick<PluginEntry, 'id' | 'value'>) {
+	return entry.value === entry.id ? entry.id : `${objectKey(entry.id)}: ${entry.value}`;
+}
+
+/** The input of a field type, `input.svelte`. */
 const TEXT_INPUT = `<script lang="ts">
 	import type { FieldInputProps } from '@pouchbasejs/plugin-sdk/ui';
 
@@ -207,10 +265,7 @@ const TEXT_INPUT = `<script lang="ts">
 />
 `;
 
-/**
- * The preview of a field type in the convention layout, `fields/<type>/preview.svelte`: shows the
- * value, read-only, in the records grid.
- */
+/** The preview of a field type, `preview.svelte`: shows the value, read-only, in the records grid. */
 const TEXT_PREVIEW = `<script lang="ts">
 	import type { FieldPreviewProps } from '@pouchbasejs/plugin-sdk/ui';
 
@@ -220,22 +275,33 @@ const TEXT_PREVIEW = `<script lang="ts">
 {value ?? ''}
 `;
 
-/** `fields/<type>/{field.ts,input.svelte,preview.svelte}`: a text field type. */
-export function conventionFieldFiles(type: string): Files {
+/** A text field type in `fields/<type>/`, `name` the import in `plugin.ts`. */
+export function fieldEntry(type: string, name: string): PluginEntry {
 	const dir = `fields/${type}`;
 
 	return {
-		[`${dir}/field.ts`]: `import { defineField } from '@pouchbasejs/plugin-sdk/server';
+		key: 'fields',
+		id: type,
+		value: name,
+		imports: [`import ${name} from './${dir}/field.js';`],
+		files: {
+			[`${dir}/field.ts`]: `import { defineField } from '@pouchbasejs/plugin-sdk/server';
+
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 
 /**
- * The ${type} field type: its name in the dashboard, the column that stores it, and how the server
- * checks and converts values. validate, serialize and deserialize are optional.
+ * The ${type} field type: its name in the dashboard, the column that stores it, its components and
+ * how the server checks and converts values. preview, icon, validate, serialize and deserialize
+ * are optional.
  */
 export default defineField({
 	label: '${title(type)}',
 	description: 'A ${title(type).toLowerCase()} value.',
 	column: 'TEXT',
-	// An Iconify name (https://icon-sets.iconify.design), or the path of an .svg file.
+	input: Input,
+	preview: Preview,
+	// An Iconify name (https://icon-sets.iconify.design), or an imported .svg file.
 	icon: 'lucide:text-cursor-input',
 	validate(value) {
 		return typeof value === 'string' && value.length <= 200
@@ -244,15 +310,24 @@ export default defineField({
 	}
 });
 `,
-		[`${dir}/input.svelte`]: TEXT_INPUT,
-		[`${dir}/preview.svelte`]: TEXT_PREVIEW
+			[`${dir}/input.svelte`]: TEXT_INPUT,
+			[`${dir}/preview.svelte`]: TEXT_PREVIEW
+		}
 	};
 }
 
 /** The `field` template: a color field type. */
-function colorFieldConventionFiles(): Files {
+function colorFieldEntry(): PluginEntry {
 	return {
-		'fields/color/field.ts': `import { defineField } from '@pouchbasejs/plugin-sdk/server';
+		key: 'fields',
+		id: 'color',
+		value: 'color',
+		imports: [`import color from './fields/color/field.js';`],
+		files: {
+			'fields/color/field.ts': `import { defineField } from '@pouchbasejs/plugin-sdk/server';
+
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
 
@@ -261,7 +336,9 @@ export default defineField({
 	label: 'Color',
 	description: 'A color as a hex code, e.g. #ff6600.',
 	column: 'TEXT',
-	// An Iconify name (https://icon-sets.iconify.design), or the path of an .svg file.
+	input: Input,
+	preview: Preview,
+	// An Iconify name (https://icon-sets.iconify.design), or an imported .svg file.
 	icon: 'lucide:palette',
 	validate(value) {
 		return typeof value === 'string' && HEX_COLOR.test(value)
@@ -273,7 +350,7 @@ export default defineField({
 	}
 });
 `,
-		'fields/color/input.svelte': `<script lang="ts">
+			'fields/color/input.svelte': `<script lang="ts">
 	import type { FieldInputProps } from '@pouchbasejs/plugin-sdk/ui';
 
 	let { name, value, required, disabled, id, errorId }: FieldInputProps<string> = $props();
@@ -289,7 +366,7 @@ export default defineField({
 	aria-describedby={errorId}
 />
 `,
-		'fields/color/preview.svelte': `<script lang="ts">
+			'fields/color/preview.svelte': `<script lang="ts">
 	import type { FieldPreviewProps } from '@pouchbasejs/plugin-sdk/ui';
 
 	let { value }: FieldPreviewProps<string> = $props();
@@ -301,20 +378,19 @@ export default defineField({
 	{value}
 </span>
 `
+		}
 	};
 }
 
-/** `pages/<path>.svelte`: a page with its title in `<script module>`. */
-export function conventionPageFiles(path: string): Files {
+/** A page at `path`, in `pages/<path>.svelte`; `name` the import in `plugin.ts`. */
+export function pageEntry(path: string, name: string): PluginEntry {
 	return {
-		[`pages/${path}.svelte`]: `<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	// A literal object: the CLI reads it without running the component.
-	export const page = { title: '${title(path)}', icon: 'lucide:file-text' } satisfies PageMeta;
-</script>
-
-<script lang="ts">
+		key: 'pages',
+		id: path,
+		value: `{\n\ttitle: ${quote(title(path))},\n\ticon: 'lucide:file-text',\n\tcomponent: ${name}\n}`,
+		imports: [`import ${name} from './pages/${path}.svelte';`],
+		files: {
+			[`pages/${path}.svelte`]: `<script lang="ts">
 	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
 
 	let { params }: PageProps = $props();
@@ -324,19 +400,20 @@ export function conventionPageFiles(path: string): Files {
 
 <p>Path below the page: /{params.join('/')}</p>
 `
+		}
 	};
 }
 
 /** The `page` template: a page that shows what its `GET /hello` route returns. */
-function helloPageConventionFiles(pluginId: string): Files {
-	return {
-		'pages/hello.svelte': `<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	export const page = { title: 'Hello', icon: 'lucide:hand' } satisfies PageMeta;
-</script>
-
-<script lang="ts">
+function helloEntries(pluginId: string): PluginEntry[] {
+	return [
+		{
+			key: 'pages',
+			id: 'hello',
+			value: `{\n\ttitle: 'Hello',\n\ticon: 'lucide:hand',\n\tcomponent: Hello\n}`,
+			imports: [`import Hello from './pages/hello.svelte';`],
+			files: {
+				'pages/hello.svelte': `<script lang="ts">
 	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
 
 	import * as Button from '@pouchbasejs/ui/button';
@@ -370,8 +447,16 @@ function helloPageConventionFiles(pluginId: string): Files {
 
 <!-- Components from @pouchbasejs/ui look like the rest of the dashboard. -->
 <Button.Root variant="secondary" onclick={() => (message = hello())}>Ask again</Button.Root>
-`,
-		'routes/hello.ts': `import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
+`
+			}
+		},
+		{
+			key: 'routes',
+			id: '/hello',
+			value: 'hello',
+			imports: [`import * as hello from './routes/hello.js';`],
+			files: {
+				'routes/hello.ts': `import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
 
 /**
  * Served at /api/plugins/${pluginId}/hello; the page calls it with api.fetch('/hello'). The greeting
@@ -382,41 +467,50 @@ export const GET: RouteHandler = async (_request, ctx) => {
 
 	return Response.json({ message: \`\${greeting} from \${ctx.plugin.id} \${ctx.plugin.version}\` });
 };
-`,
-		[PLUGIN_FILE]: pluginFileSource([
-			{
-				key: 'greeting',
-				label: 'Greeting',
-				description: 'How the Hello page greets, e.g. Hello or Welcome.',
-				type: 'text',
-				default: 'Hello'
+`
 			}
-		])
-	};
+		}
+	];
 }
 
-/** `routes/<path>.ts` for a route path such as `/items/:id`, with a `GET` handler. */
-export function conventionRouteFiles(file: string, path: string, pluginId: string | null): Files {
+/**
+ * Routes at `path` (such as `/items/:id`) in `file`, with a `GET` handler; `name` the import in
+ * `plugin.ts`.
+ */
+export function routeEntry(
+	path: string,
+	file: string,
+	name: string,
+	pluginId: string | null
+): PluginEntry {
 	const hasParams = path.includes('/:');
 	const url = `/api/plugins/${pluginId ?? '<plugin>'}${path === '/' ? '' : path}`;
 
 	return {
-		[file]: `import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
+		key: 'routes',
+		id: path,
+		value: name,
+		imports: [`import * as ${name} from './${file.replace(/\.ts$/, '.js')}';`],
+		files: {
+			[file]: `import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
 
 /**
- * GET ${path}, served at ${url}. Export POST, PUT, PATCH or DELETE from this file for the other
- * methods. Routes are public: check ctx.admin (an admin in the dashboard) or ctx.user (the app
- * user of the request's bearer token) before doing something that needs either.
+ * GET ${path}, served at ${url}. Export POST, PUT, PATCH or DELETE as well for the other methods.
+ * Routes are public: check ctx.admin (an admin in the dashboard) or ctx.user (the app user of the
+ * request's bearer token) before doing something that needs either.
  */
 export const GET: RouteHandler = (_request, ctx) =>
 	Response.json({ path: '${path}'${hasParams ? ', params: ctx.params' : ''}, admin: ctx.admin });
 `
+		}
 	};
 }
 
-/** `auth/<id>/provider.ts`: an OpenID Connect provider with example URLs. */
-export function conventionProviderFile(id: string) {
+/** `auth/<id>/provider.ts`: an OpenID Connect provider with example URLs and its logo. */
+export function providerFile(id: string) {
 	return `import { createOidcProvider, defineAuthProvider } from '@pouchbasejs/plugin-sdk/server';
+
+import logo from './icon.svg';
 
 /**
  * Replace the URLs with those of your provider, and its host in permissions.network in
@@ -453,25 +547,29 @@ export default defineAuthProvider({
 		tokenUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/token',
 		userinfoUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/userinfo'
 	}),
-	// The name on the sign-in button, and where an admin registers the OAuth app.
+	// The name and logo on the sign-in button, and where an admin registers the OAuth app.
 	label: '${title(id)}',
+	icon: logo,
 	consoleUrl: 'https://${EXAMPLE_PROVIDER_HOST}/apps'
 });
 `;
 }
 
-/** `auth/<id>/{provider.ts,icon.svg}`. */
-export function conventionProviderFiles(id: string): Files {
+/** A sign-in provider in `auth/<id>/`, `name` the import in `plugin.ts`. */
+export function providerEntry(id: string, name: string): PluginEntry {
 	return {
-		[`auth/${id}/provider.ts`]: conventionProviderFile(id),
-		[`auth/${id}/icon.svg`]: PROVIDER_ICON
+		key: 'authProviders',
+		id,
+		value: name,
+		imports: [`import ${name} from './auth/${id}/provider.js';`],
+		files: {
+			[`auth/${id}/provider.ts`]: providerFile(id),
+			[`auth/${id}/icon.svg`]: PROVIDER_ICON
+		}
 	};
 }
 
 // Settings
-
-/** The root file that holds the settings in the convention layout. */
-export const PLUGIN_FILE = 'plugin.ts';
 
 /** A setting as `add setting` and the templates write it. */
 export type SettingTemplate = {
@@ -504,27 +602,48 @@ export function settingSource(setting: SettingTemplate, indent = '\t\t') {
 	return `{\n${lines.map((line) => `${indent}\t${line}`).join(',\n')}\n${indent}}`;
 }
 
+/** `source` with every line after the first indented by `indent`. */
+export function indented(source: string, indent: string) {
+	return source.replace(/\n/g, `\n${indent}`);
+}
+
 /**
- * `plugin.ts` with `settings`, and the `Register` block that types `ctx.settings.get(key)` in the
- * routes, field types and auth providers of the plugin.
+ * `plugin.ts` with `settings` and `entries`, and the `Register` block that types
+ * `ctx.settings.get(key)` in the routes, field types and auth providers of the plugin.
  */
-export function pluginFileSource(settings: readonly SettingTemplate[]) {
-	const list = settings.length
-		? `[\n${settings.map((setting) => `\t\t${settingSource(setting)}`).join(',\n')}\n\t]`
-		: '[]';
+export function pluginFileSource(
+	settings: readonly SettingTemplate[],
+	entries: readonly PluginEntry[] = []
+) {
+	const properties: string[] = [];
+
+	if (settings.length) {
+		properties.push(
+			`settings: [\n${settings.map((setting) => `\t\t${settingSource(setting)}`).join(',\n')}\n\t]`
+		);
+	}
+
+	for (const key of ['fields', 'pages', 'authProviders', 'routes'] as const) {
+		const records = entries.filter((entry) => entry.key === key);
+
+		if (records.length) {
+			properties.push(
+				`${key}: {\n${records.map((entry) => `\t\t${indented(entrySource(entry), '\t\t')}`).join(',\n')}\n\t}`
+			);
+		}
+	}
+
+	const imports = entries.flatMap((entry) => entry.imports);
 
 	return `import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
-
+${imports.length ? `\n${imports.join('\n')}\n` : ''}
 /**
- * The plugin's settings: an admin fills them in on the Plugins page, and the server code reads them
- * with \`await ctx.settings.get(key)\`. A number setting comes back as a number, a boolean setting
- * as a boolean, the others as strings; \`null\` while there is no value, unless the setting has a
- * default (a required setting without one is \`null\` until an admin saves it). Add one with
- * \`pouchbase-plugin add setting <key>\`.
+ * The plugin: everything it adds, by id. Settings are filled in by an admin on the Plugins page and
+ * read with \`await ctx.settings.get(key)\` (a number setting comes back as a number, a boolean
+ * setting as a boolean, the others as strings; \`null\` while there is no value, unless the setting
+ * has a default). \`pouchbase-plugin add field|page|auth-provider|route|setting <id>\` adds one.
  */
-const plugin = definePlugin({
-	settings: ${list}
-});
+const plugin = definePlugin({${properties.length ? `\n\t${properties.join(',\n\t')}\n` : ''}});
 
 export default plugin;
 
@@ -545,10 +664,10 @@ const COLOR_TEST = `import type { FieldTypeHandler } from '@pouchbasejs/plugin-s
 import { fakeContext } from '@pouchbasejs/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import field from '../fields/color/field.js';
+import plugin from '../plugin.js';
 
 // Called the way Pouchbase calls it: with the field's options and the plugin context.
-const color: FieldTypeHandler = field;
+const color: FieldTypeHandler = plugin.fields.color;
 
 describe('the color field type', () => {
 	const { ctx } = fakeContext();
@@ -574,9 +693,9 @@ import { describe, expect, it } from 'vitest';
 
 import plugin from '../plugin.js';
 import manifest from '../pouchbase-plugin.json' with { type: 'json' };
-import { GET } from '../routes/hello.js';
 
 const request = new Request('https://pouchbase.test/api/plugins/${pluginId}/hello');
+const { GET } = plugin.routes['/hello'];
 
 describe('GET /hello', () => {
 	it('greets with the default greeting', async () => {
@@ -602,10 +721,11 @@ function providerTest(id: string) {
 	return `import { fakeContext } from '@pouchbasejs/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
-import provider from '../auth/${id}/provider.js';
+import plugin from '../plugin.js';
 import manifest from '../pouchbase-plugin.json' with { type: 'json' };
 
 const USERINFO = 'https://${EXAMPLE_PROVIDER_HOST}/oauth/userinfo';
+const provider = plugin.authProviders[${quote(id)}];
 
 describe('the ${id} provider', () => {
 	it('maps the userinfo claims to a profile', async () => {
@@ -650,6 +770,13 @@ describe('${pluginId}', () => {
 `;
 }
 
+/** `vitest.config.ts`: imports of `.svelte` and `.svg` files are `PluginFile`s, as in a build. */
+export const VITEST_CONFIG = `import { pouchbasePlugin } from '@pouchbasejs/plugin-sdk/vite';
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({ plugins: [pouchbasePlugin()] });
+`;
+
 // Projects
 
 /** Path of the plugin's own icon in new projects. */
@@ -670,23 +797,24 @@ const VITEST_RANGE = '^5.0.5';
 const SVELTE_CHECK_RANGE = '^4.7.7';
 
 /**
- * What the `tsconfig.json` of a new plugin type-checks: the convention folders, `lib/` and
- * `plugin.ts` (whose `Register` block types `ctx.settings`).
+ * `compilerOptions.types` of a new plugin: `svelte` types the `.svelte` imports of `plugin.ts`, and
+ * `@pouchbasejs/plugin-sdk/env` its `.svg` imports.
  */
-export const SOURCE_DIRS = ['fields', 'pages', 'auth', 'routes', 'lib', PLUGIN_FILE] as const;
+export const TSCONFIG_TYPES = ['svelte', '@pouchbasejs/plugin-sdk/env'] as const;
 
 function readme(name: string) {
 	return `# ${name}
 
-A [Pouchbase](https://pouchbase.io) plugin. Its folders say what it adds:
+A [Pouchbase](https://pouchbase.io) plugin. \`plugin.ts\` says what it adds, in
+\`definePlugin({ ... })\`: its settings, field types, pages, sign-in providers and routes, each by
+id. It imports their code, components and icons from wherever you keep them; this project starts
+with:
 
-- \`fields/<type>/\`: a field type (\`field.ts\`, \`input.svelte\`, \`preview.svelte\`);
-- \`pages/<path>.svelte\`: a dashboard page at \`/plugins/<id>/<path>\`;
-- \`auth/<id>/\`: a sign-in provider (\`provider.ts\`, \`icon.svg\`);
+- \`fields/<type>/\`: a field type (\`field.ts\` with \`defineField\`, \`input.svelte\`, \`preview.svelte\`);
+- \`pages/<path>.svelte\`: a dashboard page, at \`/plugins/<id>/<path>\`;
+- \`auth/<id>/\`: a sign-in provider (\`provider.ts\` with \`defineAuthProvider\`, \`icon.svg\`);
 - \`routes/<path>.ts\`: routes at \`/api/plugins/<id>/<path>\` (\`export const GET\`, \`POST\`, …);
-- \`lib/\`: code shared by the rest;
-- \`plugin.ts\`: the settings an admin fills in on the Plugins page (\`definePlugin({ settings })\`),
-  read with \`await ctx.settings.get(key)\`.
+- \`lib/\`: code shared by the rest.
 
 Scripts:
 
@@ -698,38 +826,47 @@ Scripts:
   \`@pouchbasejs/plugin-sdk/testing\`); \`pnpm check\` type-checks the code and the components.
 - \`pnpm build\` writes the bundle to \`dist/\`.
 - \`pnpm release\` publishes it to the registry (needs \`POUCHBASE_REGISTRY_TOKEN\`).
-- \`npx pouchbase-plugin add field|page|auth-provider|route <id>\` adds the files of a contribution;
-  \`npx pouchbase-plugin add setting <key> [--type text|secret|number|boolean|url]\` adds a setting
-  to \`plugin.ts\`.
+- \`npx pouchbase-plugin add field|page|auth-provider|route <id>\` creates the files of a
+  contribution and adds it to \`plugin.ts\`;
+  \`npx pouchbase-plugin add setting <key> [--type text|secret|number|boolean|url]\` adds a setting.
 
 The version lives in \`package.json\`; the manifest takes it from there.
 `;
 }
 
 /**
- * Every file of a new plugin, in the convention layout. The manifest has a human `name` and no
- * `version`: `version`, `description` and `license` come from `package.json`, so a release only
- * bumps one file.
+ * Every file of a new plugin. The manifest has a human `name` and no `version`: `version`,
+ * `description` and `license` come from `package.json`, so a release only bumps one file.
  */
 export function projectFiles(id: string, template: PluginTemplate, sdkVersion: string): Files {
 	const name = title(id);
 	const manifest: Record<string, unknown> = { $schema: MANIFEST_SCHEMA_URL, id, name };
 	let tests: Files = { 'test/plugin.test.ts': emptyTest(id) };
 	let description = 'A Pouchbase plugin.';
-	let files: Files = {};
+	let settings: SettingTemplate[] = [];
+	let entries: PluginEntry[] = [];
 
 	switch (template) {
 		case 'field':
 			description = 'Adds a color field type.';
 			manifest.categories = ['fields'];
-			files = colorFieldConventionFiles();
+			entries = [colorFieldEntry()];
 			tests = { 'test/color.test.ts': COLOR_TEST };
 			break;
 
 		case 'page':
 			description = 'Adds a page to the dashboard.';
 			manifest.categories = ['pages'];
-			files = helloPageConventionFiles(id);
+			settings = [
+				{
+					key: 'greeting',
+					label: 'Greeting',
+					description: 'How the Hello page greets, e.g. Hello or Welcome.',
+					type: 'text',
+					default: 'Hello'
+				}
+			];
+			entries = helloEntries(id);
 			tests = { 'test/hello.test.ts': helloTest(id) };
 			break;
 
@@ -740,7 +877,7 @@ export function projectFiles(id: string, template: PluginTemplate, sdkVersion: s
 			description = `Sign in with ${title(provider)}.`;
 			manifest.categories = ['auth'];
 			manifest.permissions = { network: [EXAMPLE_PROVIDER_HOST] };
-			files = conventionProviderFiles(provider);
+			entries = [providerEntry(provider, camelCase(provider))];
 			tests = { 'test/provider.test.ts': providerTest(provider) };
 			break;
 		}
@@ -785,17 +922,21 @@ export function projectFiles(id: string, template: PluginTemplate, sdkVersion: s
 				module: 'ESNext',
 				moduleResolution: 'Bundler',
 				lib: ['ES2022', 'DOM'],
+				types: TSCONFIG_TYPES,
 				strict: true,
 				verbatimModuleSyntax: true,
 				skipLibCheck: true,
 				resolveJsonModule: true,
 				noEmit: true
 			},
-			include: [...SOURCE_DIRS, 'test']
+			include: ['**/*.ts', '**/*.svelte'],
+			exclude: ['node_modules', 'dist']
 		}),
+		'vitest.config.ts': VITEST_CONFIG,
 		'.gitignore': 'node_modules\ndist\n',
 		'README.md': readme(name),
-		...files,
+		[PLUGIN_FILE]: pluginFileSource(settings, entries),
+		...Object.assign({}, ...entries.map((entry) => entry.files)),
 		...tests
 	};
 }

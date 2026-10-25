@@ -1,5 +1,5 @@
 /**
- * The realtime protocol: messages over the WebSocket at `/api/live?collection=<name>`, which
+ * The realtime protocol: messages over the WebSocket at `/api/realtime?collection=<name>`, which
  * sends the create, update and delete events of one collection's records. A client opens one
  * socket per collection, sends `auth` first and then subscribes to every record or to one.
  *
@@ -7,7 +7,7 @@
  * `packages/js-sdk/src/realtime/protocol.ts`; keep both in sync.
  */
 
-export const REALTIME_PATH = '/api/live';
+export const REALTIME_PATH = '/api/realtime';
 
 export type RealtimeAction = 'create' | 'update' | 'delete';
 

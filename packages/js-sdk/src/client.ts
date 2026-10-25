@@ -2,14 +2,14 @@ import { PouchbaseError } from './error.js';
 import { AuthService } from './services/auth.js';
 import { FilesService } from './services/files.js';
 import { FunctionsService } from './services/functions.js';
-import { LiveService } from './services/live.js';
+import { RealtimeService } from './services/realtime.js';
 import { MailService } from './services/mail.js';
 import { SchemaService } from './services/schema.js';
 import { createDb } from './services/db.js';
 import type { Db } from './services/db.js';
 import { browserStorage, memoryStorage, Session } from './session.js';
 import type { SessionStorage } from './session.js';
-import type { WebSocketLike } from './live/connection.js';
+import type { WebSocketLike } from './realtime/connection.js';
 import type { DefaultCollections, Issues } from './types.js';
 
 /** Options for `new Pouchbase()`. */
@@ -31,7 +31,7 @@ export type PouchbaseOptions = {
 	/** Headers sent with every request. */
 	headers?: Record<string, string>;
 	/**
-	 * The `WebSocket` class for `pouch.live`. Defaults to `globalThis.WebSocket` (browsers, Node 22
+	 * The `WebSocket` class for `pouch.realtime`. Defaults to `globalThis.WebSocket` (browsers, Node 22
 	 * and later, Deno, Bun, Workers); pass one, such as `ws`, where there is none.
 	 */
 	webSocket?: WebSocketLike;
@@ -55,7 +55,7 @@ export type RequestOptions = {
  *
  * ```ts
  * const pouch = new Pouchbase('https://pouchbase.example.com', { session: 'browser' });
- * await pouch.auth.signIn('ada@example.com', 'correct horse battery staple');
+ * await pouch.auth.login('ada@example.com', 'correct horse battery staple');
  * const user = await pouch.auth.me();
  * ```
  *
@@ -78,8 +78,8 @@ export class Pouchbase<C extends object = DefaultCollections> {
 	 * a caller may do follows each collection's API rules.
 	 */
 	readonly db: Db<C>;
-	/** Live changes to records over a WebSocket: `pouch.live.watch('posts', …)`. */
-	readonly live: LiveService;
+	/** Changes to records as they happen, over a WebSocket: `pouch.realtime.subscribe('posts', …)`. */
+	readonly realtime: RealtimeService;
 	/** Email templates, sent with the `apiKey`: `pouch.mail.send({ template, to, variables })`. */
 	readonly mail: MailService;
 	/**
@@ -102,7 +102,7 @@ export class Pouchbase<C extends object = DefaultCollections> {
 		this.files = new FilesService(this);
 		this.functions = new FunctionsService(this);
 		this.db = createDb<C>(this);
-		this.live = new LiveService(this, options.webSocket);
+		this.realtime = new RealtimeService(this, options.webSocket);
 		this.mail = new MailService(this, options.apiKey);
 		this.schema = new SchemaService(this, options.apiKey);
 	}

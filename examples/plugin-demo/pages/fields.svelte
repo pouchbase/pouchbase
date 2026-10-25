@@ -1,14 +1,3 @@
-<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	export const page = {
-		title: 'Field playground',
-		navigation: true,
-		order: 2,
-		icon: 'lucide:shapes'
-	} satisfies PageMeta;
-</script>
-
 <script lang="ts">
 	import * as Callout from '@pouchbasejs/ui/callout';
 	import * as Icon from '@pouchbasejs/ui/icon';

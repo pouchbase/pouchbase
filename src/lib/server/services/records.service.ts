@@ -4,6 +4,7 @@ import type { Field } from './fields.service';
 import type { PluginsService } from './plugins.service';
 import type { SignInMethod } from '#lib/auth/sign-in-methods.js';
 import type { FieldOptions, RelationOnDelete } from '#lib/fields/field-types.js';
+import type { PluginGrant } from '../plugins/grant';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
 import type { RealtimeAction } from '#lib/realtime/protocol.js';
 import type { SqlCondition } from '../filter';
@@ -28,6 +29,7 @@ import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
 import { ALWAYS, both, compileFilter, compileOrder, compileRule } from '../filter';
 import { generateId } from '../crypto';
+import { pluginMay } from '../plugins/grant';
 import {
 	applyPluginReads,
 	applyPluginWrites,
@@ -103,11 +105,16 @@ type UniqueViolationError = ServiceError<8002, 'UNIQUE_VIOLATION'> & { data: { f
 type RecordContext = { collection: Collection; fields: Field[]; databaseId: string };
 
 /**
- * Who calls the records API: the signed-in user (a row of `users`) or `null`. Record operations
- * that get an `access` check the collection's API rule for it; without one (the dashboard) every
- * record is reachable.
+ * Who calls the records API: the signed-in user (a row of `users`) or `null`, or a plugin with
+ * what it may do. Record operations that get an `access` check the collection's API rule for a
+ * user and the grant for a plugin; without one (the dashboard) every record is reachable.
  */
-export type ApiAccess = { user: Record<string, unknown> | null };
+export type ApiAccess = { user: Record<string, unknown> | null } | { plugin: PluginGrant };
+
+/** The user an API rule or a filter's `$user` stands for: nobody for a plugin. */
+function accessUser(access: ApiAccess | undefined) {
+	return access && 'user' in access ? access.user : null;
+}
 
 /**
  * A record as the records API returns it: every field except blobs, with real values: booleans as
@@ -763,7 +770,7 @@ export class RecordsService extends Service {
 
 				return this.compileQuery('where', () =>
 					options.where?.trim()
-						? both(rule, compileFilter(options.where, readable, access ?? { user: null }))
+						? both(rule, compileFilter(options.where, readable, { user: accessUser(access) }))
 						: rule
 				).andThen((where) =>
 					this.compileQuery('order', () => compileOrder(options.order ?? '', readable))
@@ -2002,6 +2009,10 @@ export class RecordsService extends Service {
 			return errAsync(this.error(8013, 'ACTION_NOT_AVAILABLE'));
 		}
 
+		if ('plugin' in access && !pluginMay(access.plugin, action, collection.name)) {
+			return errAsync(this.error(8014, 'RULE_LOCKED'));
+		}
+
 		const written = protectedApiFields(collection).filter((name) => input && name in input);
 
 		if (written.length) {
@@ -2014,6 +2025,10 @@ export class RecordsService extends Service {
 					)
 				}
 			});
+		}
+
+		if ('plugin' in access) {
+			return okAsync(ALWAYS);
 		}
 
 		let condition: SqlCondition | null;

@@ -13,7 +13,7 @@ export const pouch = createClient(baseUrl, { session: 'browser' });
 /** The session as reactive state, for the header and the auth page. */
 export const auth = $state<{ session: SessionData | null }>({ session: null });
 
-pouch.session.watch(
+pouch.session.subscribe(
 	(session) => {
 		auth.session = session;
 	},

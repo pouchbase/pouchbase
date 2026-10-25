@@ -6,7 +6,7 @@
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import type { InstalledPlugin } from './types';
-	import { getPluginFieldUsage, uninstallPlugin } from './plugins.remote';
+	import { getPluginCollections, getPluginFieldUsage, uninstallPlugin } from './plugins.remote';
 
 	type Props = { plugin: InstalledPlugin } & DialogProps;
 
@@ -52,6 +52,24 @@
 			{#snippet failed()}{/snippet}
 		</svelte:boundary>
 	{/if}
+
+	<!-- Also collections a previous version added, which the manifest may no longer list. -->
+	<svelte:boundary>
+		{@const owned = await getPluginCollections(plugin.id)}
+
+		{#if owned.length}
+			<Callout.Root variant="error">
+				<Icon.Root icon="lucide:database" class="size-4 shrink-0" />
+				<p>
+					These collections of the plugin are deleted with all their records, which can't be undone:
+					<span class="font-mono">{owned.join(', ')}</span>
+				</p>
+			</Callout.Root>
+		{/if}
+
+		{#snippet pending()}{/snippet}
+		{#snippet failed()}{/snippet}
+	</svelte:boundary>
 
 	<Form.Root
 		{form}

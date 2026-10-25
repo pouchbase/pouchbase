@@ -2,7 +2,14 @@ import type { PluginContext } from '../src/server.js';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { createOidcProvider, createPluginSettings, definePage, fetchJson } from '../src/server.js';
+import {
+	PLUGIN_FILE,
+	createOidcProvider,
+	createPluginSettings,
+	definePage,
+	fetchJson,
+	pluginFilePath
+} from '../src/server.js';
 
 function context(body: unknown, status = 200) {
 	const fetch = vi.fn(async () => Response.json(body, { status }));
@@ -12,7 +19,8 @@ function context(body: unknown, status = 200) {
 		settings: createPluginSettings([]),
 		log: { info() {}, warn() {}, error() {} },
 		admin: false,
-		user: null
+		user: null,
+		pouch: {} as PluginContext['pouch']
 	};
 
 	return { ctx, fetch };
@@ -114,9 +122,24 @@ describe('createOidcProvider', () => {
 });
 
 describe('definePage', () => {
-	it('returns the metadata unchanged', () => {
-		const meta = { title: 'Stats', navigation: false };
+	it('returns the page unchanged', () => {
+		const page = {
+			title: 'Stats',
+			navigation: false,
+			component: { [PLUGIN_FILE]: 'stats.svelte' }
+		};
 
-		expect(definePage(meta)).toBe(meta);
+		expect(definePage(page)).toBe(page);
+	});
+});
+
+describe('pluginFilePath', () => {
+	it('reads the path of a PluginFile, and nothing else', () => {
+		expect(pluginFilePath({ [Symbol.for('pouchbase.plugin-file')]: 'pages/stats.svelte' })).toBe(
+			'pages/stats.svelte'
+		);
+		expect(pluginFilePath('pages/stats.svelte')).toBeNull();
+		expect(pluginFilePath(() => null)).toBeNull();
+		expect(pluginFilePath(null)).toBeNull();
 	});
 });

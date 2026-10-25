@@ -28,6 +28,11 @@
 		},
 		{ member: 'ctx.fetch', about: 'fetch, limited to the hosts in permissions.network.' },
 		{
+			member: 'ctx.pouch',
+			about:
+				'The JS SDK, signed in as the plugin: records of its own collections and those in permissions.collections. See Collections.'
+		},
+		{
 			member: 'ctx.log',
 			about: 'info, warn and error, written to the log of the plugin’s Worker.'
 		},
@@ -42,7 +47,7 @@
 		},
 		{
 			member: 'ctx.params',
-			about: 'The [name] segments of the route’s file, e.g. { id: "42" } for routes/items/[id].ts.'
+			about: 'The :name segments of the route’s path, e.g. { id: "42" } for /items/:id.'
 		}
 	];
 
@@ -55,12 +60,12 @@
 		{
 			status: '404',
 			about:
-				'No file in routes/ answers the path (Route not found), or the plugin isn’t installed (Plugin not found).'
+				'No route of the plugin answers the path (Route not found), or the plugin isn’t installed (Plugin not found).'
 		},
 		{
 			status: '405',
 			about:
-				'The path exists, but its file doesn’t export this method; the Allow header lists the ones it does.'
+				'The path exists, but has no handler for this method; the Allow header lists the ones it has.'
 		},
 		{
 			status: '500',
@@ -82,14 +87,20 @@
 	<h2 id="a-route">A route</h2>
 
 	<p>
-		A file in <Code.Root>routes/</Code.Root> exports a handler per HTTP method it answers:
-		<Code.Root>GET</Code.Root>, <Code.Root>POST</Code.Root>, <Code.Root>PUT</Code.Root>,
-		<Code.Root>PATCH</Code.Root> or <Code.Root>DELETE</Code.Root>. It answers at
-		<Code.Root>/api/plugins/&lt;plugin&gt;/&lt;path&gt;</Code.Root>, and <Code.Root
-			>index.ts</Code.Root
-		>
-		answers its folder's path. From the demo plugin:
+		Routes are the <Code.Root>routes</Code.Root> of <Code.Root>definePlugin</Code.Root>, by path.
+		Each has a handler per HTTP method it answers: <Code.Root>GET</Code.Root>,
+		<Code.Root>POST</Code.Root>, <Code.Root>PUT</Code.Root>, <Code.Root>PATCH</Code.Root> or
+		<Code.Root>DELETE</Code.Root>. A module that exports them, imported with
+		<Code.Root>import * as</Code.Root>, is one; its other exports are left alone. A path answers at
+		<Code.Root>/api/plugins/&lt;plugin&gt;&lt;path&gt;</Code.Root>, and <Code.Root>'/'</Code.Root>
+		is the plugin's root.
 	</p>
+
+	<CodeBlock.Root title="plugin.ts">
+		<CodeBlock.Source code={data.code.routesPlugin} />
+	</CodeBlock.Root>
+
+	<p>From the demo plugin:</p>
 
 	<CodeBlock.Root title="routes/info.ts">
 		<CodeBlock.Source code={data.code.route} />
@@ -102,13 +113,14 @@
 	<h2 id="params">Params</h2>
 
 	<p>
-		<Code.Root>[name]</Code.Root> in a file or folder name is a param, in
-		<Code.Root>ctx.params</Code.Root>. A static segment wins over a param:
-		<Code.Root>/items/new</Code.Root> goes to <Code.Root>items/new.ts</Code.Root> before
-		<Code.Root>items/[id].ts</Code.Root>.
+		<Code.Root>:name</Code.Root> in a path is a param, in <Code.Root>ctx.params</Code.Root>. A
+		static segment wins over a param: <Code.Root>/items/new</Code.Root> goes to
+		<Code.Root>'/items/new'</Code.Root> before <Code.Root>'/items/:id'</Code.Root>. The file name
+		doesn't matter: the demo registers <Code.Root>routes/item.ts</Code.Root> at
+		<Code.Root>'/items/:id'</Code.Root>.
 	</p>
 
-	<CodeBlock.Root title="routes/items/[id].ts">
+	<CodeBlock.Root title="routes/item.ts">
 		<CodeBlock.Source code={data.code.routeParams} />
 	</CodeBlock.Root>
 
@@ -172,8 +184,9 @@
 	<h2 id="server-code">Server code</h2>
 
 	<p>
-		Routes, field types and sign-in providers are bundled into one module that runs in its own
-		Worker on your Cloudflare account. In that Worker:
+		The handlers of routes, field types and sign-in providers are bundled into one module that runs
+		in its own Worker on your Cloudflare account; their components and icons stay out of it. In that
+		Worker:
 	</p>
 
 	<ul>
@@ -186,7 +199,7 @@
 			There are no bindings: no database, storage or secrets other than the plugin's settings.
 		</li>
 		<li>
-			npm packages a server file imports are bundled in, so install them as dependencies.
+			npm packages the server code imports are bundled in, so install them as dependencies.
 			<Code.Root>cloudflare:*</Code.Root> and <Code.Root>node:*</Code.Root> modules aren't available.
 		</li>
 	</ul>

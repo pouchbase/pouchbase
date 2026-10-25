@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { POST as echo } from '../routes/echo.js';
 import { GET as githubStatus } from '../routes/github-status.js';
 import { GET as info } from '../routes/info.js';
-import { GET as item } from '../routes/items/[id].js';
+import { GET as item } from '../routes/item.js';
 import { GET as me } from '../routes/me.js';
 import { fakeContext } from './context.js';
 

@@ -237,8 +237,8 @@ export class ModuleLinker {
 /**
  * The plugin and bundle path of a file of a built-in plugin, from its key in `import.meta.glob`:
  * `/plugins/demo/ui/overview.svelte` → `ui/overview.svelte` (the legacy layout, as is) and
- * `/plugins/demo/pages/stats.svelte` → `ui/pages/stats.svelte` (the convention folders, which the
- * bundle keeps under `ui/`).
+ * `/plugins/demo/pages/stats.svelte` → `ui/pages/stats.svelte` (any other file, which the bundle
+ * keeps under `ui/` at its path in the plugin).
  */
 export function embeddedModulePath(key: string): { pluginId: string; path: string } | null {
 	const match = /^\/plugins\/([^/]+)\/(.+)$/.exec(key);

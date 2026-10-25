@@ -2,7 +2,7 @@
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import AccountSection from './account-section.svelte';
-	import { getUser, signOut } from './account.remote';
+	import { getUser, logout } from './account.remote';
 	import PluginsTable from './plugins-table.svelte';
 	import PublishCard from './publish-card.svelte';
 	import TokensCard from './tokens-card.svelte';
@@ -23,7 +23,7 @@
 			{/if}
 		</div>
 
-		<Form.Root form={signOut}>
+		<Form.Root form={logout}>
 			<Form.Submit variant="ghost">
 				<Icon.Root icon="lucide:log-out" />
 				Sign out

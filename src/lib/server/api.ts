@@ -2,6 +2,7 @@ import type { ApiKey } from './services/api-keys.service';
 import type { ApiAccess } from './services/records.service';
 import type { RequestEvent } from '@sveltejs/kit';
 
+import { internalPluginKey, INTERNAL_PLUGIN_KEY_PREFIX } from './plugins/internal-keys';
 import { API_KEY_PREFIX } from './services/api-keys.service';
 
 /**
@@ -73,11 +74,8 @@ export async function requestUser(
 	return { user: result.value };
 }
 
-/**
- * The API key of the request's bearer token (`pbk_…`, see `ApiKeysService`), for routes only
- * server-side code may call. Without a valid key the route answers with the `401` response.
- */
-export async function requestApiKey(
+/** The key of the request's bearer token, of any scope; see `requestApiKey`. */
+async function verifiedApiKey(
 	event: RequestEvent
 ): Promise<{ key: ApiKey } | { response: Response }> {
 	const token = bearerToken(event);
@@ -100,22 +98,93 @@ export async function requestApiKey(
 }
 
 /**
+ * The API key of the request's bearer token (`pbk_…`, see `ApiKeysService`), for routes only
+ * server-side code may call. Without a valid key the route answers with the `401` response; the
+ * key of a plugin gets a `403`, as it only reaches the records API.
+ */
+export async function requestApiKey(
+	event: RequestEvent
+): Promise<{ key: ApiKey } | { response: Response }> {
+	const caller = await verifiedApiKey(event);
+
+	if ('response' in caller) {
+		return caller;
+	}
+
+	if (caller.key.scope === 'plugin') {
+		return { response: json({ message: 'A plugin key can only use the records API' }, 403) };
+	}
+
+	return caller;
+}
+
+/**
+ * What the plugin `pluginId` may do through the records API (see `PluginsService.grant`); a `401`
+ * response when the plugin is gone.
+ */
+async function pluginAccess(
+	event: RequestEvent,
+	pluginId: string
+): Promise<{ access: ApiAccess } | { response: Response }> {
+	const result = await event.locals.services.plugins().grant(pluginId);
+
+	if (result.isErr()) {
+		return { response: json({ message: "Could not check the plugin's permissions" }, 500) };
+	}
+
+	if (!result.value) {
+		return { response: json({ message: 'The plugin of this key is not installed' }, 401) };
+	}
+
+	return { access: { plugin: result.value } };
+}
+
+/**
  * Who the records API acts for: the user of the request's bearer token (`{ user }`, see
- * `requestUser`), or `undefined` for an API key with the `service` scope, which the API rules don't
- * apply to. Other API keys get a `403` response, an invalid key a `401`.
+ * `requestUser`), a plugin (`{ plugin }`, for the key of its Worker, or the in-memory key of a
+ * built-in plugin, see `internal-keys.ts`), or `undefined` for an API key with the `service`
+ * scope, which the API rules don't apply to. Other API keys get a `403` response, an invalid key a
+ * `401`.
  */
 export async function requestAccess(
 	event: RequestEvent
 ): Promise<{ access: ApiAccess | undefined } | { response: Response }> {
-	if (!bearerToken(event)?.startsWith(API_KEY_PREFIX)) {
+	const token = bearerToken(event);
+
+	if (token?.startsWith(INTERNAL_PLUGIN_KEY_PREFIX)) {
+		const pluginId = internalPluginKey(token);
+
+		return pluginId
+			? pluginAccess(event, pluginId)
+			: { response: json({ message: 'Invalid API key' }, 401) };
+	}
+
+	if (!token?.startsWith(API_KEY_PREFIX)) {
 		const caller = await requestUser(event);
 
 		return 'response' in caller ? caller : { access: { user: caller.user } };
 	}
 
-	const caller = await requestServiceKey(event, 'use the records API');
+	const caller = await verifiedApiKey(event);
 
-	return 'response' in caller ? caller : { access: undefined };
+	if ('response' in caller) {
+		return caller;
+	}
+
+	if (caller.key.scope === 'plugin' && caller.key.pluginId) {
+		return pluginAccess(event, caller.key.pluginId);
+	}
+
+	if (caller.key.scope !== 'service') {
+		return {
+			response: json(
+				{ message: 'Only an API key with the service scope can use the records API' },
+				403
+			)
+		};
+	}
+
+	return { access: undefined };
 }
 
 /**

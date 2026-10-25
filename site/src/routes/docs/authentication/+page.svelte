@@ -25,11 +25,11 @@
 	const endpoints = [
 		['GET /api/auth/providers', 'The active OAuth providers: [{ provider, label, iconUrl }]'],
 		[
-			'POST /api/auth/password/sign-up',
+			'POST /api/auth/password/register',
 			'{ name, email, password } → { token, user_id, verification_required }; 400 or 409 with issues per field'
 		],
 		[
-			'POST /api/auth/password/sign-in',
+			'POST /api/auth/password/login',
 			'{ email, password }; 401 for wrong credentials, 403 (email_not_verified) until the email is verified'
 		],
 		['POST /api/auth/password/forgot', '{ email }; the same answer for unknown addresses'],
@@ -142,8 +142,7 @@
 	<h2 id="oauth">OAuth</h2>
 
 	<p>
-		Call <Code.Root>signInWithOAuth</Code.Root> straight from a click handler: browsers only allow the
-		popup then.
+		Call <Code.Root>oauth</Code.Root> straight from a click handler: browsers only allow the popup then.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -206,7 +205,7 @@
 
 	<p>
 		A successful sign-in begins a session in <Code.Root>pouch.session</Code.Root>: the token, the
-		user's id and, once known, the user. <Code.Root>pouch.auth.signOut()</Code.Root> ends it. Every request
+		user's id and, once known, the user. <Code.Root>pouch.auth.logout()</Code.Root> ends it. Every request
 		sends the token along while the session lasts.
 	</p>
 

@@ -100,10 +100,22 @@
 	<h2 id="unit-tests">Unit tests</h2>
 
 	<p>
-		Field hooks, sign-in providers and routes are plain functions, so test them with any runner in
-		Node.js. <Code.Root>fakeContext</Code.Root> from <Code.Root
-			>@pouchbasejs/plugin-sdk/testing</Code.Root
-		>
+		Field hooks, sign-in providers and routes are plain functions, so test them in Node.js, straight
+		from the plugin: <Code.Root>plugin.routes['/stats'].GET</Code.Root>,
+		<Code.Root>plugin.fields.color.validate</Code.Root> or
+		<Code.Root>plugin.authProviders.gitlab.profile</Code.Root>, typed by
+		<Code.Root>definePlugin</Code.Root>. Since <Code.Root>plugin.ts</Code.Root> imports
+		<Code.Root>.svelte</Code.Root> and <Code.Root>.svg</Code.Root> files, the templates'
+		<Code.Root>vitest.config.ts</Code.Root> adds the SDK's Vite plugin, which turns those imports into
+		references to the files, as a build does:
+	</p>
+
+	<CodeBlock.Root title="vitest.config.ts">
+		<CodeBlock.Source code={data.code.vitestConfig} />
+	</CodeBlock.Root>
+
+	<p>
+		<Code.Root>fakeContext</Code.Root> from <Code.Root>@pouchbasejs/plugin-sdk/testing</Code.Root>
 		builds the <Code.Root>ctx</Code.Root> Pouchbase would pass:
 	</p>
 
@@ -121,6 +133,12 @@
 		<li>
 			<Code.Root>admin</Code.Root>, <Code.Root>user</Code.Root> and <Code.Root>params</Code.Root> set
 			the rest; <Code.Root>logs</Code.Root> collects what <Code.Root>ctx.log</Code.Root> wrote.
+		</li>
+		<li>
+			<Code.Root>pouch</Code.Root> is <Code.Root>ctx.pouch</Code.Root>, usually
+			<Code.Root>fakePouch(…).client</Code.Root> (see
+			<a href="{resolve('/docs/plugins/collections')}#testing">Collections</a>); without it,
+			<Code.Root>ctx.pouch</Code.Root> fails.
 		</li>
 	</ul>
 

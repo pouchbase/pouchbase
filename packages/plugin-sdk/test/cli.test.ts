@@ -1,16 +1,22 @@
 import type { PluginBundle } from '../src/bundle.js';
+import type { ServerDefinition } from '../src/server.js';
 
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { PassThrough } from 'node:stream';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { parseBundle } from '../src/bundle.js';
-import { addContribution } from '../src/cli/add.js';
+import { addContribution, addToDefinition } from '../src/cli/add.js';
 import { withDevVersion } from '../src/cli/dev-server.js';
-import { discoverProject, readPageMeta, routeFileFor, routePathOf } from '../src/cli/discover.js';
+import {
+	discoverProject,
+	routeFileFor,
+	routePathFor,
+	routePathProblem
+} from '../src/cli/discover.js';
 import { askTemplate, initProject, parseTemplate } from '../src/cli/init.js';
 import { printManifest } from '../src/cli/manifest-command.js';
 import { createLogger } from '../src/cli/output.js';
@@ -102,6 +108,21 @@ async function legacyProject(id = 'legacy-plugin') {
 	return root;
 }
 
+/** `plugin.ts` with `body` as its imports and the argument of `definePlugin`. */
+function pluginFile(imports: string, definition: string) {
+	return `import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+${imports}
+export default definePlugin(${definition});
+`;
+}
+
+/** The server code of a bundle, run in Node.js: what the host runs. */
+async function serverDefinition(bundle: PluginBundle) {
+	const url = `data:text/javascript;base64,${Buffer.from(bundle.files['server.js']!).toString('base64')}`;
+
+	return ((await import(url)) as { default: ServerDefinition }).default;
+}
+
 describe('init', () => {
 	it.each(TEMPLATES)('creates a valid plugin from the %s template', async (template) => {
 		const root = await project('auth-acme', template);
@@ -114,17 +135,12 @@ describe('init', () => {
 		expect(manifest.contributes).toBeUndefined();
 		expect(manifest.server).toBeUndefined();
 		expect(manifest.name).toBe(template === 'auth-provider' ? 'Acme sign-in' : 'Auth acme');
-		expect(tsconfig.include).toEqual([
-			'fields',
-			'pages',
-			'auth',
-			'routes',
-			'lib',
-			'plugin.ts',
-			'test'
-		]);
+		expect(tsconfig.include).toEqual(['**/*.ts', '**/*.svelte']);
+		expect(tsconfig.compilerOptions.types).toEqual(['svelte', '@pouchbasejs/plugin-sdk/env']);
+		expect(await readFile(join(root, 'vitest.config.ts'), 'utf8')).toContain('pouchbasePlugin()');
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain('interface Register');
 		expect(manifest.engines).toEqual({ pouchbase: '>=0.10.0' });
-		expect(found.mode).toBe('convention');
+		expect(found.mode).toBe('definition');
 		expect(bundle.manifest.apiVersion).toBe(1);
 		expect(bundle.manifest.version).toBe('0.1.0');
 		expect(bundle.manifest.license).toBe('MIT');
@@ -162,6 +178,17 @@ describe('init', () => {
 		expect(bundle.files['ui/icons/lucide/palette.svg']).toMatch(/^<svg [^>]*viewBox="0 0 24 24">/);
 		// The preview's Tailwind classes, compiled with the dashboard's tokens.
 		expect(bundle.files['ui/tailwind.css']).toContain('.inline-flex');
+
+		// The server code has the handlers, without the components and the icon.
+		const { fields } = await serverDefinition(bundle);
+
+		expect(Object.keys(fields!.color!).sort()).toEqual([
+			'column',
+			'description',
+			'label',
+			'serialize',
+			'validate'
+		]);
 	});
 
 	it('writes the auth-provider template', async () => {
@@ -179,6 +206,7 @@ describe('init', () => {
 			}
 		]);
 		expect(bundle.files['ui/auth/acme/icon.svg']).toContain('<svg');
+		expect((await serverDefinition(bundle)).authProviders?.acme).not.toHaveProperty('icon');
 	});
 
 	it('writes the page template with a route', async () => {
@@ -196,7 +224,7 @@ describe('init', () => {
 			}
 		]);
 		expect(routes).toEqual(['GET /hello']);
-		expect(bundle.files['server.js']).toContain('GET /hello');
+		expect(Object.keys((await serverDefinition(bundle)).routes!)).toEqual(['GET /hello']);
 		expect(bundle.files['ui/pages/hello.svelte']).toContain("from '@pouchbasejs/ui/button'");
 	});
 
@@ -205,7 +233,12 @@ describe('init', () => {
 		const { bundle } = await buildBundle(root);
 
 		expect(bundle.manifest.server).toBeUndefined();
-		expect(bundle.manifest.contributes).toEqual({ fields: [], pages: [], authProviders: [] });
+		expect(bundle.manifest.contributes).toEqual({
+			fields: [],
+			pages: [],
+			authProviders: [],
+			collections: []
+		});
 		expect(Object.keys(bundle.files)).toEqual(['ui/icon.svg']);
 	});
 
@@ -225,7 +258,7 @@ describe('init', () => {
 });
 
 describe('add', () => {
-	it('adds a field type as files, without touching the manifest', async () => {
+	it('adds a field type: its files, and its entry and import in plugin.ts', async () => {
 		const root = await project('my-plugin', 'empty');
 		const before = await readFile(join(root, 'pouchbase-plugin.json'), 'utf8');
 		const result = await addContribution(root, 'field', 'rich_color');
@@ -237,10 +270,24 @@ describe('add', () => {
 				'fields/rich_color/input.svelte',
 				'fields/rich_color/preview.svelte'
 			],
+			changed: ['plugin.ts'],
 			manifestChanged: false,
-			layout: 'convention'
+			layout: 'plugin'
 		});
 		expect(await readFile(join(root, 'pouchbase-plugin.json'), 'utf8')).toBe(before);
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain(
+			`import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
+
+import richColor from './fields/rich_color/field.js';
+`
+		);
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain(
+			`const plugin = definePlugin({
+	fields: {
+		rich_color: richColor
+	}
+});`
+		);
 		expect(bundle.manifest.contributes.fields).toEqual([
 			{
 				type: 'rich_color',
@@ -258,12 +305,27 @@ describe('add', () => {
 		const root = await project('my-plugin', 'field');
 		const result = await addContribution(root, 'page', 'reports/monthly');
 		const text = await readFile(join(root, 'pouchbase-plugin.json'), 'utf8');
+		const plugin = await readFile(join(root, 'plugin.ts'), 'utf8');
 		const { bundle } = await buildBundle(root);
 
 		expect(result.created).toEqual(['pages/reports/monthly.svelte']);
 		expect(result.manifestChanged).toBe(true);
 		expect(text).toContain('\t"categories"');
 		expect(text.endsWith('}\n')).toBe(true);
+		expect(plugin).toContain(
+			`import color from './fields/color/field.js';
+import ReportsMonthly from './pages/reports/monthly.svelte';
+`
+		);
+		expect(plugin).toContain(
+			`	pages: {
+		'reports/monthly': {
+			title: 'Monthly',
+			icon: 'lucide:file-text',
+			component: ReportsMonthly
+		}
+	}`
+		);
 		expect(bundle.manifest.categories).toEqual(['fields', 'pages']);
 		expect(bundle.manifest.contributes.pages).toEqual([
 			{
@@ -283,6 +345,7 @@ describe('add', () => {
 		const { bundle } = await buildBundle(root);
 
 		expect(result.created).toEqual(['auth/my-sso/provider.ts', 'auth/my-sso/icon.svg']);
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain("'my-sso': mySso");
 		expect(manifest.permissions).toEqual({ network: ['id.example.com'] });
 		expect(manifest.server).toBeUndefined();
 		expect(bundle.manifest.contributes.authProviders).toEqual([
@@ -295,7 +358,7 @@ describe('add', () => {
 		]);
 	});
 
-	it('adds routes, with [id] params', async () => {
+	it('adds routes, with :id params, in the order they are added', async () => {
 		const root = await project('my-plugin', 'empty');
 
 		expect((await addContribution(root, 'route', 'items/:id')).created).toEqual([
@@ -303,24 +366,30 @@ describe('add', () => {
 		]);
 		expect((await addContribution(root, 'route', '/')).created).toEqual(['routes/index.ts']);
 		expect((await addContribution(root, 'route', 'stats')).created).toEqual(['routes/stats.ts']);
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain(
+			`	routes: {
+		'/items/:id': itemsId,
+		'/': root,
+		'/stats': stats
+	}`
+		);
 
 		const { routes, bundle } = await buildBundle(root);
 
-		expect(routes).toEqual(['GET /', 'GET /items/:id', 'GET /stats']);
+		expect(routes).toEqual(['GET /items/:id', 'GET /', 'GET /stats']);
 		expect(bundle.manifest.server).toBe('server.js');
+		// The registry lists them sorted.
 		expect(contributionSummary(bundle.manifest, routes).routes).toEqual([
 			'GET /',
 			'GET /items/:id',
 			'GET /stats'
 		]);
 
-		const definition = (await import(
-			`data:text/javascript;base64,${Buffer.from(bundle.files['server.js']!).toString('base64')}`
-		)) as { default: { routes: Record<string, (request: Request, ctx: unknown) => Response> } };
-		const response = definition.default.routes['GET /items/:id']!(new Request('https://x.test'), {
+		const definition = await serverDefinition(bundle);
+		const response = await definition.routes!['GET /items/:id']!(new Request('https://x.test'), {
 			params: { id: '42' },
 			admin: false
-		});
+		} as never);
 
 		expect(await response.json()).toEqual({
 			path: '/items/:id',
@@ -329,21 +398,58 @@ describe('add', () => {
 		});
 	});
 
-	it('refuses invalid ids and existing files', async () => {
+	it('creates plugin.ts when the plugin has none, and picks free names for imports', async () => {
+		const root = await project('my-plugin', 'empty');
+
+		await rm(join(root, 'plugin.ts'));
+		expect((await addContribution(root, 'route', 'stats')).created).toEqual([
+			'routes/stats.ts',
+			'plugin.ts'
+		]);
+		await addContribution(root, 'page', 'stats');
+		await addContribution(root, 'field', 'stats');
+
+		const plugin = await readFile(join(root, 'plugin.ts'), 'utf8');
+
+		expect(plugin).toContain("import * as stats from './routes/stats.js';");
+		expect(plugin).toContain("import Stats from './pages/stats.svelte';");
+		expect(plugin).toContain("import statsField from './fields/stats/field.js';");
+		expect((await buildBundle(root)).routes).toEqual(['GET /stats']);
+	});
+
+	it('refuses invalid ids, existing files and ids plugin.ts has', async () => {
 		const root = await project('my-plugin', 'field');
 
 		await expect(addContribution(root, 'field', 'Bad Type')).rejects.toThrow(
 			"can't be a field type"
 		);
 		await expect(addContribution(root, 'field', 'color')).rejects.toThrow(
-			'fields/color already exists'
+			'fields in plugin.ts already has color'
 		);
 		await expect(addContribution(root, 'route', 'assets/logo')).rejects.toThrow(
 			"can't be a route path"
 		);
-		await write(root, { 'pages/stats/index.svelte': '<p>Stats</p>\n' });
+		await write(root, { 'pages/stats.svelte': '<p>Stats</p>\n' });
 		await expect(addContribution(root, 'page', 'stats')).rejects.toThrow(
-			'pages/stats/index.svelte already exists'
+			'pages/stats.svelte already exists'
+		);
+		// Nothing was written for the page.
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).not.toContain('pages');
+	});
+
+	it('explains how to add an entry by hand when plugin.ts has no literal record', () => {
+		expect(() =>
+			addToDefinition('plugin.ts', 'export default definePlugin({ fields: shared });\n', {
+				key: 'fields',
+				id: 'rating',
+				value: 'rating',
+				imports: ["import rating from './rating.js';"]
+			})
+		).toThrow(
+			expect.objectContaining({
+				message: 'fields in plugin.ts is not an object literal',
+				hint: "Add it to definePlugin({ ... }) in plugin.ts by hand: import rating from './rating.js'; fields: { rating }"
+			})
 		);
 	});
 
@@ -359,13 +465,13 @@ describe('add', () => {
 		});
 		expect(manifest.contributes.pages.map((page) => page.path)).toEqual(['stats']);
 		await expect(addContribution(root, 'route', 'stats')).rejects.toThrow(
-			'add route needs the convention layout'
+			'add route needs plugin.ts'
 		);
 	});
 });
 
 describe('discoverProject', () => {
-	it('builds the demo plugin with the contributions of its manifest before the convention', async () => {
+	it('builds the demo plugin', async () => {
 		const { bundle, routes } = await buildBundle(DEMO_ROOT);
 
 		expect(bundle.manifest.contributes.fields.map((field) => field.type)).toEqual([
@@ -383,6 +489,7 @@ describe('discoverProject', () => {
 			icon: 'ui/icons/lucide/star-half.svg'
 		});
 		expect(bundle.manifest.contributes).toMatchObject({
+			// In the order of plugin.ts.
 			pages: [
 				{
 					path: 'overview',
@@ -391,18 +498,30 @@ describe('discoverProject', () => {
 					navigation: true,
 					icon: 'ui/icons/lucide/layout-dashboard.svg'
 				},
-				// By their `order`, not by file name.
 				{ path: 'fields', title: 'Field playground', icon: 'ui/icons/lucide/shapes.svg' },
 				{ path: 'api', title: 'API explorer', icon: 'ui/icons/lucide/terminal.svg' }
 			],
-			authProviders: []
+			authProviders: [],
+			collections: [
+				{
+					name: 'notes',
+					fields: [
+						{ name: 'text', type: 'text', required: true },
+						{ name: 'author', type: 'relation', options: { collection: 'users' } }
+					],
+					indexes: [{ columns: ['author'], unique: false }]
+				}
+			]
 		});
+		expect(bundle.manifest.permissions.collections).toEqual({ read: ['users'], write: [] });
 		expect(routes.sort()).toEqual([
 			'GET /github-status',
 			'GET /info',
 			'GET /items/:id',
 			'GET /me',
-			'POST /echo'
+			'GET /notes',
+			'POST /echo',
+			'POST /notes'
 		]);
 		expect(bundle.files['ui/icons/lucide/pipette.svg']).toContain('<svg');
 		expect(bundle.manifest.settings.map((setting) => setting.key)).toEqual([
@@ -428,135 +547,193 @@ describe('discoverProject', () => {
 		await buildBundle(root, { log });
 
 		expect(stdout).toContain('  Found 1 page (hello), 1 route (GET /hello), 1 setting (greeting)');
-		expect(stdout).toContain('› Reading the settings in plugin.ts');
-		expect(stdout).toContain('  1 setting: greeting (text)');
+		expect(stdout).toContain('› Reading plugin.ts');
+		expect(stdout).toContain('  1 page, 1 route, 1 setting');
 		expect(stdout[0]).toBe('› Reading pouchbase-plugin.json');
 	});
 
-	it('needs an input for every field type', async () => {
-		const root = await project('my-plugin', 'field');
+	it('needs plugin.ts, with a definition', async () => {
+		const root = await project('my-plugin', 'empty');
 
-		await rm(join(root, 'fields/color/input.svelte'));
+		await write(root, { 'plugin.ts': 'export const x = 1;\n' });
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message: 'fields/color: has no input.svelte: every field type needs an input component',
-			hint: 'pouchbase-plugin add field <type> shows what the files of a field type look like.'
+			message: 'plugin.ts: must default-export definePlugin({ ... })'
+		});
+		await rm(join(root, 'plugin.ts'));
+		await expect(discoverProject(root)).rejects.toMatchObject({
+			message: expect.stringMatching(/^plugin\.ts: doesn't exist/)
 		});
 	});
 
-	it('needs a description and a column for every field type', async () => {
+	it('needs an input, a description and a column for every field type', async () => {
 		const root = await project('my-plugin', 'empty');
 
 		await write(root, {
-			'fields/rating/field.ts': 'export default { label: "Rating" };\n',
-			'fields/rating/input.svelte': '<input />\n'
+			'rating.svelte': '<input />\n',
+			'plugin.ts': pluginFile(
+				"import Input from './rating.svelte';\n",
+				"{ fields: { rating: { label: 'Rating', input: Input }, stars: { label: 'Stars' }, Bad: {} }, extra: {} } as never"
+			)
 		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
+			message: 'Problems in plugin.ts',
 			issues: [
 				{
-					path: 'fields/rating/field.ts',
+					path: 'plugin.ts',
 					message:
-						'defineField needs a description: one sentence shown when an admin picks the type'
+						"definePlugin({ extra }) isn't something a plugin adds; use settings, fields, pages, authProviders, collections, routes"
 				},
 				{
-					path: 'fields/rating/field.ts',
+					path: 'plugin.ts',
 					message:
-						'defineField needs a column: TEXT, INTEGER, REAL or BLOB, the storage class of the value'
-				}
+						'fields.rating needs a description: one sentence shown when an admin picks the type'
+				},
+				{
+					path: 'plugin.ts',
+					message:
+						'fields.rating needs a column: TEXT, INTEGER, REAL or BLOB, the storage class of the value'
+				},
+				{
+					path: 'plugin.ts',
+					message:
+						"fields.stars.input is missing: a Svelte component of the plugin, e.g. import Input from './input.svelte'"
+				},
+				{ path: 'plugin.ts', message: 'fields.Bad: use lowercase names' }
 			]
 		});
 	});
 
-	it('takes page titles from <script module>, else from the file name', async () => {
+	it('takes pages from plugin.ts, in its order, with titles from their paths', async () => {
 		const root = await project('my-plugin', 'empty');
 
 		await write(root, {
-			'pages/monthly-report.svelte': '<h1>Report</h1>\n',
-			'pages/settings/index.svelte': `<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	export const page = { title: 'Plugin settings', navigation: false } satisfies PageMeta;
-</script>
-
-<h1>Settings</h1>
-`,
-			'pages/_parts/header.svelte': '<header></header>\n'
+			'views/report.svelte': '<h1>Report</h1>\n',
+			'views/settings.svelte': '<h1>Settings</h1>\n',
+			'plugin.ts': pluginFile(
+				"import Report from './views/report.svelte';\nimport Settings from './views/settings.svelte';\n",
+				"{ pages: { settings: { title: 'Plugin settings', navigation: false, component: Settings }, 'reports/monthly-report': { component: Report } } }"
+			)
 		});
 
 		const { bundle } = await buildBundle(root);
 
 		expect(bundle.manifest.contributes.pages).toEqual([
 			{
-				path: 'monthly-report',
-				title: 'Monthly report',
-				component: 'ui/pages/monthly-report.svelte',
-				navigation: true
-			},
-			{
 				path: 'settings',
 				title: 'Plugin settings',
-				component: 'ui/pages/settings/index.svelte',
+				component: 'ui/views/settings.svelte',
 				navigation: false
+			},
+			{
+				path: 'reports/monthly-report',
+				title: 'Monthly report',
+				component: 'ui/views/report.svelte',
+				navigation: true
 			}
 		]);
-		expect(bundle.files['ui/pages/_parts/header.svelte']).toBeUndefined();
 	});
 
-	it('refuses page metadata that is not a literal, and names that are not lowercase', async () => {
-		expect(
-			readPageMeta('pages/a.svelte', '<script module>export const page = { title: t };</script>')
-		).toEqual({
-			problem:
-				"export const page must be a literal object, e.g. { title: 'Stats' }; it can't use imports, variables or function calls"
-		});
-
+	it('refuses pages without a component of the plugin, and paths that are not lowercase', async () => {
 		const root = await project('my-plugin', 'empty');
 
-		await write(root, { 'pages/Stats.svelte': '<p></p>\n', 'pages/index.svelte': '<p></p>\n' });
+		await write(root, {
+			'stats.svelte': '<p></p>\n',
+			'icon-of-page.svg': '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"></svg>\n',
+			'plugin.ts': pluginFile(
+				"import Stats from './stats.svelte';\nimport icon from './icon-of-page.svg';\n",
+				'{ pages: { Stats: { component: Stats }, a: { component: () => null }, b: { component: icon }, c: { component: Stats, icon: Stats } } } as never'
+			)
+		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
 			issues: [
+				{ path: 'plugin.ts', message: 'pages.Stats: use lowercase names' },
 				{
-					path: 'pages/Stats.svelte',
-					message: 'use lowercase names'
+					path: 'plugin.ts',
+					message:
+						"pages.a.component must be a Svelte component of the plugin, imported like a module: import Stats from './stats.svelte'"
 				},
 				{
-					path: 'pages/index.svelte',
+					path: 'plugin.ts',
 					message:
-						'a page needs a path below /plugins/<id>/; give the file a name, e.g. pages/overview.svelte'
-				}
+						"pages.b.component must be a Svelte component of the plugin, imported like a module: import Stats from './stats.svelte'"
+				},
+				{ path: 'plugin.ts', message: 'pages.c.icon: stats.svelte is not an .svg file' }
 			]
 		});
 	});
 
-	it('maps route files to paths', () => {
-		expect(routePathOf('routes/index.ts')).toEqual({ path: '/' });
-		expect(routePathOf('routes/items/index.ts')).toEqual({ path: '/items' });
-		expect(routePathOf('routes/items/[id].ts')).toEqual({ path: '/items/:id' });
-		expect(routePathOf('routes/v2/status.json.ts')).toEqual({ path: '/v2/status.json' });
-		expect(routePathOf('routes/Items.ts')).toEqual({ problem: 'use lowercase names' });
-		expect(routePathOf('routes/assets/x.ts')).toMatchObject({
-			problem: expect.stringContaining('served by Pouchbase itself')
-		});
+	it('checks route paths', () => {
+		expect(routePathProblem('/')).toBeNull();
+		expect(routePathProblem('/items/:id')).toBeNull();
+		expect(routePathProblem('/v2/status.json')).toBeNull();
+		expect(routePathProblem('items')).toBe('starts with a slash, e.g. /items');
+		expect(routePathProblem('/items/')).toBe(
+			'has an empty segment; remove the extra or trailing slash'
+		);
+		expect(routePathProblem('/items/[id]')).toBe('"[id]" is written :id for a parameter');
+		expect(routePathProblem('/Items')).toBe('use lowercase names');
+		expect(routePathProblem('/assets/x')).toContain('served by Pouchbase itself');
+		expect(routePathFor('items/[id]')).toBe('/items/:id');
 		expect(routeFileFor('/items/:id')).toBe('routes/items/[id].ts');
 		expect(routeFileFor('items/[id]')).toBe('routes/items/[id].ts');
 		expect(routeFileFor('/')).toBe('routes/index.ts');
 		expect(routeFileFor('Bad Path')).toBeNull();
 	});
 
-	it('refuses route files without handlers and routes that answer the same path', async () => {
+	it('refuses routes without handlers and routes that answer the same paths', async () => {
 		const root = await project('my-plugin', 'empty');
 
 		await write(root, {
-			'routes/stats.ts': 'export const get = () => new Response();\n',
-			'routes/items/[id].ts': 'export const GET = () => new Response();\n',
-			'routes/items/[slug].ts': 'export const GET = () => new Response();\n'
+			'plugin.ts': pluginFile(
+				'',
+				`{ routes: {
+					'/stats': { get: () => new Response() },
+					'/items/:id': { GET: () => new Response() },
+					'/items/:slug': { GET: () => new Response() },
+					'/items/[id]/x': { GET: () => new Response() }
+				} } as never`
+			)
 		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message:
-				'routes/items/[slug].ts: answers /items/:slug, like routes/items/[id].ts; keep one of them'
+			issues: [
+				{
+					path: 'plugin.ts',
+					message: 'routes["/stats"] has no GET, POST, PUT, PATCH, DELETE handler'
+				},
+				{
+					path: 'plugin.ts',
+					message:
+						'routes["/items/:slug"] answers the same paths as routes["/items/:id"]; keep one of them'
+				},
+				{
+					path: 'plugin.ts',
+					message: 'routes["/items/[id]/x"]: "[id]" is written :id for a parameter'
+				}
+			]
 		});
-		await rm(join(root, 'routes/items/[slug].ts'));
+	});
+
+	it('refuses imports of missing files and files outside the plugin', async () => {
+		const root = await project('my-plugin', 'empty');
+
+		await write(root, {
+			'plugin.ts': pluginFile(
+				"import Stats from './stats.svelte';\n",
+				'{ pages: { stats: { component: Stats } } }'
+			)
+		});
 		await expect(discoverProject(root)).rejects.toMatchObject({
-			message: 'routes/stats.ts: exports no GET, POST, PUT, PATCH, DELETE function'
+			message: expect.stringContaining("stats.svelte doesn't exist")
+		});
+
+		await write(root, {
+			'plugin.ts': pluginFile(
+				"import Other from '../other.svelte';\n",
+				'{ pages: { stats: { component: Other } } }'
+			)
+		});
+		await expect(discoverProject(root)).rejects.toMatchObject({
+			message: expect.stringContaining('which is outside the plugin')
 		});
 	});
 
@@ -580,6 +757,7 @@ describe('discoverProject', () => {
 		await write(root, {
 			'fields/color/preview.svelte': `<script lang="ts">
 	import field from './field.js';
+	import plugin from '../../plugin.js';
 	import lodash from 'lodash';
 </script>
 `
@@ -589,11 +767,16 @@ describe('discoverProject', () => {
 				{
 					path: 'fields/color/preview.svelte',
 					message:
-						'imports fields/color/field.ts, which is server code; move what both need into a shared file, e.g. lib/'
+						'imports plugin.ts, which is server code; move what both need into a shared file, e.g. lib/'
 				},
 				{
 					path: 'fields/color/preview.svelte',
 					message: expect.stringContaining('imports lodash')
+				},
+				{
+					path: 'fields/color/preview.svelte',
+					message:
+						'imports fields/color/field.ts, which is server code (it imports @pouchbasejs/plugin-sdk/server); move what both need into a shared file, e.g. lib/'
 				}
 			]
 		});
@@ -698,17 +881,6 @@ describe('discoverProject', () => {
 		});
 	});
 
-	it('refuses to mix the legacy and the convention layout', async () => {
-		const root = await legacyProject();
-
-		await write(root, { 'routes/ping.ts': 'export const GET = () => new Response();\n' });
-		await expect(discoverProject(root)).rejects.toMatchObject({
-			message:
-				'pouchbase-plugin.json has "contributes" and "server", but the plugin also has routes/',
-			hint: expect.stringContaining('Use one layout')
-		});
-	});
-
 	it('still builds the legacy layout, with a deprecation warning', async () => {
 		const root = await legacyProject();
 		const { bundle, warnings, routes, project: found } = await buildBundle(root);
@@ -743,32 +915,20 @@ describe('manifest command', () => {
 			server: 'server.js',
 			contributes: { pages: [{ path: 'hello', title: 'Hello' }] }
 		});
-		expect(stdout.at(-1)).toBe('✓ Generated the manifest of hello-page@0.1.0 (convention layout)');
+		expect(stdout.at(-1)).toBe('✓ Generated the manifest of hello-page@0.1.0');
 		expect(stderr).toEqual([]);
 	});
 });
 
 describe('generateServerEntry', () => {
-	it('imports every file and keys the routes', () => {
-		const source = generateServerEntry(
-			{
-				fields: [{ type: 'rating', file: 'fields/rating/field.ts' }],
-				authProviders: [{ id: 'acme', file: 'auth/acme/provider.ts' }],
-				routes: [
-					{ path: '/info', file: 'routes/info.ts', methods: ['GET'] },
-					{ path: '/items/:id', file: 'routes/items/[id].ts' }
-				]
-			},
-			{ root: dir }
-		);
+	it('imports plugin.ts by its path in the plugin', () => {
 		const base = dir.split(sep).join('/');
 
-		expect(source).toContain(`import field0 from "${base}/fields/rating/field.ts";`);
-		expect(source).toContain(`import * as route1 from "${base}/routes/items/[id].ts";`);
-		expect(source).toContain('"GET /info": route0.GET');
-		expect(source).toContain('...routes([');
-		expect(generateServerEntry({ fields: [], authProviders: [], routes: [] })).not.toContain(
-			'function routes'
+		expect(generateServerEntry({ plugin: 'plugin.ts' }, { root: dir })).toContain(
+			`import plugin from "${base}/plugin.ts";`
+		);
+		expect(generateServerEntry({ plugin: 'plugin.js' })).toContain(
+			'import plugin from "./plugin.js";'
 		);
 	});
 });
@@ -881,21 +1041,6 @@ function manifestFor(version: string) {
 }
 
 describe('field previews', () => {
-	it('still reads cell.svelte, the former name of preview.svelte, with a warning', async () => {
-		const root = await project('old-names', 'field');
-
-		await rename(join(root, 'fields/color/preview.svelte'), join(root, 'fields/color/cell.svelte'));
-
-		const { bundle, warnings } = await buildBundle(root);
-
-		expect(bundle.manifest.contributes.fields[0]?.preview).toBe('ui/fields/color/cell.svelte');
-		expect(bundle.files['ui/fields/color/cell.svelte']).toBeDefined();
-		expect(warnings).toContainEqual({
-			path: 'fields/color/cell.svelte',
-			message: expect.stringContaining('rename it to preview.svelte')
-		});
-	});
-
 	it('reads cell in a manifest as the preview', () => {
 		const result = parseManifest({
 			id: 'old',

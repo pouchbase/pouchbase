@@ -21,10 +21,20 @@
 >
 	<p>
 		Pouchbase handles the redirects and the token exchange; the plugin says where to send people and
-		how to read their profile. A provider is a folder in <Code.Root>auth/</Code.Root>, whose name is
-		its id, with a <Code.Root>provider.ts</Code.Root> that default-exports
-		<Code.Root>defineAuthProvider(...)</Code.Root> and an optional <Code.Root>icon.svg</Code.Root> for
-		the sign-in button.
+		how to read their profile. A provider is a <Code.Root>defineAuthProvider(...)</Code.Root> in
+		<Code.Root>authProviders</Code.Root> of <Code.Root>definePlugin</Code.Root>, whose key is its
+		id:
+	</p>
+
+	<CodeBlock.Root title="plugin.ts">
+		<CodeBlock.Source code={data.code.authProviderPlugin} />
+	</CodeBlock.Root>
+
+	<p>
+		The templates keep it in <Code.Root>auth/&lt;id&gt;/provider.ts</Code.Root>, next to its logo.
+		<Code.Root>icon</Code.Root> is the logo on the sign-in button, shown in its own colors: an imported
+		<Code.Root>.svg</Code.Root> file or an Iconify name, such as
+		<Code.Root>logos:gitlab-icon</Code.Root>. Without one, the button has no logo.
 	</p>
 
 	<h2 id="openid-connect">OpenID Connect</h2>
@@ -43,7 +53,8 @@
 
 	<p>
 		Write <Code.Root>profile</Code.Root> yourself: it gets the access token and returns the user.
-		<Code.Root>fetchJson</Code.Root> sends the token and throws when the request fails:
+		<Code.Root>fetchJson</Code.Root> sends the token and throws when the request fails. From the built-in
+		GitHub sign-in:
 	</p>
 
 	<CodeBlock.Root title="auth/github/provider.ts">

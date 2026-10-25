@@ -73,7 +73,7 @@ export type RouteInfo = {
 	/** As the route file declares it, e.g. `/items/:id`. */
 	path: string;
 	description: string;
-	/** The file that answers it, below `routes/`. */
+	/** The file that answers it, below `routes/`; plugin.ts maps the path to it. */
 	file: string;
 };
 
@@ -93,14 +93,26 @@ export const ROUTES: RouteInfo[] = [
 	{
 		method: 'GET',
 		path: '/items/:id',
-		description: 'A parameter in the file name, read from ctx.params.',
-		file: 'items/[id].ts'
+		description: 'A :id segment in the path, read from ctx.params.',
+		file: 'item.ts'
 	},
 	{
 		method: 'GET',
 		path: '/me',
 		description: 'The app user of the bearer token, from ctx.user.',
 		file: 'me.ts'
+	},
+	{
+		method: 'GET',
+		path: '/notes',
+		description: "The user's notes, from the plugin's own collection through ctx.pouch.",
+		file: 'notes.ts'
+	},
+	{
+		method: 'POST',
+		path: '/notes',
+		description: 'Adds a note of the user to the demo_notes collection.',
+		file: 'notes.ts'
 	},
 	{
 		method: 'GET',

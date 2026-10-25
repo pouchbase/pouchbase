@@ -1,0 +1,5 @@
+---
+'@pouchbasejs/plugin-sdk': minor
+---
+
+Build a plugin from one `definePlugin({ ... })` in `plugin.ts` that declares its settings, field types, pages (with their title, sidebar link and icon), sign-in providers and routes by id, importing their code, components and `.svg` icons from any folder; the CLI writes the manifest itself (`pouchbase-plugin manifest` prints it). `add` creates the files of a contribution and adds it to `plugin.ts`, `validate` checks imports and compiles components exactly as Pouchbase does, components and icons are typed (`@pouchbasejs/plugin-sdk/env`), field types, pages and sign-in providers can have icons, `@pouchbasejs/plugin-sdk/vite` lets tests import `plugin.ts`, and `@pouchbasejs/plugin-sdk/testing` provides `fakeContext()`. Manifests with `contributes` still build, with a warning; their server code is now typed as `ServerDefinition`.

@@ -31,14 +31,17 @@ export type PluginComponent = Component<any>;
 
 type ComponentModule = { default?: unknown };
 
-/** Components of the built-in plugins: the legacy `ui/` folder and the convention folders. */
+/**
+ * Components of the built-in plugins, wherever they keep them (`plugin.ts` names the ones the
+ * dashboard renders; the legacy layout has them in `ui/`).
+ */
 const embeddedComponents = import.meta.glob<ComponentModule>([
-	'/plugins/*/ui/**/*.svelte',
-	'/plugins/*/{fields,pages}/**/*.svelte'
+	'/plugins/*/**/*.svelte',
+	'!/plugins/*/{node_modules,dist}/**'
 ]);
 
 const embeddedStyles = import.meta.glob<string>(
-	['/plugins/*/ui/**/*.css', '/plugins/*/{fields,pages}/**/*.css'],
+	['/plugins/*/**/*.css', '!/plugins/*/{node_modules,dist}/**'],
 	{ query: '?inline', import: 'default' }
 );
 

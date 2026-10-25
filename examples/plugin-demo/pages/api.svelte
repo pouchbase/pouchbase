@@ -1,14 +1,3 @@
-<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	export const page = {
-		title: 'API explorer',
-		navigation: true,
-		order: 3,
-		icon: 'lucide:terminal'
-	} satisfies PageMeta;
-</script>
-
 <script lang="ts">
 	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
 
@@ -105,8 +94,7 @@
 				<Callout.Body>
 					<Callout.Description>
 						Your admin session isn't an app user, so from here it answers 401. An app sends the
-						token of a signed-in user, from <code class="font-mono text-xs"
-							>pouch.auth.signIn()</code
+						token of a signed-in user, from <code class="font-mono text-xs">pouch.auth.login()</code
 						>.
 					</Callout.Description>
 				</Callout.Body>

@@ -70,12 +70,12 @@
 		{ method: 'GET', path: '/api/auth/providers', purpose: 'Active OAuth providers' },
 		{
 			method: 'POST',
-			path: '/api/auth/password/sign-up',
+			path: '/api/auth/password/register',
 			purpose: 'Create a user: { name, email, password }'
 		},
 		{
 			method: 'POST',
-			path: '/api/auth/password/sign-in',
+			path: '/api/auth/password/login',
 			purpose: 'Sign in: { email, password }'
 		},
 		{

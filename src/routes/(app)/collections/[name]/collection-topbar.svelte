@@ -15,12 +15,12 @@
 		/** Collection name from the URL, so the breadcrumb can render before the data is in. */
 		name: string;
 		/** Leave it out while the collection loads; the actions are then disabled. */
-		collection?: { id: string; name: string; system: boolean };
+		collection?: { id: string; name: string; system: boolean; pluginId?: string | null };
 		/**
-		 * The realtime connection that keeps the records up to date: "Live" when open, "Offline" when
+		 * The realtime connection that keeps the records up to date: "Realtime" when open, "Offline" when
 		 * closed, nothing while connecting or when left out.
 		 */
-		live?: 'connecting' | 'open' | 'closed';
+		realtime?: 'connecting' | 'open' | 'closed';
 		/** Ids of the selected records; switches the actions to bulk actions. */
 		selected?: string[];
 		onClearSelection?: () => void;
@@ -37,7 +37,7 @@
 	let {
 		name,
 		collection,
-		live,
+		realtime,
 		selected = [],
 		onClearSelection,
 		onDeleteSelected,
@@ -64,12 +64,22 @@
 	</Breadcrumb.Root>
 
 	<Topbar.Actions>
-		{#if live === 'open'}
+		{#if collection?.pluginId}
+			<Badge.Root
+				variant="outline"
+				title="Created by the plugin {collection.pluginId}, which can always read and write it"
+			>
+				<Icon.Root icon="lucide:puzzle" />
+				{collection.pluginId}
+			</Badge.Root>
+		{/if}
+
+		{#if realtime === 'open'}
 			<Badge.Root variant="success" title="Changes show up as they are saved">
 				<Icon.Root icon="lucide:radio" />
-				Live
+				Realtime
 			</Badge.Root>
-		{:else if live === 'closed'}
+		{:else if realtime === 'closed'}
 			<Badge.Root variant="outline" title="Not connected; reload to see the latest changes">
 				<Icon.Root icon="lucide:unplug" />
 				Offline

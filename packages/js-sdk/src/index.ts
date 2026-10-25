@@ -32,24 +32,24 @@ export type { InvokeOptions } from './services/functions.js';
 export { MailService } from './services/mail.js';
 export type { SendMailOptions } from './services/mail.js';
 export { CollectionClient } from './services/db.js';
-export { LiveService } from './services/live.js';
-export type { WatchOptions } from './services/live.js';
-export { LiveConnection } from './live/connection.js';
+export { RealtimeService } from './services/realtime.js';
+export type { SubscribeOptions } from './services/realtime.js';
+export { RealtimeConnection } from './realtime/connection.js';
 export type {
 	ConnectionState,
-	LiveEvent,
-	LiveSubscription,
+	RealtimeEvent,
+	RealtimeSubscription,
 	SubscriptionRequest,
 	WebSocketInstance,
 	WebSocketLike
-} from './live/connection.js';
-export type { LiveAction } from './live/protocol.js';
+} from './realtime/connection.js';
+export type { RealtimeAction } from './realtime/protocol.js';
 export type {
 	AnyInclude,
 	AnyRecord,
 	AnyRelations,
 	CallOptions,
-	CollectionWatchOptions,
+	CollectionSubscribeOptions,
 	CreateOf,
 	Db,
 	FindFirstOptions,
@@ -83,8 +83,8 @@ export type {
 	KnownOAuthProvider,
 	OAuthProvider,
 	OAuthProviderInfo,
-	SignUpInput,
-	SignUpResult,
+	RegisterInput,
+	RegisterResult,
 	User,
 	UserOf
 } from './types.js';

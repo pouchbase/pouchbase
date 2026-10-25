@@ -63,15 +63,15 @@ export type AuthResult = {
 };
 
 /**
- * The result of `pouch.auth.signUp()`. When the instance requires a verified email, `token` is `null`
+ * The result of `pouch.auth.register()`. When the instance requires a verified email, `token` is `null`
  * and the user signs in after following the link in the verification email.
  */
-export type SignUpResult =
+export type RegisterResult =
 	| (AuthResult & { verificationRequired: false })
 	| { token: null; userId: string; verificationRequired: true };
 
-/** Input for `pouch.auth.signUp()`. */
-export type SignUpInput = {
+/** Input for `pouch.auth.register()`. */
+export type RegisterInput = {
 	/** Full name, such as `Ada Lovelace`. */
 	name: string;
 	email: string;

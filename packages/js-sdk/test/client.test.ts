@@ -65,7 +65,7 @@ describe('Pouchbase', () => {
 		]);
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
 		const error = await pouch.auth
-			.signUp({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'secret' })
+			.register({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'secret' })
 			.catch((e) => e);
 
 		expect(error).toBeInstanceOf(PouchbaseError);
@@ -129,13 +129,13 @@ describe('auth', () => {
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
 		const listener = vi.fn();
 
-		pouch.session.watch(listener);
+		pouch.session.subscribe(listener);
 
-		await expect(pouch.auth.signIn('ada@example.com', 'secret')).resolves.toEqual({
+		await expect(pouch.auth.login('ada@example.com', 'secret')).resolves.toEqual({
 			token: 'abc',
 			userId: 'u1'
 		});
-		expect(calls[0]?.url).toBe('https://pouch.example.com/api/auth/password/sign-in');
+		expect(calls[0]?.url).toBe('https://pouch.example.com/api/auth/password/login');
 		expect(JSON.parse(String(calls[0]?.init.body))).toEqual({
 			email: 'ada@example.com',
 			password: 'secret'
@@ -151,7 +151,7 @@ describe('auth', () => {
 			{ message: 'Verify your email address first', code: 'email_not_verified' }
 		]);
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
-		const error = await pouch.auth.signIn('ada@example.com', 'secret').catch((e) => e);
+		const error = await pouch.auth.login('ada@example.com', 'secret').catch((e) => e);
 
 		expect(error).toBeInstanceOf(PouchbaseError);
 		expect(error.status).toBe(403);
@@ -166,7 +166,7 @@ describe('auth', () => {
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
 		const input = { name: 'Ada Lovelace', email: 'ada@example.com', password: 'secret' };
 
-		await expect(pouch.auth.signUp(input)).resolves.toEqual({
+		await expect(pouch.auth.register(input)).resolves.toEqual({
 			token: 'abc',
 			userId: 'u1',
 			verificationRequired: false
@@ -180,7 +180,7 @@ describe('auth', () => {
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
 
 		await expect(
-			pouch.auth.signUp({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'secret' })
+			pouch.auth.register({ name: 'Ada Lovelace', email: 'ada@example.com', password: 'secret' })
 		).resolves.toEqual({ token: null, userId: 'u1', verificationRequired: true });
 		expect(pouch.session.token).toBeNull();
 	});
@@ -209,8 +209,8 @@ describe('auth', () => {
 		const pouch = new Pouchbase('https://pouch.example.com', { session: signedIn('abc') });
 		const listener = vi.fn();
 
-		pouch.session.watch(listener);
-		pouch.auth.signOut();
+		pouch.session.subscribe(listener);
+		pouch.auth.logout();
 
 		expect(pouch.session.token).toBeNull();
 		expect(listener).toHaveBeenCalledWith(null);
@@ -251,7 +251,7 @@ describe('auth', () => {
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
 		const open = vi.fn();
 
-		await expect(pouch.auth.signInWithOAuth('github', { open, interval: 1 })).resolves.toEqual({
+		await expect(pouch.auth.oauth('github', { open, interval: 1 })).resolves.toEqual({
 			token: 'abc',
 			userId: 'u1'
 		});
@@ -269,9 +269,7 @@ describe('auth', () => {
 	it('throws the OAuth error code', async () => {
 		const { fetch } = mockFetch([200, { status: 'error', error: 'email_in_use' }]);
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });
-		const error = await pouch.auth
-			.signInWithOAuth('google', { open: () => {}, interval: 1 })
-			.catch((e) => e);
+		const error = await pouch.auth.oauth('google', { open: () => {}, interval: 1 }).catch((e) => e);
 
 		expect(error).toBeInstanceOf(PouchbaseError);
 		expect(error.code).toBe('email_in_use');
@@ -651,7 +649,7 @@ describe('db', () => {
 
 		// Only type-checked, never run.
 		expectTypeOf(() => {
-			pouch.db.comments.watch(
+			pouch.db.comments.subscribe(
 				(event) => {
 					expectTypeOf(event.record.author).toEqualTypeOf<UsersRecord | null>();
 				},

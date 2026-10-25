@@ -17,8 +17,8 @@ import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
 import { oauthCallbackPath } from '#lib/auth/oauth-providers.js';
 import {
 	appPassword,
-	passwordSignUpSchema,
-	type PasswordSignUpInput
+	passwordRegisterSchema,
+	type PasswordRegisterInput
 } from '#lib/schemas/password-auth.js';
 
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
@@ -102,7 +102,7 @@ export type PasswordSettings = {
 };
 
 /** A new user; `token` is `null` when they must verify their email address first. */
-export type PasswordSignUpResult = { token: string | null; userId: string };
+export type PasswordRegisterResult = { token: string | null; userId: string };
 
 /** Validation messages keyed by input field. */
 export type AuthIssues = Record<string, string>;
@@ -274,10 +274,10 @@ export class AuthService extends Service {
 	 * is required there is no token: the user signs in after following the link in the
 	 * verification email.
 	 */
-	passwordSignUp(
-		input: PasswordSignUpInput
+	passwordRegister(
+		input: PasswordRegisterInput
 	): ResultAsync<
-		PasswordSignUpResult,
+		PasswordRegisterResult,
 		| EnsureUsersError
 		| ServiceError<5000, 'GET_SETTING_FAILED'>
 		| ServiceError<5001, 'SET_SETTING_FAILED'>
@@ -299,7 +299,7 @@ export class AuthService extends Service {
 					return errAsync(this.error(11021, 'SIGN_UP_DISABLED'));
 				}
 
-				const parsed = passwordSignUpSchema.safeParse(input);
+				const parsed = passwordRegisterSchema.safeParse(input);
 
 				if (!parsed.success) {
 					return errAsync(this.invalidInput(parsed.error.issues));
@@ -365,7 +365,7 @@ export class AuthService extends Service {
 	 * Checks an email and password, and returns a token. When verification is required, a user
 	 * whose address isn't verified yet gets `EMAIL_NOT_VERIFIED`, but only with the right password.
 	 */
-	passwordSignIn(
+	passwordLogin(
 		email: string,
 		password: string
 	): ResultAsync<
@@ -549,7 +549,7 @@ export class AuthService extends Service {
 				{ token: string; userId: string } | { error: OAuthErrorCode },
 				never
 			> = code
-				? this.signIn(provider, code, request.providerVerifier).orElse((failure) => {
+				? this.oauthLogin(provider, code, request.providerVerifier).orElse((failure) => {
 						if (failure.code !== 11005) {
 							console.error(`[auth] Sign-in with ${provider} failed`, failure);
 						}
@@ -641,7 +641,7 @@ export class AuthService extends Service {
 	 * A sign-in is linked to an existing user with the same email only when the provider verified
 	 * that email; otherwise anyone could take over an account by claiming its address.
 	 */
-	private signIn(
+	private oauthLogin(
 		provider: OAuthProvider,
 		code: string,
 		codeVerifier: string

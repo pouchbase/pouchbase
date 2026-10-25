@@ -15,19 +15,16 @@
 	];
 
 	const options = [
+		{ key: 'component', about: 'The page: a Svelte component, imported like a module. Required.' },
 		{
 			key: 'title',
-			about: 'The page title. Defaults to the file name: monthly-report.svelte is “Monthly report”.'
+			about:
+				'The page title. Defaults to the last segment of the path: monthly-report is “Monthly report”.'
 		},
 		{ key: 'navigation', about: 'Whether the page gets a link in the sidebar. Default true.' },
 		{
-			key: 'order',
-			about:
-				'Where the page comes among the plugin’s pages: lower first. Pages without one follow, by path.'
-		},
-		{
 			key: 'icon',
-			about: 'The icon of the sidebar link: an Iconify name or the path of an .svg file.'
+			about: 'The icon of the sidebar link: an Iconify name or an imported .svg file.'
 		}
 	];
 </script>
@@ -40,23 +37,31 @@
 	<h2 id="a-page">A page</h2>
 
 	<p>
-		A Svelte component in <Code.Root>pages/</Code.Root> is a page at
-		<Code.Root>/plugins/&lt;plugin&gt;/&lt;path&gt;</Code.Root>:
-		<Code.Root>pages/palette.svelte</Code.Root> is <Code.Root
-			>/plugins/color-picker/palette</Code.Root
-		>, and <Code.Root>pages/reports/index.svelte</Code.Root> is
-		<Code.Root>/plugins/color-picker/reports</Code.Root>.
+		A page is an entry in <Code.Root>pages</Code.Root> of <Code.Root>definePlugin</Code.Root>. Its
+		key is its path below <Code.Root>/plugins/&lt;plugin&gt;/</Code.Root>:
+		<Code.Root>palette</Code.Root> is <Code.Root>/plugins/color-picker/palette</Code.Root>, and
+		<Code.Root>'reports/monthly'</Code.Root> is
+		<Code.Root>/plugins/color-picker/reports/monthly</Code.Root>. The sidebar lists the pages in the
+		order of the object.
 	</p>
+
+	<CodeBlock.Root title="plugin.ts">
+		<CodeBlock.Source code={data.code.pagePlugin} />
+	</CodeBlock.Root>
+
+	<p>The component is an ordinary Svelte component:</p>
 
 	<CodeBlock.Root title="pages/palette.svelte">
 		<CodeBlock.Source code={data.code.page} />
 	</CodeBlock.Root>
 
-	<h2 id="page-options">Page options</h2>
-
 	<p>
-		<Code.Root>page</Code.Root> in the <Code.Root>&lt;script module&gt;</Code.Root> sets these, all optional:
+		Build pages from the <a href={resolve('/docs/ui')}>UI components</a> of the dashboard, such as
+		the <a href={resolve('/docs/ui/[component]', { component: 'card' })}>Card</a> above, so they look
+		like the rest of it.
 	</p>
+
+	<h2 id="page-options">Page options</h2>
 
 	<Table.Root>
 		<Table.Header>
@@ -76,10 +81,14 @@
 	</Table.Root>
 
 	<p>
-		The CLI reads <Code.Root>page</Code.Root> without running the component, so it must be a literal:
-		no variables or function calls, apart from <Code.Root>definePage(&#123; … &#125;)</Code.Root> from
-		<Code.Root>@pouchbasejs/plugin-sdk/ui</Code.Root>.
+		To keep a page's options next to its component, write them in a file of their own with
+		<Code.Root>definePage</Code.Root> from <Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>,
+		and import that into <Code.Root>plugin.ts</Code.Root>:
 	</p>
+
+	<CodeBlock.Root title="pages/settings.ts">
+		<CodeBlock.Source code={data.code.definePage} />
+	</CodeBlock.Root>
 
 	<h2 id="props">Props</h2>
 

@@ -54,6 +54,7 @@
 		"@iconify/svelte": "^5.2.3",
 		"@pouchbasejs/js-sdk": "workspace:*",
 		"@pouchbasejs/plugin-sdk": "workspace:*",
+		"@pouchbasejs/ui": "workspace:*",
 		"bits-ui": "^2.20.0",
 		"motion-sv": "^0.2.2",
 		"semver": "^7.8.5",

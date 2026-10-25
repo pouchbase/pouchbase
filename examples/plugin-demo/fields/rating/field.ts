@@ -1,5 +1,7 @@
 import { defineField } from '@pouchbasejs/plugin-sdk/server';
 
+import Input from './input.svelte';
+import Preview from './preview.svelte';
 import { FIELD_TYPES } from '../../lib/catalog.js';
 import { checkRating } from '../../lib/rating.js';
 
@@ -12,6 +14,8 @@ export default defineField({
 	label: FIELD_TYPES.rating.label,
 	description: FIELD_TYPES.rating.description,
 	column: 'INTEGER',
+	input: Input,
+	preview: Preview,
 	icon: 'lucide:star-half',
 	validate(value) {
 		const check = checkRating(value);

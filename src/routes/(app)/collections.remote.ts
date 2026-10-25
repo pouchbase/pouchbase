@@ -42,9 +42,9 @@ export const getCollection = query(z.string(), async (name) => {
 		error(404, 'Collection not found');
 	}
 
-	const { id, system, createdAt } = result.value;
+	const { id, system, pluginId, createdAt } = result.value;
 
-	return { id, name: result.value.name, system, createdAt };
+	return { id, name: result.value.name, system, pluginId, createdAt };
 });
 
 export const createCollection = form(createCollectionSchema, async (data, issue) => {

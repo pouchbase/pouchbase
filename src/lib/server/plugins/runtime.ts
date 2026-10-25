@@ -4,10 +4,11 @@ import type {
 	FieldValue,
 	OAuthProfile,
 	PluginContext,
-	PluginDefinition,
+	ServerDefinition,
 	PluginUser
 } from '@pouchbasejs/plugin-sdk/server';
 
+import { Pouchbase } from '@pouchbasejs/js-sdk';
 import { createPluginSettings } from '@pouchbasejs/plugin-sdk/server';
 import { z } from 'zod';
 
@@ -253,11 +254,25 @@ export function pluginUser(row: Record<string, unknown> & { id: unknown }): Plug
  * `ctx.settings.get(key)` parses the value by the setting's type in `manifest.settings`
  * (`createPluginSettings`); mirrored in the Worker's entry code (`worker.ts`).
  */
+/**
+ * A `ctx.pouch` whose every request fails, where the host has none to give (e.g. while it asks a
+ * built-in plugin to `describe` itself).
+ */
+export function unavailablePouch(): Pouchbase {
+	return new Pouchbase('https://pouchbase.invalid', {
+		fetch: () => Promise.reject(new Error('ctx.pouch is not available here'))
+	});
+}
+
 export function pluginContext(
 	manifest: Pick<PluginManifest, 'id' | 'version'> & Partial<Pick<PluginManifest, 'settings'>>,
 	context: PluginCallContext,
 	fetch: typeof globalThis.fetch,
-	{ admin = false, user = null }: { admin?: boolean; user?: PluginUser | null } = {}
+	{
+		admin = false,
+		user = null,
+		pouch = unavailablePouch()
+	}: { admin?: boolean; user?: PluginUser | null; pouch?: Pouchbase } = {}
 ): PluginContext {
 	const prefix = `[plugin ${manifest.id}]`;
 
@@ -272,21 +287,22 @@ export function pluginContext(
 				console.error(prefix, message, ...(data === undefined ? [] : [data]))
 		},
 		admin,
-		user
+		user,
+		pouch
 	};
 }
 
 /** The handler of a field type; one the plugin doesn't define has no hooks. */
-function fieldHandler(plugin: PluginDefinition, type: string): FieldTypeHandler {
+function fieldHandler(plugin: ServerDefinition, type: string): FieldTypeHandler {
 	const fields = plugin.fields ?? {};
 	const handler = Object.hasOwn(fields, type) ? fields[type] : undefined;
 
 	return typeof handler === 'object' && handler !== null ? handler : {};
 }
 
-/** Runs a call against the plugin's `definePlugin(...)` export. Mirrored in `worker.ts`. */
+/** Runs a call against the plugin's server code (`ServerDefinition`). Mirrored in `worker.ts`. */
 export async function dispatch(
-	definition: PluginDefinition | undefined,
+	definition: ServerDefinition | undefined,
 	call: PluginCall,
 	ctx: PluginContext
 ): Promise<unknown> {
@@ -406,7 +422,7 @@ export function routeNotFound(match: { status: 404 } | { status: 405; allow: str
  * `worker.ts`.
  */
 export async function dispatchRoute(
-	definition: PluginDefinition | undefined,
+	definition: ServerDefinition | undefined,
 	request: Request,
 	path: string,
 	ctx: PluginContext

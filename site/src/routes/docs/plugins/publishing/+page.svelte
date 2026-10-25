@@ -162,7 +162,9 @@
 			bumps the API version; Pouchbase supports the current one and the one before.
 		</li>
 		<li>
-			Plugins written before the folder layout, with <Code.Root>contributes</Code.Root> and
+			Plugins written before <Code.Root>definePlugin</Code.Root> in <Code.Root>plugin.ts</Code.Root
+			>, with
+			<Code.Root>contributes</Code.Root> and
 			<Code.Root>server</Code.Root> in the manifest, still build with a warning until API version 2. The
 			<a href="https://github.com/pouchbase/pouchbase/tree/main/packages/plugin-sdk#legacy-layout"
 				>SDK README</a

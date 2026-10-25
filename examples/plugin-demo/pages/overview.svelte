@@ -1,16 +1,3 @@
-<script module lang="ts">
-	import type { PageMeta } from '@pouchbasejs/plugin-sdk/ui';
-
-	// The page's title, sidebar link and icon; a literal, which the CLI reads without running the page.
-	export const page = {
-		title: 'Demo',
-		navigation: true,
-		// First among the plugin's pages, in the sidebar too.
-		order: 1,
-		icon: 'lucide:layout-dashboard'
-	} satisfies PageMeta;
-</script>
-
 <script lang="ts">
 	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
 
@@ -258,7 +245,7 @@
 		</Card.Root>
 	</div>
 
-	<Section title="Pages" description="Every .svelte file in pages/ is a page of the plugin.">
+	<Section title="Pages" description="Every page in pages of plugin.ts, at its own path.">
 		<Card.Root class="divide-y divide-zinc-100">
 			{#each PAGES as item (item.path)}
 				<a

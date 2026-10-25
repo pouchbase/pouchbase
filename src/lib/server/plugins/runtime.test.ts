@@ -1,4 +1,4 @@
-import type { PluginDefinition } from '@pouchbasejs/plugin-sdk/server';
+import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
 import type { PluginRuntime } from './runtime';
 
 import { resolveSettings } from '@pouchbasejs/plugin-sdk';
@@ -88,7 +88,7 @@ describe('built-in sign-in providers', () => {
 });
 
 /** A plugin with a field type that has every hook, one without hooks, and a few routes. */
-const PLUGIN: PluginDefinition = {
+const PLUGIN: ServerDefinition = {
 	fields: {
 		rating: {
 			validate: (value, options) =>

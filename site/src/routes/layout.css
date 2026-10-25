@@ -3,6 +3,13 @@
 @import '@fontsource-variable/figtree';
 @import '@fontsource-variable/jetbrains-mono';
 @plugin '@tailwindcss/typography';
+/*
+ * The design tokens of @pouchbasejs/ui (`h-row`, chart colors, ...) and the classes its components
+ * use, for the live previews in the docs. The site's own tokens below win, so its controls stay
+ * `h-10`; a preview sets `--spacing-control` back to the dashboard's height.
+ */
+@import '@pouchbasejs/ui/tokens.css';
+@source '../../node_modules/@pouchbasejs/ui/src/components';
 
 @theme {
 	/* Shared height for all form controls (buttons, inputs, selects, ...) so they line up. */

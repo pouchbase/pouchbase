@@ -11,6 +11,7 @@
 	import { errorMessage } from '#lib/errors.js';
 	import { describeContributions } from './contributions';
 	import PluginCategories from './plugin-categories.svelte';
+	import PluginPermissions from './plugin-permissions.svelte';
 	import { getPluginDetails, installPlugin } from './plugins.remote';
 
 	type Props = {
@@ -41,7 +42,6 @@
 		{@const latest =
 			details.versions.find((version) => version.version === details.version) ??
 			details.versions[0]}
-		{@const hosts = latest?.permissions.network ?? []}
 		{@const adds = describeContributions(latest?.contributes)}
 
 		<dl class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
@@ -82,25 +82,11 @@
 			{/if}
 		</dl>
 
-		<div class="flex flex-col gap-2">
-			<h3 class="text-sm font-medium text-zinc-900">Permissions</h3>
-			{#if hosts.length}
-				<p class="text-sm text-zinc-600">The plugin's server code can connect to:</p>
-				<ul class="flex flex-col gap-1">
-					{#each hosts as host (host)}
-						<li class="flex items-center gap-2 font-mono text-sm text-zinc-900">
-							<Icon.Root icon="lucide:globe" class="size-4 text-zinc-500" />
-							{host}
-						</li>
-					{/each}
-				</ul>
-			{:else}
-				<p class="text-sm text-zinc-600">
-					No network access. The plugin runs in a sandbox and only sees the data Pouchbase passes to
-					it.
-				</p>
-			{/if}
-		</div>
+		<PluginPermissions
+			pluginId={plugin.id}
+			permissions={latest?.permissions}
+			collections={latest?.contributes?.collections}
+		/>
 
 		{#if !details.verified}
 			<Callout.Root variant="warning">

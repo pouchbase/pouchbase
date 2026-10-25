@@ -23,7 +23,7 @@
 
 - Collections, fields and indexes, managed from the admin interface, with a database API for their records.
 - Built-in user management with email and password sign-in and OAuth (Google, GitHub, Microsoft, Discord and Twitch built in, more through sign-in plugins).
-- Live updates: apps watch changes to records over a WebSocket, filtered by each collection's view rule.
+- Realtime: apps subscribe to changes to records over a WebSocket, filtered by each collection's view rule.
 - A built-in `files` collection for uploads.
 - An install page that creates the databases and the first admin account, or an install from `POUCHBASE_ADMIN_EMAIL` and `POUCHBASE_ADMIN_PASSWORD`.
 - A dashboard that shows the Cloudflare resources of the installation, the Worker and its bindings, usage graphs and how close the account is to the limits of its plan.
@@ -215,8 +215,8 @@ Every sign-in returns `{ token, user_id }`; a sign-up returns `{ token, user_id,
 | Request                                               | Purpose                                                                                                            |
 | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `GET /api/auth/providers`                             | Active OAuth providers: `[{ "provider": "github", "label": "GitHub", "iconUrl": "https://…/github.svg?v=1.0.0" }]` |
-| `POST /api/auth/password/sign-up`                     | `{ name, email, password }`; `400`/`409` with `issues` per field, `503` without mail when verification is required |
-| `POST /api/auth/password/sign-in`                     | `{ email, password }`; `401` for wrong credentials, `403` until the email is verified (when required)              |
+| `POST /api/auth/password/register`                    | `{ name, email, password }`; `400`/`409` with `issues` per field, `503` without mail when verification is required |
+| `POST /api/auth/password/login`                       | `{ email, password }`; `401` for wrong credentials, `403` until the email is verified (when required)              |
 | `POST /api/auth/password/forgot`                      | `{ email }`; emails a reset link (same answer for unknown addresses)                                               |
 | `POST /api/auth/password/reset`                       | `{ token, password }`; `400` for an invalid or expired link                                                        |
 | `POST /api/auth/email/send-verification`              | `{ email }`; emails a verification link                                                                            |
@@ -229,7 +229,7 @@ Every sign-in returns `{ token, user_id }`; a sign-up returns `{ token, user_id,
 | `POST /api/db/<collection>`                           | `{ <field>: value }`; creates a record when the create rule allows it; `?select`, `include`                        |
 | `PATCH /api/db/<collection>/<id>`                     | Changes the given fields, when the update rule allows it; `?select`, `include`                                     |
 | `DELETE /api/db/<collection>/<id>`                    | Deletes a record when the delete rule allows it; `204`                                                             |
-| `GET /api/live?collection=<name>` (WebSocket)         | Live changes to records the view rule allows, see [Live updates](#live-updates)                                    |
+| `GET /api/realtime?collection=<name>` (WebSocket)     | Changes to records the view rule allows, as they happen, see [Realtime](#realtime)                                 |
 | `GET /api/files/<id>`                                 | A file from the `files` collection (public; ids are random); `?size=<size>`, `?download`                           |
 | `GET /api/types?token=…`                              | TypeScript types of every collection; the URL is on the **Types** page                                             |
 | `GET /api/plugins/<id>/assets/ui/<file>.svg`          | An image of a plugin, e.g. a sign-in provider's logo (public, sandboxed)                                           |
@@ -277,26 +277,26 @@ A list takes `?where=<condition>`, `?order=created_at:desc,title` (ascending unl
 
 Records come back with real values: booleans as `true`/`false`, JSON fields parsed, and multiple relations, files and lists as arrays (`[]` when empty); blob fields are left out. `select` returns only those fields. `include` (on every database call except `DELETE`) replaces relation and file fields by the records they point to, up to three levels deep: a single relation becomes a record or `null`, a multiple one an array of records. Related records are only included when the view rule of their collection allows them, and including fails with `400` when the API doesn't show that collection at all (its view rule is **Admins only**). An [API key](#email-templates) with the **service** scope (`Authorization: Bearer pbk_…`) uses the database API as an admin: the API rules don't apply to it, so a back-end can write what users may not; other API keys get `403` there. `users` can't be created through the API (use sign-up), and its `email` and `verified` can't be changed there; `files` can only be listed, viewed and deleted. The **Preview** tab of the same panel shows every endpoint with SDK and cURL examples for its fields.
 
-### Live updates
+### Realtime
 
-Apps can watch changes to records as they are saved: every create, update and delete that the collection's **view rule** lets them see, over a WebSocket. With the SDK:
+Apps can subscribe to changes to records as they are saved: every create, update and delete that the collection's **view rule** lets them see, over a WebSocket. With the SDK:
 
 ```ts
-const watching = pouch.db.posts.watch(
+const subscription = pouch.db.posts.subscribe(
 	(event) => console.log(event.action, event.record), // 'create' | 'update' | 'delete'
 	{ where: { status: 'published' }, select: ['id', 'title'] }
 );
 
-await watching.ready; // rejects when the view rule doesn't allow it
-watching.stop();
+await subscription.ready; // rejects when the view rule doesn't allow it
+subscription.unsubscribe();
 ```
 
-`pouch.db.posts.watch(callback, { id })` follows one record. The SDK opens one connection per collection, reconnects by itself and follows sign-ins and sign-outs. The protocol, for other clients: connect to `/api/live?collection=<name>` and send `{"type":"auth","token":"<token>"}` (leave out `token` to connect anonymously) within 10 seconds; after `{"type":"ready"}`, send `{"type":"subscribe","id":"<your id>","record":"<record id>?","where":"<condition>?","select":["…"]?,"include":["author"]?}` (`include` as in the database API, checked against the view rules of the related collections for every event), answered by `subscribed` or `error`, and receive `{"type":"event","id","action","record","at"}`. `{"type":"ping"}` is answered by `{"type":"pong"}`; send it every 30 seconds. See `src/lib/realtime/protocol.ts` for the messages, error codes and close codes (`4401`: invalid or expired token).
+`pouch.db.posts.subscribe(callback, { id })` subscribes to one record. The SDK opens one connection per collection, reconnects by itself and follows sign-ins and sign-outs. The protocol, for other clients: connect to `/api/realtime?collection=<name>` and send `{"type":"auth","token":"<token>"}` (leave out `token` to connect anonymously) within 10 seconds; after `{"type":"ready"}`, send `{"type":"subscribe","id":"<your id>","record":"<record id>?","where":"<condition>?","select":["…"]?,"include":["author"]?}` (`include` as in the database API, checked against the view rules of the related collections for every event), answered by `subscribed` or `error`, and receive `{"type":"event","id","action","record","at"}`. `{"type":"ping"}` is answered by `{"type":"pong"}`; send it every 30 seconds. See `src/lib/realtime/protocol.ts` for the messages, error codes and close codes (`4401`: invalid or expired token).
 
 - An event's `record` has the same shape as the database API returns it; for a delete it is the record as it was. A record that no longer matches the view rule or the `where` after an update sends no event.
 - The rule sees the signed-in user as it was when the connection was made; it is checked again on reconnect. The connection is closed when the token expires.
 - Changes made outside the database API (restoring a backup) send no events.
-- The dashboard's records grid uses it too: it updates while you look at it, whoever made the change, and shows **Live** in the top bar.
+- The dashboard's records grid uses it too: it updates while you look at it, whoever made the change, and shows **Realtime** in the top bar.
 - On Workers, every collection with subscribers has a Durable Object (`RealtimeHub`, SQLite-backed, so the Free plan works too) that holds its sockets; while no events come in it hibernates, so open sockets aren't billed for duration. On Node the server holds them itself. Behind a reverse proxy, let WebSocket upgrades through (nginx needs `proxy_set_header Upgrade $http_upgrade` and `Connection "upgrade"`; Caddy does it by default).
 
 ### OAuth from your app
@@ -312,7 +312,7 @@ const random = (bytes) =>
 		.replace(/\//g, '_')
 		.replace(/=+$/, '');
 
-async function signInWith(provider) {
+async function oauth(provider) {
 	const popup = window.open('', 'pouchbase-oauth', 'width=500,height=700');
 	const state = random(24);
 	const verifier = random(32);
@@ -402,7 +402,7 @@ Templates are sent with `POST /api/mail/send` (`{ "template", "to", "variables" 
 
 The **Plugins** page (under System) searches the plugin registry, filters it by category (sign-in providers, field types, pages, integrations, developer tools) and installs, updates and removes plugins; the same plugins can be browsed on [pouchbase.io/plugins](https://pouchbase.io/plugins). Plugins add field types, dashboard pages and sign-in providers. Sign-in providers from plugins work; field types and pages don't run yet.
 
-A plugin with server code runs in **its own Worker on your Cloudflare account** (`<instance>-plugin-<id>`), deployed with the same Script Upload API as the functions. Like a function Worker, it answers on its `workers.dev` URL only to requests that carry its secret (so the account needs a `workers.dev` subdomain), and it has no other bindings: it can't reach your data. Before any plugin code runs, the Worker replaces `fetch` (and `WebSocket`) with versions that only reach the HTTPS hosts in the manifest's `permissions.network` (`*.example.com` matches the subdomains of `example.com`, not `example.com` itself) and don't follow redirects. Sign-in providers are registered when the plugin is installed: Pouchbase asks the plugin for the authorize and token URLs, scopes and PKCE setting and does the OAuth redirect and token exchange itself; only the profile lookup runs in the plugin. Provider ids are global, so a plugin can't be installed when another plugin already contributes one of its provider ids.
+A plugin with server code runs in **its own Worker on your Cloudflare account** (`<instance>-plugin-<id>`), deployed with the same Script Upload API as the functions. Like a function Worker, it answers on its `workers.dev` URL only to requests that carry its secret (so the account needs a `workers.dev` subdomain), and it has no bindings to the database, the storage or Pouchbase's secrets. Its data comes through `ctx.pouch`, the JS SDK with an API key of the plugin (renewed on every install and update), which only reaches the records API of the collections the plugin adds itself (`<plugin>_<name>`, created on install and deleted with their records when it is removed) and those in `permissions.collections`, without the collections' API rules; the admin sees both before installing. Before any plugin code runs, the Worker replaces `fetch` (and `WebSocket`) with versions that only reach the HTTPS hosts in the manifest's `permissions.network` (`*.example.com` matches the subdomains of `example.com`, not `example.com` itself) and don't follow redirects. Sign-in providers are registered when the plugin is installed: Pouchbase asks the plugin for the authorize and token URLs, scopes and PKCE setting and does the OAuth redirect and token exchange itself; only the profile lookup runs in the plugin. Provider ids are global, so a plugin can't be installed when another plugin already contributes one of its provider ids.
 
 The first-party plugins in [`plugins/`](plugins) (sign-in with Google, GitHub, Microsoft, Discord and Twitch) are **built in**: they ship with Pouchbase, run inside it with the same `fetch` allowlist, and can't be removed. Installing a plugin with the same id from the registry replaces the built-in one until it is removed again. Provider logos and other images of a plugin are served at `GET /api/plugins/<id>/assets/ui/<file>.svg` (public, sandboxed).
 

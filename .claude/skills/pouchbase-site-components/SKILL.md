@@ -184,7 +184,7 @@ The website has no forms yet. When one is needed (newsletter, contact, ...):
   <Icon.Root icon="lucide:trash-2" label="Delete" />
   ```
 
-- The Vite plugin in `vite/iconify.ts` scans `src` for these strings and bundles only the icons in
+- The `iconify` Vite plugin from `@pouchbasejs/ui/vite` scans `src` for these strings and bundles only the icons in
   use, so icons render during SSR and are never fetched from the Iconify API. Because of that the
   name must appear literally in the source: no `icon={`lucide:${name}`}`.
 - The default set is `lucide`. To use another set, install `@iconify-json/<set>` and add it to

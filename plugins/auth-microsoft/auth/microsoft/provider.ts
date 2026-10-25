@@ -1,10 +1,13 @@
 import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
 
+import logo from './icon.svg';
+
 /** The OpenID Connect userinfo response of Microsoft Graph. */
 type MicrosoftUser = { sub: string; email?: string; name?: string };
 
 export default defineAuthProvider({
 	label: 'Microsoft',
+	icon: logo,
 	consoleUrl:
 		'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade',
 	authorizeUrl: 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize',

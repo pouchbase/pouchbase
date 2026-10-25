@@ -395,6 +395,9 @@ importers:
       '@iconify-json/lucide':
         specifier: ^1.2.147
         version: 1.2.147
+      '@pouchbasejs/js-sdk':
+        specifier: workspace:^
+        version: link:../js-sdk
       es-module-lexer:
         specifier: ^2.3.2
         version: 2.3.2
@@ -546,6 +549,9 @@ importers:
       '@pouchbasejs/plugin-sdk':
         specifier: workspace:*
         version: link:../packages/plugin-sdk
+      '@pouchbasejs/ui':
+        specifier: workspace:*
+        version: link:../packages/ui
       bits-ui:
         specifier: ^2.20.0
         version: 2.20.2(@internationalized/date@3.12.4)(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.1(svelte@5.57.2(@typescript-eslint/types@8.72.0))(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))(typescript@6.0.3)(vite@8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1)))(svelte@5.57.2(@typescript-eslint/types@8.72.0))

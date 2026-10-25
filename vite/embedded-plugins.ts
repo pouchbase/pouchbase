@@ -1,7 +1,11 @@
 import type { DiscoveredProject } from '../packages/plugin-sdk/src/project.ts';
 import type { EnvironmentModuleNode, Plugin } from 'vite';
 
-import { discoverProject } from '../packages/plugin-sdk/src/project.ts';
+import {
+	discoverProject,
+	pluginFileOfId,
+	pluginFiles
+} from '../packages/plugin-sdk/src/project.ts';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 
@@ -14,7 +18,9 @@ import { join, relative, resolve, sep } from 'node:path';
  *   (`contributes` included), its `.svg` files by bundle path (`ui/auth/google/icon.svg`) and a
  *   loader of its server code; `issues`, the folders that couldn't be read.
  * - `virtual:pouchbase/embedded-plugins/server/<folder>`: the plugin's generated server entry, which
- *   imports its real source files, so Vite compiles them and watches them in dev.
+ *   imports its real source files, so Vite compiles them and watches them in dev. On the server, the
+ *   `.svelte` and `.svg` files that `plugin.ts` imports are `PluginFile`s, as in a plugin's bundle
+ *   (`pluginFiles()` of the SDK).
  *
  * `src/lib/server/plugins/embedded.ts` reads them. In dev, a change in `plugins/<folder>/` reads
  * that plugin again and reloads both modules on the server. The components (`.svelte`) are not
@@ -49,9 +55,22 @@ export function embeddedPlugins(options: EmbeddedPluginsOptions = {}): Plugin {
 	const discoveries = new Map<string, Promise<Discovery>>();
 	/** Folders whose warnings were printed, so a reload doesn't repeat them. */
 	const warned = new Set<string>();
+	/** Folder name → the plugin that turns its `.svelte` and `.svg` imports into `PluginFile`s. */
+	const references = new Map<string, ReturnType<typeof pluginFiles>>();
 
 	function pluginsDir() {
 		return resolve(root, dirName);
+	}
+
+	function referencesOf(folder: string) {
+		let plugin = references.get(folder);
+
+		if (!plugin) {
+			plugin = pluginFiles({ root: join(pluginsDir(), folder) });
+			references.set(folder, plugin);
+		}
+
+		return plugin;
 	}
 
 	/** Folders of `plugins/` with a `pouchbase-plugin.json`, sorted. */
@@ -146,6 +165,8 @@ export function embeddedPlugins(options: EmbeddedPluginsOptions = {}): Plugin {
 
 	return {
 		name: 'pouchbase:embedded-plugins',
+		// Before the Svelte plugin and Vite's assets, for the `.svelte` and `.svg` imports of server code.
+		enforce: 'pre',
 
 		configResolved(config) {
 			root = config.root;
@@ -155,7 +176,7 @@ export function embeddedPlugins(options: EmbeddedPluginsOptions = {}): Plugin {
 			discoveries.clear();
 		},
 
-		resolveId(id) {
+		resolveId(id, importer) {
 			if (id === EMBEDDED_PLUGINS_ID) {
 				return RESOLVED_ID;
 			}
@@ -164,12 +185,27 @@ export function embeddedPlugins(options: EmbeddedPluginsOptions = {}): Plugin {
 				return `\0${id}`;
 			}
 
+			// Only on the server: the dashboard compiles the components itself (`module-loader.ts`).
+			const folder = importer ? folderOf(importer) : null;
+
+			if (folder && this.environment.config.consumer === 'server') {
+				return referencesOf(folder).resolveId(id, importer);
+			}
+
 			return null;
 		},
 
 		async load(id) {
 			if (id === RESOLVED_ID) {
 				return pluginsModule();
+			}
+
+			// By the folder in the id, not by what resolved it: Vite may resolve in another instance.
+			const file = pluginFileOfId(id);
+			const fileFolder = file ? folderOf(file) : null;
+
+			if (fileFolder) {
+				return referencesOf(fileFolder).load(id);
 			}
 
 			if (!id.startsWith(RESOLVED_SERVER_PREFIX)) {
@@ -186,7 +222,7 @@ export function embeddedPlugins(options: EmbeddedPluginsOptions = {}): Plugin {
 			return discovery.project.serverEntry;
 		},
 
-		// A change in a plugin can change its manifest (a new folder in auth/, a label in provider.ts),
+		// A change in a plugin can change its manifest (a new page in plugin.ts, a label in provider.ts),
 		// so the plugin is read again and both modules reload with the changed file.
 		hotUpdate({ file, modules }) {
 			const folder = folderOf(file);

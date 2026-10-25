@@ -44,11 +44,11 @@
 	<h2 id="define-settings">Define settings</h2>
 
 	<p>
-		<Code.Root>plugin.ts</Code.Root> at the root of the plugin default-exports
-		<Code.Root>definePlugin(&#123; settings &#125;)</Code.Root>; Pouchbase builds the settings form
-		from it. The <Code.Root>Register</Code.Root> block at the end types <Code.Root
-			>ctx.settings</Code.Root
-		>
+		Settings are the <Code.Root>settings</Code.Root> list of
+		<Code.Root>definePlugin(&#123; … &#125;)</Code.Root> in <Code.Root>plugin.ts</Code.Root>, next
+		to what else the plugin adds; Pouchbase builds the settings form from it. They are code, so
+		<Code.Root>pouchbase-plugin.json</Code.Root> can't have them. The <Code.Root>Register</Code.Root
+		> block at the end types <Code.Root>ctx.settings</Code.Root>
 		everywhere in the plugin.
 	</p>
 

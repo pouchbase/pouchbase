@@ -188,7 +188,7 @@ export async function resolveIconifyIcon(
 		throw new ProjectError(
 			`icon "${name}" is not an Iconify name`,
 			[],
-			'Use prefix:name in lowercase, e.g. lucide:palette (see https://icon-sets.iconify.design), or the path of an .svg file.'
+			'Use prefix:name in lowercase, e.g. lucide:palette (see https://icon-sets.iconify.design), or import an .svg file of the plugin.'
 		);
 	}
 
@@ -226,7 +226,7 @@ export async function resolveIconifyIcon(
 	}
 
 	const url = `${ICONIFY_API}/${prefix}/${icon}.svg`;
-	const hint = `Install the icon set (pnpm add -D @iconify-json/${prefix}) or add an .svg file and use its path.`;
+	const hint = `Install the icon set (pnpm add -D @iconify-json/${prefix}) or import an .svg file of the plugin instead.`;
 
 	log?.step(`Fetching icon ${name} for ${label} from ${url}`);
 

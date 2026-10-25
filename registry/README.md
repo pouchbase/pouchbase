@@ -31,7 +31,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 
 - `pnpm dev` starts the app (`:5173`), the site (`:5174`) and this instance (`:5175`); without `registry/.env` the registry is skipped.
 - Let a Pouchbase instance install from the local registry with `POUCHBASE_REGISTRY_URL=http://localhost:5174` in its `.env` (the root `.env` for `pnpm dev:app`).
-- Publish to it: sign up on `http://localhost:5174/account/sign-up`, create a publish token under **Account**, then
+- Publish to it: sign up on `http://localhost:5174/account/register`, create a publish token under **Account**, then
 
   ```sh
   POUCHBASE_REGISTRY_URL=http://localhost:5174 POUCHBASE_REGISTRY_TOKEN=pbp_… pnpm --filter @pouchbase-plugins/auth-google release

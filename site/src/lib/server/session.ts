@@ -76,7 +76,7 @@ export async function requireUser(): Promise<User> {
 	if (!user) {
 		const { url } = getRequestEvent();
 
-		redirect(303, `/account/sign-in?redirectTo=${encodeURIComponent(url.pathname + url.search)}`);
+		redirect(303, `/account/login?redirectTo=${encodeURIComponent(url.pathname + url.search)}`);
 	}
 
 	return user;

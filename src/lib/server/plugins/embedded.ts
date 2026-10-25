@@ -1,5 +1,6 @@
+import type { Pouchbase } from '@pouchbasejs/js-sdk';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
-import type { PluginDefinition } from '@pouchbasejs/plugin-sdk/server';
+import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
 import type {
 	DescribeResult,
 	PluginCall,
@@ -35,8 +36,8 @@ import {
  * shadows the built-in one.
  */
 
-/** A module whose default export is `definePlugin(...)`. */
-type ServerModule = { default?: PluginDefinition };
+/** A module whose default export is what the host runs: the generated server entry. */
+type ServerModule = { default?: ServerDefinition };
 
 /** One folder of `plugins/`, as `virtual:pouchbase/embedded-plugins` has it. */
 export type EmbeddedSource = {
@@ -61,7 +62,7 @@ export type EmbeddedPlugin = {
 	/** Bundle path (`ui/auth/google/icon.svg`) → contents. */
 	assets: Record<string, string>;
 	/** Imports the server code; `undefined` without one. */
-	load(): Promise<PluginDefinition | undefined>;
+	load(): Promise<ServerDefinition | undefined>;
 };
 
 export type EmbeddedIssue = { dir: string; message: string };
@@ -116,7 +117,7 @@ export function loadEmbeddedPlugins(sources: EmbeddedSources): {
 			continue;
 		}
 
-		let loaded: Promise<PluginDefinition | undefined> | undefined;
+		let loaded: Promise<ServerDefinition | undefined> | undefined;
 
 		plugins.push({
 			manifest,
@@ -165,11 +166,14 @@ export function embeddedPlugin(id: string): EmbeddedPlugin | null {
 	return embeddedPlugins().find((plugin) => plugin.manifest.id === id) ?? null;
 }
 
-/** Runs a built-in plugin's server code inside Pouchbase. */
+/**
+ * Runs a built-in plugin's server code inside Pouchbase. `pouch` is its `ctx.pouch`, which the
+ * host builds for the request (see `PluginsService`); without one, its requests fail.
+ */
 export class InProcessRuntime implements PluginRuntime {
 	constructor(
 		private readonly plugin: EmbeddedPlugin,
-		private readonly options: { timeout?: number; fetch?: typeof fetch } = {}
+		private readonly options: { timeout?: number; fetch?: typeof fetch; pouch?: Pouchbase } = {}
 	) {}
 
 	async call(call: PluginCall, context: PluginCallContext = EMPTY_CALL_CONTEXT): Promise<unknown> {
@@ -177,7 +181,8 @@ export class InProcessRuntime implements PluginRuntime {
 		const ctx = pluginContext(
 			manifest,
 			context,
-			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch)
+			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
+			{ pouch: this.options.pouch }
 		);
 
 		return withTimeout(
@@ -200,7 +205,7 @@ export class InProcessRuntime implements PluginRuntime {
 			manifest,
 			context,
 			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
-			{ admin: context.admin, user: context.user }
+			{ admin: context.admin, user: context.user, pouch: this.options.pouch }
 		);
 		const forwarded = new Request(request, { headers: routeRequestHeaders(request.headers) });
 

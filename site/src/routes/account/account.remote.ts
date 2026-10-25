@@ -7,8 +7,8 @@ import { command, form, getRequestEvent, query } from '$app/server';
 import {
 	publishTokenIdSchema,
 	publishTokenSchema,
-	signInSchema,
-	signUpSchema,
+	loginSchema,
+	registerSchema,
 	uploadBundleSchema,
 	verificationSchema
 } from '#lib/schemas/account.js';
@@ -67,13 +67,13 @@ export const getProviders = query(async () => {
 	}
 });
 
-export const signIn = form(signInSchema, async (data) => {
+export const login = form(loginSchema, async (data) => {
 	const { cookies } = getRequestEvent();
 
 	let verified = false;
 
 	try {
-		const { token } = await pouchbase().auth.signIn(data.email, data._password);
+		const { token } = await pouchbase().auth.login(data.email, data._password);
 
 		// The instance may not require a verified email itself, but the site always does.
 		verified = isVerified(await pouchbase(token).auth.me());
@@ -111,9 +111,9 @@ export const signIn = form(signInSchema, async (data) => {
  * never a session yet: the page says the verification email is on its way and asks to follow the
  * link in it, then sign in.
  */
-export const signUp = form(signUpSchema, async (data, issue) => {
+export const register = form(registerSchema, async (data, issue) => {
 	try {
-		await pouchbase().auth.signUp({
+		await pouchbase().auth.register({
 			name: data.name,
 			email: data.email,
 			password: data._password
@@ -170,7 +170,7 @@ export const startOAuthSession = command(z.string().min(1), async (token) => {
 	locals.user = user;
 });
 
-export const signOut = form(async () => {
+export const logout = form(async () => {
 	endSession(getRequestEvent().cookies);
 
 	redirect(303, '/');

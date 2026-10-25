@@ -52,7 +52,8 @@ export default {
 			throw new Error('boom');
 		},
 		'GET /settings': async (_request, ctx) =>
-			Response.json({ limit: await ctx.settings.get('limit'), all: await ctx.settings.getAll() })
+			Response.json({ limit: await ctx.settings.get('limit'), all: await ctx.settings.getAll() }),
+		'GET /posts': async (_request, ctx) => Response.json(await ctx.pouch.db.posts.findMany({ limit: 2 }))
 	},
 	authProviders: {
 		example: {
@@ -88,13 +89,22 @@ export default {
 
 const SECRET = 'secret-value';
 
+/** The bindings of the plugin's Worker. */
+const ENV = {
+	POUCHBASE_PLUGIN_SECRET: SECRET,
+	POUCHBASE_URL: 'https://pouchbase.example.com',
+	POUCHBASE_API_KEY: 'pbk_plugin'
+};
+
 type Worker = { fetch(request: Request, env: Record<string, string>): Promise<Response> };
 
 let dir: string;
 let worker: Worker;
 let restore: () => void;
+let originFetch: (origin: string) => typeof fetch;
 const originalFetch = globalThis.fetch;
 const upstream: string[] = [];
+const authorizations: (string | null)[] = [];
 
 beforeAll(async () => {
 	if (!('timingSafeEqual' in crypto.subtle)) {
@@ -108,6 +118,11 @@ beforeAll(async () => {
 		const request = input instanceof Request ? input : new Request(input);
 
 		upstream.push(request.url);
+		authorizations.push(request.headers.get('authorization'));
+
+		if (new URL(request.url).pathname.startsWith('/api/db/')) {
+			return Response.json({ items: [{ id: 'p1' }], total: 1, limit: 2, offset: 0 });
+		}
 
 		return Response.json({ id: 42 });
 	}) as typeof fetch;
@@ -138,6 +153,7 @@ beforeAll(async () => {
 
 	worker = entry.default;
 	restore = guard.restoreGlobals;
+	originFetch = guard.originFetch;
 });
 
 afterAll(async () => {
@@ -149,9 +165,7 @@ afterAll(async () => {
 function runtime(secret = SECRET) {
 	return new WorkerRuntime('https://plugin.example.workers.dev', secret, {
 		fetch: ((input: RequestInfo | URL, init?: RequestInit) =>
-			worker.fetch(new Request(input, init), {
-				POUCHBASE_PLUGIN_SECRET: SECRET
-			})) as typeof fetch
+			worker.fetch(new Request(input, init), ENV)) as typeof fetch
 	});
 }
 
@@ -167,7 +181,7 @@ describe('plugin Worker', () => {
 				}
 			},
 			fields: ['rating', 'bytes'],
-			routes: ['GET /hello', 'POST /items/:id', 'GET /boom', 'GET /settings'],
+			routes: ['GET /hello', 'POST /items/:id', 'GET /boom', 'GET /settings', 'GET /posts'],
 			fieldHandlers: {
 				rating: { validate: true, serialize: true, deserialize: true },
 				bytes: { validate: false, serialize: true, deserialize: true }
@@ -277,6 +291,35 @@ describe('plugin Worker routes', () => {
 		}
 	};
 	const original = 'https://pouchbase.example.com/api/plugins/auth-example';
+
+	it('gives ctx.pouch the JS SDK with the plugin key, for the origin of Pouchbase', async () => {
+		const response = await runtime().route(
+			new Request(`${original}/posts`),
+			{ path: '/posts', search: '' },
+			context
+		);
+
+		await expect(response.json()).resolves.toEqual({
+			items: [{ id: 'p1' }],
+			total: 1,
+			limit: 2,
+			offset: 0,
+			hasMore: false
+		});
+		expect(upstream.at(-1)).toBe('https://pouchbase.example.com/api/db/posts?limit=2');
+		expect(authorizations.at(-1)).toBe('Bearer pbk_plugin');
+	});
+
+	it('limits the fetch of ctx.pouch to the origin of Pouchbase', async () => {
+		const fetch = originFetch('https://pouchbase.example.com');
+
+		await expect(fetch('https://evil.com/steal')).rejects.toThrow(
+			'ctx.pouch only reaches https://pouchbase.example.com'
+		);
+		await expect(fetch('https://pouchbase.example.com/api/health')).resolves.toBeInstanceOf(
+			Response
+		);
+	});
 
 	it('answers /__route/hello with the handler response', async () => {
 		const response = await runtime().route(

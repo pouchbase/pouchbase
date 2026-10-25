@@ -31,7 +31,7 @@
 	import { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 	import { FILES_COLLECTION, fileUrl, formatFileSize, isInlineImage } from '#lib/files/files.js';
 	import { previewThumbnail } from '#lib/files/thumbnails.js';
-	import { LiveCollection } from '#lib/realtime/live.svelte.js';
+	import { RealtimeCollection } from '#lib/realtime/collection.svelte.js';
 	import ApiSheet from './api-sheet.svelte';
 	import CollectionSettingsSheet from './collection-settings-sheet.svelte';
 	import { getCollectionSettings } from './collection-settings.remote';
@@ -98,7 +98,7 @@
 	const signInMethods = $derived(data.signInMethods ?? {});
 
 	// Changes by anyone (the API, other admins, functions) refresh the page of records.
-	const live = new LiveCollection(
+	const realtime = new RealtimeCollection(
 		() => params.name,
 		() => void listRecords(args).refresh()
 	);
@@ -252,7 +252,7 @@
 <CollectionTopbar
 	name={params.name}
 	{collection}
-	live={live.state}
+	realtime={realtime.state}
 	selected={selectedIds}
 	onClearSelection={() => selection.clear()}
 	onDeleteSelected={() => void confirmDelete(selectedIds)}

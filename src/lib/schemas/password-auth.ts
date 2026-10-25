@@ -16,17 +16,17 @@ export const appName = z
 
 export const appEmail = z.string().trim().toLowerCase().pipe(z.email('Invalid email address'));
 
-/** Sign-up of an app user with name, email and password (public API). */
-export const passwordSignUpSchema = z.object({
+/** Registration of an app user with name, email and password (public API). */
+export const passwordRegisterSchema = z.object({
 	name: appName,
 	email: appEmail,
 	password: appPassword
 });
 
-export type PasswordSignUpInput = z.input<typeof passwordSignUpSchema>;
+export type PasswordRegisterInput = z.input<typeof passwordRegisterSchema>;
 
-/** Sign-in of an app user with email and password (public API). */
-export const passwordSignInSchema = z.object({
+/** Login of an app user with email and password (public API). */
+export const passwordLoginSchema = z.object({
 	email: z.string().trim().toLowerCase().min(1, 'Enter your email address'),
 	password: z.string().min(1, 'Enter your password')
 });

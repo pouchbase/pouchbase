@@ -77,6 +77,12 @@ export const collections = sqliteTable('collections', {
 	system: integer('system', { mode: 'boolean' }).notNull().default(false),
 	/** Collection-specific settings, e.g. thumbnail sizes for `files`. */
 	settings: collectionSettings('settings').notNull().default({}),
+	/**
+	 * The plugin that contributes the collection (`contributes.collections`), or `null`. The plugin
+	 * may always use it through its `ctx.pouch`; it is deleted, with its records, when the plugin is
+	 * removed.
+	 */
+	pluginId: text('plugin_id'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.notNull()
 		.$defaultFn(() => new Date())
@@ -488,11 +494,17 @@ export const apiKeys = sqliteTable('api_keys', {
 	keyHash: text('key_hash').notNull().unique(),
 	/** The first characters of the key, so it can be recognised in the list. */
 	prefix: text('prefix').notNull(),
-	/** `standard`: what server-side code may do, such as sending email; `service`: also the records API as an admin. */
-	scope: text('scope', { enum: ['standard', 'service'] })
+	/**
+	 * `standard`: what server-side code may do, such as sending email; `service`: also the records
+	 * API as an admin; `plugin`: the key of a plugin's Worker, only for the records API of the
+	 * collections the plugin may use.
+	 */
+	scope: text('scope', { enum: ['standard', 'service', 'plugin'] })
 		.notNull()
 		.default('standard'),
 	functionId: text('function_id').references(() => functions.id, { onDelete: 'cascade' }),
+	/** Set for the key of a plugin (scope `plugin`); built-in plugins have no row in `plugins`. */
+	pluginId: text('plugin_id'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.notNull()
 		.$defaultFn(() => new Date()),

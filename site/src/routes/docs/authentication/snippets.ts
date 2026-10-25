@@ -17,7 +17,7 @@ export const password = snippet(
 	`
 import { isPouchbaseError } from '@pouchbasejs/js-sdk';
 
-const { verificationRequired } = await pouch.auth.signUp({
+const { verificationRequired } = await pouch.auth.register({
 	name: 'Ada Lovelace',
 	email: 'ada@example.com',
 	password: 'correct horse battery staple'
@@ -25,7 +25,7 @@ const { verificationRequired } = await pouch.auth.signUp({
 // verificationRequired: no session yet, Ada signs in after following the link in the email
 
 try {
-	await pouch.auth.signIn('ada@example.com', 'correct horse battery staple');
+	await pouch.auth.login('ada@example.com', 'correct horse battery staple');
 } catch (error) {
 	if (isPouchbaseError(error, 'unauthorized')) {
 		// Wrong email or password.
@@ -37,7 +37,7 @@ try {
 }
 
 const user = await pouch.auth.me(); // UsersRecord | null
-pouch.auth.signOut(); // ends the session`
+pouch.auth.logout(); // ends the session`
 );
 
 export const session = snippet(
@@ -49,17 +49,17 @@ pouch.session.user; // the signed-in user, once known
 pouch.session.expiresAt; // Date | null, from the token
 
 // Runs after every sign-in and sign-out; immediate: true also runs it right away.
-const stop = pouch.session.watch(
+const unsubscribe = pouch.session.subscribe(
 	(session) => {
 		console.log(session ? \`Signed in as \${session.userId}\` : 'Signed out');
 	},
 	{ immediate: true }
 );
-stop();
+unsubscribe();
 
 // A token you got elsewhere, for example from your own server:
 pouch.session.begin({ token, userId });
-pouch.session.end(); // the same as pouch.auth.signOut()`
+pouch.session.end(); // the same as pouch.auth.logout()`
 );
 
 export const storage = snippet(
@@ -88,7 +88,7 @@ const providers = await pouch.auth.providers();
 
 button.addEventListener('click', async () => {
 	try {
-		await pouch.auth.signInWithOAuth('github');
+		await pouch.auth.oauth('github');
 	} catch (error) {
 		// error.code: access_denied, email_in_use, sign_in_failed, popup_blocked, popup_closed or timeout
 	}

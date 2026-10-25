@@ -4,7 +4,7 @@
  * reaches the browser, and `CodeBlock.Source` renders the result.
  */
 
-export type Language = 'typescript' | 'javascript' | 'bash' | 'json' | 'html';
+export type Language = 'typescript' | 'javascript' | 'bash' | 'json' | 'html' | 'css' | 'svelte';
 
 export interface Snippet {
 	language: Language;
@@ -16,6 +16,8 @@ export interface HighlightedToken {
 	text: string;
 	/** A CSS color; tokens without one take the block's text color. */
 	color?: string;
+	/** Makes the token a link, e.g. an import of `@pouchbasejs/ui` to the docs of that component. */
+	href?: string;
 }
 
 export interface HighlightedCode {

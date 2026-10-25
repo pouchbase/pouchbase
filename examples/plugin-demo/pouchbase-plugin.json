@@ -7,6 +7,7 @@
 		"pouchbase": ">=0.10.0"
 	},
 	"permissions": {
-		"network": ["www.githubstatus.com"]
+		"network": ["www.githubstatus.com"],
+		"collections": { "read": ["users"] }
 	}
 }

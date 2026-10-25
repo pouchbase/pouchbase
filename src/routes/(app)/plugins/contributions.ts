@@ -11,6 +11,8 @@ const KINDS = [
 		many: 'sign-in providers',
 		name: (item) => item.label
 	},
+	// The permissions list them by name.
+	{ key: 'collections', one: 'collection', many: 'collections', name: null },
 	{ key: 'routes', one: 'route', many: 'routes', name: null },
 	{ key: 'settings', one: 'setting', many: 'settings', name: null }
 ] as const satisfies readonly {

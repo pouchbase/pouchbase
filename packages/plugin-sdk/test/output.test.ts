@@ -112,11 +112,10 @@ describe('feedback', () => {
 
 		await buildBundle(project, { log }).catch(() => {});
 
-		expect(stdout.slice(0, 4)).toEqual([
+		expect(stdout.slice(0, 3)).toEqual([
 			'› Reading pouchbase-plugin.json',
-			'  demo-page, convention layout',
-			'› Looking for fields/, pages/, auth/, routes/',
-			'  1 page, 1 route file'
+			'  demo-page',
+			'› Reading plugin.ts'
 		]);
 	});
 

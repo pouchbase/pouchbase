@@ -22,6 +22,6 @@ Before writing or editing any `.svelte` file, load the **`pouchbase-site-compone
 - Reuse what exists in `src/lib/components/ui/`; if nothing fits, check the Pouchbase app (`../src/lib/components/ui/`) and copy it over, otherwise **always** create a reusable component in `ui/` instead of inline markup.
 - Compound structure with an `index.ts` and a namespace import: `<Button.Root>`, `<Card.Title>`, ...
 - File names are lowercase kebab-case, prefixed with the component name: `card-root.svelte`, `card-title.svelte`, `card-context.ts`.
-- Icons always come from Iconify through `<Icon.Root icon="lucide:plus" />` (literal names, bundled by `vite/iconify.ts`); never `@lucide/svelte` or other icon component libraries.
+- Icons always come from Iconify through `<Icon.Root icon="lucide:plus" />` (literal names, bundled by the `iconify` Vite plugin from `@pouchbasejs/ui/vite`); never `@lucide/svelte` or other icon component libraries.
 - Buttons that trigger async actions always show the spinner (async `onclick` does this automatically; otherwise pass `loading`).
 - Forms use remote functions (`form(...)` in a `*.remote.ts`) with a Zod schema from `src/lib/schemas/`.

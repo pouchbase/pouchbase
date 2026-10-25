@@ -22,6 +22,8 @@ import {
 	manifestJsonSchema,
 	parseBundle,
 	parseManifest,
+	pluginCollectionName,
+	pluginCollectionPrefix,
 	resolveSettings,
 	serializeBundle,
 	serverCodeIssues,
@@ -105,6 +107,82 @@ describe('parseManifest', () => {
 
 		if (!result.success) {
 			expect(result.issues[0]?.path).toBe('server');
+		}
+	});
+});
+
+describe('collections', () => {
+	it('names a plugin collection with the plugin id as prefix', () => {
+		expect(pluginCollectionPrefix('color-picker')).toBe('color_picker_');
+		expect(pluginCollectionName('color-picker', 'palettes')).toBe('color_picker_palettes');
+	});
+
+	it('fills in the defaults of permissions and collections', () => {
+		const result = parseManifest({
+			...valid,
+			contributes: {
+				collections: [{ name: 'palettes', fields: [{ name: 'title', type: 'text' }] }]
+			}
+		});
+
+		expect(result.success).toBe(true);
+
+		if (result.success) {
+			expect(result.manifest.permissions.collections).toEqual({ read: [], write: [] });
+			expect(result.manifest.contributes.collections).toEqual([
+				{
+					name: 'palettes',
+					fields: [
+						{
+							name: 'title',
+							type: 'text',
+							required: false,
+							unique: false,
+							defaultValue: null,
+							options: {}
+						}
+					],
+					indexes: [],
+					rules: {}
+				}
+			]);
+		}
+	});
+
+	it('accepts collection names and * in permissions.collections', () => {
+		const result = parseManifest({
+			...valid,
+			permissions: { collections: { read: ['*'], write: ['posts', 'Bad-Name'] } }
+		});
+
+		expect(result.success).toBe(false);
+
+		if (!result.success) {
+			expect(result.issues.map((issue) => issue.path)).toEqual(['permissions.collections.write.1']);
+		}
+	});
+
+	it('rejects duplicate, invalid and too long collection names', () => {
+		const result = parseManifest({
+			...valid,
+			contributes: {
+				collections: [
+					{ name: 'palettes' },
+					{ name: 'palettes' },
+					{ name: 'Palettes' },
+					{ name: 'p'.repeat(60) }
+				]
+			}
+		});
+
+		expect(result.success).toBe(false);
+
+		if (!result.success) {
+			expect(result.issues.map((issue) => issue.path)).toEqual([
+				'contributes.collections.2.name',
+				'contributes.collections.1',
+				'contributes.collections.3.name'
+			]);
 		}
 	});
 });
@@ -493,7 +571,7 @@ describe('manifestJsonSchema', () => {
 		).toEqual([...PLUGIN_CATEGORIES]);
 	});
 
-	it('marks the keys the convention layout no longer reads as deprecated', () => {
+	it('marks the keys plugin.ts replaces as deprecated', () => {
 		const properties = manifestJsonSchema().properties as Record<string, Record<string, unknown>>;
 
 		for (const key of ['settings', 'contributes', 'server']) {

@@ -1,5 +1,7 @@
 import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
 
+import logo from './icon.svg';
+
 /** The OpenID Connect userinfo response of Google. */
 type GoogleUser = {
 	sub: string;
@@ -11,6 +13,7 @@ type GoogleUser = {
 
 export default defineAuthProvider({
 	label: 'Google',
+	icon: logo,
 	consoleUrl: 'https://console.cloud.google.com/apis/credentials',
 	authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
 	tokenUrl: 'https://oauth2.googleapis.com/token',

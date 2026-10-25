@@ -91,13 +91,13 @@ function parseSession(value: unknown): SessionData | null {
 }
 
 /**
- * The session of the signed-in user, as `pouch.session`. Sign-ins begin it, `pouch.auth.signOut()`
+ * The session of the signed-in user, as `pouch.session`. Sign-ins begin it, `pouch.auth.logout()`
  * ends it, and while it lasts its token is sent as `Authorization: Bearer` with every request.
  *
  * ```ts
  * const pouch = createClient<Schema>(url, { session: 'browser' });
  *
- * pouch.session.watch((session) => {
+ * pouch.session.subscribe((session) => {
  * 	console.log(session ? `Signed in as ${session.userId}` : 'Signed out');
  * });
  * ```
@@ -156,9 +156,9 @@ export class Session {
 
 	/**
 	 * Calls `listener` after every change, and right away when `immediate` is set.
-	 * @returns A function that removes the listener.
+	 * @returns A function that unsubscribes the listener.
 	 */
-	watch(listener: SessionListener, options: { immediate?: boolean } = {}): () => void {
+	subscribe(listener: SessionListener, options: { immediate?: boolean } = {}): () => void {
 		this.#listeners.add(listener);
 
 		if (options.immediate) {

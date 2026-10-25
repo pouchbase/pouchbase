@@ -14,10 +14,10 @@
 
 	const providers = $derived(await getProviders());
 
-	async function signInWith(provider: OAuthProvider) {
+	async function loginWith(provider: OAuthProvider) {
 		try {
 			// The popup opens before the first `await`, so browsers don't block it.
-			const { token } = await createClient(POUCHBASE_URL ?? '').auth.signInWithOAuth(provider);
+			const { token } = await createClient(POUCHBASE_URL ?? '').auth.oauth(provider);
 
 			await startOAuthSession(token);
 			// Only paths on this site, so a sign-in link can't send people elsewhere.
@@ -48,7 +48,7 @@
 {#if providers.length}
 	<div class="flex flex-col gap-2">
 		{#each providers as { provider, label } (provider)}
-			<Button.Root variant="secondary" onclick={() => signInWith(provider)}>
+			<Button.Root variant="secondary" onclick={() => loginWith(provider)}>
 				{#if provider === 'github'}
 					<Icon.Root icon="simple-icons:github" />
 				{:else}

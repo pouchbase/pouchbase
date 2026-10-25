@@ -7,8 +7,14 @@ declare module 'virtual:pouchbase/embedded-plugins' {
 	export const issues: import('./lib/server/plugins/embedded').EmbeddedIssue[];
 }
 
-/** The generated server entry of a built-in plugin: default-exports `definePlugin(...)`'s input. */
+/** The JS SDK as one ES module, for the Worker of a plugin; see `vite/js-sdk-module.ts`. */
+declare module 'virtual:pouchbase/js-sdk-module' {
+	const code: string;
+	export default code;
+}
+
+/** The generated server entry of a built-in plugin: default-exports what the host runs. */
 declare module 'virtual:pouchbase/embedded-plugins/server/*' {
-	const definition: import('@pouchbasejs/plugin-sdk/server').PluginDefinition | undefined;
+	const definition: import('@pouchbasejs/plugin-sdk/server').ServerDefinition | undefined;
 	export default definition;
 }

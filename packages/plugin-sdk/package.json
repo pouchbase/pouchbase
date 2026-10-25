@@ -20,7 +20,8 @@
 		"pouchbase-plugin": "./dist/cli.js"
 	},
 	"files": [
-		"dist"
+		"dist",
+		"env.d.ts"
 	],
 	"exports": {
 		".": "./src/index.ts",
@@ -28,6 +29,10 @@
 		"./ui": "./src/ui.ts",
 		"./project": "./src/project.ts",
 		"./testing": "./src/testing.ts",
+		"./vite": "./src/vite.ts",
+		"./env": {
+			"types": "./env.d.ts"
+		},
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -53,6 +58,13 @@
 				"types": "./dist/testing.d.ts",
 				"default": "./dist/testing.js"
 			},
+			"./vite": {
+				"types": "./dist/vite.d.ts",
+				"default": "./dist/vite.js"
+			},
+			"./env": {
+				"types": "./env.d.ts"
+			},
 			"./package.json": "./package.json"
 		}
 	},
@@ -68,6 +80,7 @@
 	},
 	"dependencies": {
 		"@iconify-json/lucide": "^1.2.147",
+		"@pouchbasejs/js-sdk": "workspace:^",
 		"es-module-lexer": "^2.3.2",
 		"rolldown": "^1.2.15",
 		"semver": "^7.8.5",

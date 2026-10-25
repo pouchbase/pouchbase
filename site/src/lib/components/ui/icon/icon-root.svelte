@@ -1,5 +1,6 @@
 <script module lang="ts">
-	// Registers every icon used in `src` (see `vite/iconify.ts`), so icons render on the server too.
+	// Registers every icon used in `src` and in `@pouchbasejs/ui` (the `iconify` Vite plugin of
+	// `@pouchbasejs/ui/vite`), so icons render on the server too.
 	import 'virtual:iconify';
 </script>
 
