@@ -168,6 +168,10 @@ setStepsContext({
 ## 7. Forms
 
 - Forms always use **remote functions**: `form(schema, handler)` in a `*.remote.ts` file.
+- A keyed instance (`myForm.for(key)`) is created outside a derived's dependencies, or its issues
+  get lost: the instance reads state that its own submission changes, so a plain
+  `$derived(myForm.for(id))` re-runs and creates a fresh instance without them. Write
+  `$derived.by(() => { const key = item.id; return untrack(() => myForm.for(key).preflight(schema)); })`.
 - Schemas are Zod and live in `src/lib/schemas/`, so pages can reuse them for
   `myForm.preflight(schema)` (schemas can't be exported from a `.remote.ts` file).
 - Fields with sensitive values start with an underscore (`_password`) so they are never sent back.

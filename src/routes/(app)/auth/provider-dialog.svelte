@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { page } from '$app/state';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -25,7 +26,11 @@
 
 	let { provider, close }: Props = $props();
 
-	const form = $derived(updateOAuthProvider.for(provider.provider).preflight(oauthProviderSchema));
+	const form = $derived.by(() => {
+		const key = provider.provider;
+
+		return untrack(() => updateOAuthProvider.for(key).preflight(oauthProviderSchema));
+	});
 	// Same URL the OAuth endpoints send to the provider (`AuthService.callbackUrl`).
 	const callbackUrl = $derived(
 		new URL(oauthCallbackPath(provider.provider), page.url.origin).toString()

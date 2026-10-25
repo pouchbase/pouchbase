@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -14,7 +15,11 @@
 
 	let { fn, name, close }: Props = $props();
 
-	const form = $derived(setFunctionSecret.for(name ?? 'new').preflight(functionSecretSchema));
+	const form = $derived.by(() => {
+		const key = name ?? 'new';
+
+		return untrack(() => setFunctionSecret.for(key).preflight(functionSecretSchema));
+	});
 </script>
 
 <Dialog.Content>

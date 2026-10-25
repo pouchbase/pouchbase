@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -15,8 +16,22 @@
 
 	let { collection, fields, index, close }: Props = $props();
 
-	const update = $derived(index && updateIndex.for(index.name).preflight(updateIndexSchema));
-	const form = $derived(update || createIndex.for(collection.id).preflight(createIndexSchema));
+	// Created outside the deriveds' dependencies: a keyed form instance reads state that its
+	// submission changes, which would otherwise create a new instance and lose the issues.
+	const update = $derived.by(() => {
+		const name = index?.name;
+
+		return name ? untrack(() => updateIndex.for(name).preflight(updateIndexSchema)) : null;
+	});
+	const form = $derived.by(() => {
+		if (update) {
+			return update;
+		}
+
+		const key = collection.id;
+
+		return untrack(() => createIndex.for(key).preflight(createIndexSchema));
+	});
 
 	const columnItems = $derived(
 		fields

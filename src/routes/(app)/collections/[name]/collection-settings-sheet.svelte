@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
@@ -19,9 +20,11 @@
 	// Only loaded while the panel is open.
 	const settings = $derived(open ? await getCollectionSettings(collection.name) : null);
 
-	const thumbnailsForm = $derived(
-		updateThumbnailSettings.for(collection.id).preflight(thumbnailSettingsSchema)
-	);
+	const thumbnailsForm = $derived.by(() => {
+		const key = collection.id;
+
+		return untrack(() => updateThumbnailSettings.for(key).preflight(thumbnailSettingsSchema));
+	});
 </script>
 
 <!-- Settings per collection; each section only shows for the collections it applies to. -->

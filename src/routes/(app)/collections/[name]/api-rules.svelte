@@ -32,7 +32,11 @@
 
 	let { collection, fields, relationTargets, rules, userFields }: Props = $props();
 
-	const form = $derived(updateApiRules.for(`rules-${collection.id}`).preflight(apiRulesSchema));
+	const form = $derived.by(() => {
+		const key = `rules-${collection.id}`;
+
+		return untrack(() => updateApiRules.for(key).preflight(apiRulesSchema));
+	});
 	const actions = $derived(apiActions(collection));
 	const isUsers = $derived(collection.system && collection.name === USERS_COLLECTION);
 

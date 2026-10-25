@@ -16,9 +16,11 @@
 
 	let { destinations, schedule, close }: Props = $props();
 
-	const form = $derived(
-		saveBackupSchedule.for(schedule?.id ?? 'new').preflight(backupScheduleSchema)
-	);
+	const form = $derived.by(() => {
+		const key = schedule?.id ?? 'new';
+
+		return untrack(() => saveBackupSchedule.for(key).preflight(backupScheduleSchema));
+	});
 
 	const initialFrequency = untrack(() => {
 		if (!schedule) {

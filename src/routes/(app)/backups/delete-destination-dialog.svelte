@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -9,7 +10,11 @@
 
 	let { destination, close }: Props = $props();
 
-	const form = $derived(deleteBackupDestination.for(destination.id));
+	const form = $derived.by(() => {
+		const key = destination.id;
+
+		return untrack(() => deleteBackupDestination.for(key));
+	});
 </script>
 
 <Dialog.Content>

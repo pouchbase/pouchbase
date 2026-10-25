@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -14,7 +15,11 @@
 	let { collection, close }: Props = $props();
 
 	// One form instance per collection, so state doesn't leak between collections.
-	const form = $derived(renameCollection.for(collection.id).preflight(renameCollectionSchema));
+	const form = $derived.by(() => {
+		const key = collection.id;
+
+		return untrack(() => renameCollection.for(key).preflight(renameCollectionSchema));
+	});
 </script>
 
 <Dialog.Content>

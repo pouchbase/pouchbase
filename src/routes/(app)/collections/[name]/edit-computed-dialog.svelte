@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -17,7 +18,11 @@
 
 	let { collection, field, fields, close }: Props = $props();
 
-	const form = $derived(updateComputedField.for(field.id).preflight(updateComputedSchema));
+	const form = $derived.by(() => {
+		const key = field.id;
+
+		return untrack(() => updateComputedField.for(key).preflight(updateComputedSchema));
+	});
 </script>
 
 <Dialog.Content size="lg">

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
@@ -16,7 +17,11 @@
 
 	let { backup, label, close }: Props = $props();
 
-	const form = $derived(restoreBackup.for(backup.id).preflight(restoreBackupSchema));
+	const form = $derived.by(() => {
+		const key = backup.id;
+
+		return untrack(() => restoreBackup.for(key).preflight(restoreBackupSchema));
+	});
 </script>
 
 <Dialog.Content size="md">

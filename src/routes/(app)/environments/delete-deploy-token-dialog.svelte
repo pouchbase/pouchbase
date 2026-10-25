@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -9,7 +10,11 @@
 
 	let { token, close }: Props = $props();
 
-	const form = $derived(deleteDeployToken.for(token.id));
+	const form = $derived.by(() => {
+		const key = token.id;
+
+		return untrack(() => deleteDeployToken.for(key));
+	});
 </script>
 
 <Dialog.Content>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
@@ -22,7 +23,11 @@
 
 	const id = $props.id();
 
-	const form = $derived(restoreFunctionVersion.for(version.id));
+	const form = $derived.by(() => {
+		const key = version.id;
+
+		return untrack(() => restoreFunctionVersion.for(key));
+	});
 </script>
 
 {#snippet loading()}
