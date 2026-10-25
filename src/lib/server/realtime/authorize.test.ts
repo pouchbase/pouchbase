@@ -159,10 +159,67 @@ describe('authorizationChecks', () => {
 		expect(allowed('', { ada: [ADA, 'removed == 1'] })).toEqual([]);
 	});
 
+	it('checks rules it can evaluate in memory without a query', () => {
+		for (const viewRule of [
+			'author == $user.id',
+			'any(members) == $user.id',
+			'published == true and views > 10'
+		]) {
+			const checks = authorizationChecks({
+				action: 'update',
+				viewRule,
+				viewOffered: true,
+				readable: FIELDS,
+				row: POST,
+				table: 'posts',
+				key: 'id',
+				keyParam: 'p1',
+				contexts: [context(ADA), context(GRACE), context(ANONYMOUS)]
+			});
+
+			expect(checks.every((check) => check.statement === undefined)).toBe(true);
+		}
+	});
+
+	it('checks contexts the rule can’t tell apart once', () => {
+		const LINUS: Subject = { kind: 'user', auth: { id: 'linus', role: 'editor' } };
+		const checks = authorizationChecks({
+			action: 'update',
+			viewRule: '$user.role contains "edit"',
+			viewOffered: true,
+			readable: FIELDS,
+			row: POST,
+			table: 'posts',
+			key: 'id',
+			keyParam: 'p1',
+			contexts: [context(ADA), context(LINUS), context(GRACE)]
+		});
+
+		expect(checks.map((check) => check.key)).toEqual([
+			context(ADA).key,
+			context(LINUS).key,
+			context(GRACE).key
+		]);
+		expect(checks[0].statement).toBeDefined();
+		expect(checks[1].statement).toBe(checks[0].statement);
+		expect(checks[2].statement).not.toBe(checks[0].statement);
+		expect(allowed('$user.role contains "edit"', { ADA, LINUS, GRACE })).toEqual(['ADA', 'LINUS']);
+	});
+
+	it('keeps subscribers with different filters apart', () => {
+		expect(
+			allowed('', {
+				ada: [ADA, 'views > 10'],
+				grace: [GRACE, 'views > 100'],
+				anonymous: [ANONYMOUS, 'views > 10']
+			})
+		).toEqual(['ada', 'anonymous']);
+	});
+
 	it('only binds the fields the condition reads', () => {
 		const [check] = authorizationChecks({
 			action: 'update',
-			viewRule: 'author == $user.id',
+			viewRule: 'author contains $user.id',
 			viewOffered: true,
 			readable: FIELDS,
 			row: POST,
@@ -175,6 +232,30 @@ describe('authorizationChecks', () => {
 		expect(check.statement?.params).toEqual(['ada', 'ada']);
 	});
 
+	it('evaluates conditions with many fields in memory', () => {
+		const readable = Array.from({ length: 60 }, (_, index) => ({
+			name: `f${index}`,
+			type: 'text' as const
+		}));
+		const condition = (fields: typeof readable) =>
+			fields.map((field) => `${field.name} != "x"`).join(' and ');
+		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
+
+		const [update] = authorizationChecks({
+			action: 'delete',
+			viewRule: condition(readable.slice(0, 30)),
+			viewOffered: true,
+			readable,
+			row,
+			table: 'posts',
+			key: 'id',
+			keyParam: 'p1',
+			contexts: [context(ADA, condition(readable.slice(30)))]
+		});
+
+		expect(update).toEqual({ key: update.key, allowed: true });
+	});
+
 	it('checks the stored record when the condition needs too many parameters', () => {
 		const readable = Array.from({ length: 60 }, (_, index) => ({
 			name: `f${index}`,
@@ -182,7 +263,7 @@ describe('authorizationChecks', () => {
 		}));
 		const rule = readable
 			.slice(0, 30)
-			.map((field) => `${field.name} != "x"`)
+			.map((field) => `${field.name} not contains "x"`)
 			.join(' and ');
 		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
 
@@ -200,7 +281,7 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `${field.name} != "x"`)
+						.map((field) => `${field.name} not contains "x"`)
 						.join(' and ')
 				)
 			]
@@ -222,7 +303,7 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `${field.name} != "x"`)
+						.map((field) => `${field.name} not contains "x"`)
 						.join(' and ')
 				)
 			]

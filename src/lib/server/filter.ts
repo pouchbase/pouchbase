@@ -1,4 +1,4 @@
-import type { FilterExpression, Operand } from '#lib/filter/filter.js';
+import type { CompareOperator, FilterExpression, Operand } from '#lib/filter/filter.js';
 import type { Field } from './services/fields.service';
 
 import { FilterError, parseFilter } from '#lib/filter/filter.js';
@@ -219,6 +219,261 @@ export function both(first: SqlCondition, second: SqlCondition): SqlCondition {
 	}
 
 	return { sql: `(${first.sql}) AND (${second.sql})`, params: [...first.params, ...second.params] };
+}
+
+/** A value as SQLite holds a bound parameter. */
+type SqlValue = string | number | null;
+
+/** SQL's three-valued outcome: `null` is unknown (a comparison with NULL). */
+type Truth = boolean | null;
+
+/** Thrown inside `evaluateFilter` for what only SQLite can answer exactly. */
+class Unsupported extends Error {}
+
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+/** `bindable`, for values the evaluation can take as they are (SQLite would convert the others). */
+function sqlValue(value: unknown): SqlValue {
+	const bound = bindable(value);
+
+	if (typeof bound === 'number' && !Number.isFinite(bound)) {
+		throw new Unsupported();
+	}
+
+	if (typeof bound === 'string' && LONE_SURROGATE.test(bound)) {
+		throw new Unsupported();
+	}
+
+	return bound;
+}
+
+function isEmptyLiteral(operand: Operand) {
+	return operand.kind === 'null' || (operand.kind === 'string' && operand.value === '');
+}
+
+function evaluateOperand(
+	operand: Operand,
+	fields: Map<string, Pick<Field, 'name' | 'type'>>,
+	context: FilterContext,
+	row: Record<string, unknown>,
+	other: Operand
+): SqlValue {
+	switch (operand.kind) {
+		case 'field': {
+			const field = fields.get(operand.name);
+
+			if (!field || field.type === 'blob') {
+				throw new Unsupported();
+			}
+
+			return sqlValue(row[field.name]);
+		}
+		case 'user':
+			return context.user ? sqlValue(context.user[operand.name]) : '';
+		case 'input':
+			return sqlValue(context.input?.[operand.name]);
+		case 'string':
+			return sqlValue(operand.value);
+		case 'number':
+			return sqlValue(operand.value);
+		case 'boolean':
+			return operand.value ? 1 : 0;
+		case 'null':
+			return null;
+		case 'now': {
+			const type = other.kind === 'field' ? fields.get(other.name)?.type : undefined;
+			const now = new Date();
+
+			return type === 'created' || type === 'updated' ? now.getTime() : now.toISOString();
+		}
+	}
+}
+
+/** SQLite's BINARY collation compares UTF-8 bytes, which is the order of the code points. */
+function compareText(a: string, b: string) {
+	let i = 0;
+	let j = 0;
+
+	while (i < a.length && j < b.length) {
+		const x = a.codePointAt(i)!;
+		const y = b.codePointAt(j)!;
+
+		if (x !== y) {
+			return x < y ? -1 : 1;
+		}
+
+		i += x > 0xffff ? 2 : 1;
+		j += y > 0xffff ? 2 : 1;
+	}
+
+	return Number(i < a.length) - Number(j < b.length);
+}
+
+/** SQLite's order of two values without affinity: numbers before text. */
+function compareValues(a: string | number, b: string | number) {
+	if (typeof a === 'number' && typeof b === 'number') {
+		return a < b ? -1 : a > b ? 1 : 0;
+	}
+
+	if (typeof a === 'number' || typeof b === 'number') {
+		return typeof a === 'number' ? -1 : 1;
+	}
+
+	return compareText(a, b);
+}
+
+/** `compare` above, evaluated: `IS` for `==`, and NULL for an ordering with NULL. */
+function evaluateCompare(
+	operator: CompareOperator,
+	left: SqlValue,
+	leftEmpty: boolean,
+	right: SqlValue,
+	rightEmpty: boolean
+): Truth {
+	switch (operator) {
+		case '==':
+		case '!=': {
+			const empty = rightEmpty ? left : leftEmpty ? right : undefined;
+			const same =
+				empty !== undefined
+					? empty === null || empty === ''
+					: left === null || right === null
+						? left === right
+						: typeof left === typeof right && left === right;
+
+			return operator === '==' ? same : !same;
+		}
+		case 'contains':
+		case 'not contains':
+			// LIKE (case-insensitive for ASCII only, `%` and `_` as wildcards) stays in SQL.
+			throw new Unsupported();
+		default: {
+			if (left === null || right === null) {
+				return null;
+			}
+
+			const order = compareValues(left, right);
+
+			return operator === '>'
+				? order > 0
+				: operator === '>='
+					? order >= 0
+					: operator === '<'
+						? order < 0
+						: order <= 0;
+		}
+	}
+}
+
+/** The items `json_each` gives for a value of `any()`: a JSON array, or the value itself. */
+function jsonItems(value: SqlValue): SqlValue[] {
+	if (typeof value !== 'string') {
+		return [value];
+	}
+
+	let parsed: unknown;
+
+	try {
+		parsed = JSON.parse(value);
+	} catch {
+		return [value];
+	}
+
+	if (!Array.isArray(parsed)) {
+		return [value];
+	}
+
+	return parsed.map((item: unknown) => {
+		if (item === null || typeof item === 'string') {
+			return sqlValue(item);
+		}
+
+		if (typeof item === 'boolean') {
+			return item ? 1 : 0;
+		}
+
+		// Integers beyond 2^53 are exact in SQLite but not in JavaScript; nested JSON comes back as
+		// SQLite's own text of it.
+		if (typeof item === 'number' && (!Number.isInteger(item) || Number.isSafeInteger(item))) {
+			return sqlValue(item);
+		}
+
+		throw new Unsupported();
+	});
+}
+
+function evaluateExpression(
+	expression: FilterExpression,
+	fields: Map<string, Pick<Field, 'name' | 'type'>>,
+	context: FilterContext,
+	row: Record<string, unknown>
+): Truth {
+	if (expression.kind !== 'compare') {
+		const left = evaluateExpression(expression.left, fields, context, row);
+		const right = evaluateExpression(expression.right, fields, context, row);
+
+		if (expression.kind === 'and') {
+			return left === false || right === false
+				? false
+				: left === null || right === null
+					? null
+					: true;
+		}
+
+		return left === true || right === true ? true : left === null || right === null ? null : false;
+	}
+
+	const { operator, any, left: leftOperand, right: rightOperand } = expression;
+	const left = evaluateOperand(leftOperand, fields, context, row, rightOperand);
+	const right = evaluateOperand(rightOperand, fields, context, row, leftOperand);
+	const rightEmpty = isEmptyLiteral(rightOperand);
+
+	if (!any) {
+		return evaluateCompare(operator, left, isEmptyLiteral(leftOperand), right, rightEmpty);
+	}
+
+	if (leftOperand.kind !== 'field') {
+		throw new Unsupported();
+	}
+
+	// `EXISTS (SELECT 1 FROM json_each(…) WHERE …)` is true or false, never NULL.
+	return jsonItems(left).some(
+		(item) => evaluateCompare(operator, item, false, right, rightEmpty) === true
+	);
+}
+
+/**
+ * Evaluates a condition on a row of values in memory, with the outcome SQLite gives for the
+ * compiled condition on the same values as bound parameters (`SELECT 1 FROM (SELECT ? AS "field",
+ * …) WHERE …`): `IS` for `==` and `!=`, unknown for an ordering with `null`, numbers before text
+ * and text in code point order. Returns `undefined` for what is left to SQLite (`contains`, nested
+ * JSON in `any()`, values SQLite would convert), so the caller runs the SQL instead.
+ * @throws {FilterError} When the text isn't a valid condition.
+ */
+export function evaluateFilter(
+	text: string,
+	fields: Pick<Field, 'name' | 'type'>[],
+	context: FilterContext,
+	row: Record<string, unknown>
+): boolean | undefined {
+	const expression = parseFilter(text);
+
+	try {
+		return (
+			evaluateExpression(
+				expression,
+				new Map(fields.map((field) => [field.name, field])),
+				context,
+				row
+			) === true
+		);
+	} catch (error) {
+		if (error instanceof Unsupported) {
+			return undefined;
+		}
+
+		throw error;
+	}
 }
 
 /**

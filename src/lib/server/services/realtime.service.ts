@@ -336,19 +336,24 @@ export class RealtimeService extends Service {
 				contexts
 			})
 		);
-		const statements = checks.flat().flatMap((check) => (check.statement ? [check.statement] : []));
+		// Contexts in one group share their statement, so each runs once.
+		const statements = [
+			...new Set(checks.flat().flatMap((check) => (check.statement ? [check.statement] : [])))
+		];
 
 		return fromPromise(
 			statements.length ? batchDatabase(databaseId, statements) : Promise.resolve([]),
 			(error) => this.error(22004, 'AUTHORIZE_FAILED', error)
 		).map((rows) => {
-			let next = 0;
+			const matched = new Map(
+				statements.map((statement, index) => [statement, Boolean(rows[index]?.length)])
+			);
 
 			return {
 				results: request.items.map(({ event }, index) => ({
 					record: apiRecord(collectionFields, event.row),
 					allowed: checks[index]
-						.filter((check) => (check.statement ? rows[next++]?.length : check.allowed))
+						.filter((check) => (check.statement ? matched.get(check.statement) : check.allowed))
 						.map((check) => check.key)
 				}))
 			};
