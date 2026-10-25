@@ -13,7 +13,6 @@ import {
 	RELATION_ON_DELETE_IDS,
 	RICH_TEXT_FORMATS
 } from '#lib/fields/field-types.js';
-import { upgradeSettings } from '#lib/collections/upgrade.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 import { FUNCTION_LANGUAGES, MAX_CODE_SIZE } from '#lib/functions/functions.js';
 
@@ -59,6 +58,8 @@ export const snapshotFieldSchema = z.object({
 	type: fieldTypeIdSchema(),
 	required: z.boolean(),
 	unique: z.boolean(),
+	/** Snapshots and export files from before hidden fields have none. */
+	hidden: z.boolean().default(false),
 	defaultValue: z.string().nullable(),
 	options: fieldOptionsSchema,
 	system: z.boolean(),
@@ -76,13 +77,10 @@ export const snapshotCollectionSchema = z.object({
 	id,
 	name,
 	system: z.boolean(),
-	// Snapshots and export files of older versions can hold settings in an older syntax.
-	settings: z
-		.object({
-			thumbnails: z.object({ enabled: z.boolean(), sizes: z.array(z.string()) }).optional(),
-			rules: z.partialRecord(z.enum(API_RULE_ACTIONS), z.string().nullable()).optional()
-		})
-		.transform(upgradeSettings),
+	settings: z.object({
+		thumbnails: z.object({ enabled: z.boolean(), sizes: z.array(z.string()) }).optional(),
+		rules: z.partialRecord(z.enum(API_RULE_ACTIONS), z.string().nullable()).optional()
+	}),
 	fields: z.array(snapshotFieldSchema),
 	/** Custom indexes only: the indexes of "Unique" fields come with the field. */
 	indexes: z.array(snapshotIndexSchema)

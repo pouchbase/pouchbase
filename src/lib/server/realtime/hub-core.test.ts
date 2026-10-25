@@ -258,6 +258,40 @@ describe('HubCore', () => {
 		expect(messages('grace').at(-1)).toEqual({ type: 'subscribed', id: 'all' });
 	});
 
+	it('sends app users the record without its hidden fields, and admins the whole record', async () => {
+		const user = contextKey({ kind: 'user', auth: ADA }, null);
+		const admin = contextKey({ kind: 'admin' }, null);
+		const { connect, subscribe, hub, messages } = setup({
+			session: (body) =>
+				(body as { token: string }).token === 'admin'
+					? { status: 200, body: { subject: { kind: 'admin' }, expiresAt: null } }
+					: { status: 200, body: { subject: { kind: 'user', auth: ADA }, expiresAt: null } },
+			authorize: {
+				status: 200,
+				body: {
+					results: [
+						{
+							record: { id: 'p1', title: 'Hi', notes: 'internal' },
+							userRecord: { id: 'p1', title: 'Hi' },
+							allowed: [user, admin]
+						}
+					]
+				}
+			}
+		});
+
+		await connect('ada', 'ada');
+		await connect('admin', 'admin');
+		await subscribe('ada', { id: 'all' });
+		await subscribe('admin', { id: 'all' });
+		await hub.publish([event('p1', { id: 'p1', title: 'Hi', notes: 'internal' })]);
+
+		expect(messages('ada').at(-1)).toMatchObject({ record: { id: 'p1', title: 'Hi' } });
+		expect(messages('admin').at(-1)).toMatchObject({
+			record: { id: 'p1', title: 'Hi', notes: 'internal' }
+		});
+	});
+
 	it('sends the expanded record of each context, keeping the expanded fields', async () => {
 		const plain = contextKey({ kind: 'user', auth: ADA }, null);
 		const expanded = contextKey({ kind: 'user', auth: ADA }, null, ['author']);

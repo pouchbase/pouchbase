@@ -69,10 +69,11 @@
 	</CodeBlock.Root>
 
 	<p>
-		That Pouchbase can be the <a href={resolve('/docs/getting-started/docker')}>Docker image</a>,
-		the
-		<a href={resolve('/docs/getting-started/single-binary')}>single binary</a> or, if you work on Pouchbase
-		itself, a clone of the repository:
+		That Pouchbase can be the <a href={resolve('/docs/platform/getting-started/docker')}
+			>Docker image</a
+		>, the
+		<a href={resolve('/docs/platform/getting-started/single-binary')}>single binary</a> or, if you work
+		on Pouchbase itself, a clone of the repository:
 	</p>
 
 	<CodeBlock.Root title="Terminal">

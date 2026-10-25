@@ -113,7 +113,7 @@ const { items, total, hasMore } = await pouch.db.posts.findMany({
 	where: {
 		status: 'published', // equals
 		views: { gte: 10 }, // eq, not, in, notIn, gt, gte, lt, lte
-		title: { contains: 'svelte' }, // contains, notContains
+		title: { contains: 'svelte' }, // contains, notContains, startsWith, endsWith
 		tags: { has: 'news' }, // arrays: has (any item equals), isEmpty
 		$or: [{ author: user.id }, { featured: true }]
 	},
@@ -153,13 +153,13 @@ post?.comments; // (CommentsRecord & { author: UsersRecord | null })[]
 
 A single relation becomes a record or `null`, a multiple one an array. Related records that the view rule of their collection hides are left out (`null`), and including a collection whose view rule is _Admins only_ fails with `invalid`.
 
-**Hand-written conditions.** For what `where` can't express, such as the signed-in user, write the condition with `condition` (the syntax of the API rules: `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains`, `not contains`, `any(field) == value`, `and`, `or`, `$user.<field>`, `$now`); values in `${…}` are escaped:
+**Hand-written conditions.** For what `where` can't express, such as the signed-in user, write the condition with `condition` (the syntax of the API rules: `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(title, "x")`, `lower(title)`, `now()` and `date_add(now(), -7, "days")`, `any(field) == value`, `not`, `and`, `or`, `$user.<field>`); values in `${…}` are escaped:
 
 ```ts
 import { condition } from '@pouchbasejs/js-sdk';
 
 await pouch.db.posts.findMany({
-	where: condition`author == $user.id or title contains ${search}`
+	where: condition`author == $user.id or contains(title, ${search})`
 });
 ```
 

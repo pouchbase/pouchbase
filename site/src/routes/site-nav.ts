@@ -51,7 +51,7 @@ export const navigation: (NavGroup | NavLink)[] = [
 		links: [
 			{
 				label: 'Getting started',
-				href: resolve('/docs/getting-started'),
+				href: resolve('/docs/platform/getting-started'),
 				icon: 'lucide:book-open',
 				description: 'Self-host on Workers, with Docker or as a binary.'
 			},

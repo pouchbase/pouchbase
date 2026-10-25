@@ -56,9 +56,9 @@
 	</CodeBlock.Root>
 
 	<p>
-		Build pages from the <a href={resolve('/docs/ui')}>UI components</a> of the dashboard, such as
-		the <a href={resolve('/docs/ui/[component]', { component: 'card' })}>Card</a> above, so they look
-		like the rest of it.
+		Build pages from the <a href={resolve('/docs/plugins/ui')}>UI components</a> of the dashboard,
+		such as the <a href={resolve('/docs/plugins/ui/[component]', { component: 'card' })}>Card</a> above,
+		so they look like the rest of it.
 	</p>
 
 	<h2 id="page-options">Page options</h2>

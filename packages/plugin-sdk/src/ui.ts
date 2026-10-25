@@ -18,29 +18,12 @@
  */
 
 /**
- * The packages whose modules a UI file may import besides the plugin's own UI files: `svelte`, the
- * prop types from `@pouchbasejs/plugin-sdk/ui`, and the dashboard's components from
- * `@pouchbasejs/ui` (`import * as Button from '@pouchbasejs/ui/button'`). The host provides them at
- * runtime, in the versions the dashboard itself uses, so a plugin never bundles its own copy;
- * install them as devDependencies for type checking only. A `/*` entry stands for subpaths.
- *
- * @deprecated A pattern, looser than what the host links: only the exact `HOST_MODULE_IDS` can be
- * imported (`svelte/store` but not `svelte/compiler`, `@pouchbasejs/ui/button` but not a component
- * the dashboard doesn't have). Use `HOST_MODULE_IDS` and `isHostModuleId`.
- */
-export const HOST_MODULES = [
-	'svelte',
-	'svelte/*',
-	'@pouchbasejs/plugin-sdk/ui',
-	'@pouchbasejs/ui',
-	'@pouchbasejs/ui/*'
-] as const;
-
-/**
- * Every module the host provides at runtime, by its exact specifier: what `HOST_MODULES` allows
- * and the compiled components actually import. Svelte's compiler output imports
- * `svelte/internal/*`; `@pouchbasejs/ui` has one entry per component (`@pouchbasejs/ui/button`,
- * `@pouchbasejs/ui/inputs/select`).
+ * Every module a UI file may import besides the plugin's own files, by its exact specifier:
+ * `svelte` (Svelte's compiler output imports `svelte/internal/*`), the prop types from
+ * `@pouchbasejs/plugin-sdk/ui`, and the dashboard's components from `@pouchbasejs/ui`, one entry
+ * per component (`@pouchbasejs/ui/button`, `@pouchbasejs/ui/inputs/select`). The host provides
+ * them at runtime, in the versions the dashboard itself uses, so a plugin never bundles its own
+ * copy; install them as devDependencies for type checking only.
  */
 export const HOST_MODULE_IDS = [
 	'svelte',
@@ -89,19 +72,6 @@ export function isHostModuleId(specifier: string): specifier is HostModuleId {
 	return (HOST_MODULE_IDS as readonly string[]).includes(specifier);
 }
 
-/**
- * Whether `specifier` matches `HOST_MODULES`.
- *
- * @deprecated Looser than what the host links; use `isHostModuleId`.
- */
-export function isHostModule(specifier: string): boolean {
-	return HOST_MODULES.some((module) =>
-		module.endsWith('/*')
-			? specifier.startsWith(module.slice(0, -1)) && specifier.length > module.length - 1
-			: specifier === module
-	);
-}
-
 /** The field a component is rendered for. */
 export type FieldInfo = {
 	/** Column name. */
@@ -134,9 +104,6 @@ export type FieldPreviewProps<T = unknown> = {
 	field: FieldInfo;
 	value: T | null;
 };
-
-/** @deprecated The former name of `FieldPreviewProps`. */
-export type FieldCellProps<T = unknown> = FieldPreviewProps<T>;
 
 /** Calls the plugin's own `routes` with the admin's session. */
 export type PluginApi = {

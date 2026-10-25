@@ -12,6 +12,7 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { err, errAsync, fromPromise, ok, okAsync } from 'neverthrow';
 
 import {
+	canHide,
 	COMPUTED_SOURCE_TYPES,
 	COMPUTED_TRANSFORMS,
 	hasComputedSource,
@@ -58,6 +59,8 @@ export type CreateFieldInput = {
 	type: FieldTypeId;
 	required: boolean;
 	unique: boolean;
+	/** Leaves the field out of the records API for app users (see `fields.hidden`); `false` when missing. */
+	hidden?: boolean;
 	/** Empty or missing means no default. */
 	defaultValue?: string;
 	options: FieldOptions;
@@ -224,6 +227,8 @@ export type FieldChange = {
 	name: string;
 	required: boolean;
 	unique: boolean;
+	/** Whether only admins, service keys, plugins and API rules see the field; unchanged when missing. */
+	hidden?: boolean;
 	/** Drops the field, including its data. */
 	remove: boolean;
 };
@@ -383,6 +388,7 @@ export class FieldsService extends Service {
 				!isAutoType(input.type),
 			// Computed and automatic values are always filled in, so they can't be required.
 			required: input.required && !filled,
+			hidden: canHide({ type: input.type, system: input.system ?? false }) && !!input.hidden,
 			defaultValue: settings.value.defaultValue
 		};
 
@@ -537,6 +543,7 @@ export class FieldsService extends Service {
 										type: input.type,
 										required: input.required,
 										unique: input.unique,
+										hidden: input.hidden ?? false,
 										defaultValue: input.defaultValue || null,
 										options,
 										system: input.system ?? false,
@@ -1146,8 +1153,8 @@ export class FieldsService extends Service {
 	}
 
 	/**
-	 * Applies all changes of the edit collection sheet in one go: removes, renames, `required` and
-	 * `unique`, and the display order, which follows the order of `changes` (fields left out keep
+	 * Applies all changes of the edit collection sheet in one go: removes, renames, `required`,
+	 * `unique` and `hidden`, and the display order, which follows the order of `changes` (fields left out keep
 	 * their order after them). System fields can only be moved. Removing the `id` field rebuilds
 	 * the table; records keep their `rowid`. Removing every field drops the table.
 	 *
@@ -1193,6 +1200,7 @@ export class FieldsService extends Service {
 							name: field.name,
 							required: field.required,
 							unique: field.unique,
+							hidden: field.hidden,
 							remove: false
 						};
 					}
@@ -1205,6 +1213,7 @@ export class FieldsService extends Service {
 						name: change.name,
 						required: change.required && field.type !== 'computed' && !auto,
 						unique: change.unique && !isMultiple(field) && field.type !== 'file' && !auto,
+						hidden: canHide(field) && (change.hidden ?? field.hidden),
 						remove: change.remove
 					};
 				});
@@ -1315,7 +1324,12 @@ export class FieldsService extends Service {
 								for (const [position, plan] of kept.entries()) {
 									await this.db
 										.update(fields)
-										.set({ required: plan.required, unique: plan.unique, position })
+										.set({
+											required: plan.required,
+											unique: plan.unique,
+											hidden: plan.hidden,
+											position
+										})
 										.where(eq(fields.id, plan.field.id));
 								}
 							})(),

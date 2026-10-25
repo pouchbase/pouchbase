@@ -59,7 +59,7 @@
 			</ol>
 
 			<div>
-				<Button.Root variant="secondary" href={resolve('/docs/getting-started')}>
+				<Button.Root variant="secondary" href={resolve('/docs/platform/getting-started')}>
 					Read the full guide
 					<Icon.Root icon="lucide:arrow-right" />
 				</Button.Root>

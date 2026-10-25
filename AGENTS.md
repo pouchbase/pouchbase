@@ -26,6 +26,10 @@ Run a package's scripts from the root with `pnpm --filter <name> <script>` (`pou
 
 Everything in this project is **English**: code, identifiers, comments, UI text, validation and error messages, docs and commit messages.
 
+## No backwards compatibility before 1.0
+
+Until Pouchbase 1.0 nothing keeps old forms working: when a name, syntax, endpoint, parameter, environment variable, file format or layout changes, remove the old one everywhere (code, tests, docs, changesets) instead of keeping a fallback, upgrade step or deprecated alias.
+
 ## Code style
 
 - `if`/`else` always use braces, even for a single statement (`if (x) { return; }`, never `if (x) return;`).
@@ -61,7 +65,7 @@ The TypeScript SDK lives in the workspace package `packages/js-sdk` (`@pouchbase
 
 The plugin contract lives in the workspace package `packages/plugin-sdk` (`@pouchbasejs/plugin-sdk`, MIT): the manifest schema, the bundle format, the registry API, the server and UI types, and the `pouchbase-plugin` CLI. The app imports the same package to validate installs, so the contract and the host change together. Its README documents the contract.
 
-- `API_VERSION` covers all of it. Within an API version, changes are additive only (new optional manifest fields, contribution kinds or context members); anything that breaks an existing plugin bumps `API_VERSION` and keeps the previous version in `SUPPORTED_API_VERSIONS`.
+- `API_VERSION` covers all of it. Within an API version, changes are additive only (new optional manifest fields, contribution kinds or context members); anything that breaks an existing plugin bumps `API_VERSION`. Until 1.0, `SUPPORTED_API_VERSIONS` holds only the current version: the previous one is dropped, not kept, so plugins built for it are refused until they are rebuilt.
 - Contract changes get a changeset for `@pouchbasejs/plugin-sdk` as well as for `pouchbase` when the app changes.
 - Plugins may use any license under `PLUGIN-EXCEPTION.md`; keep the SDK free of AGPL code.
 - Run the SDK checks with `pnpm --filter @pouchbasejs/plugin-sdk check` and `... test`.

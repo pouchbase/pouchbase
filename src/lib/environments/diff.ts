@@ -29,13 +29,15 @@ import { SNAPSHOT_SETTING_KEYS, stableStringify } from './snapshot';
 export type Severity = 'safe' | 'risky' | 'destructive';
 
 /** A changed type can't be converted: the field is dropped and created again, without its data. */
-export type FieldProperty = 'name' | 'type' | 'required' | 'unique' | 'defaultValue' | 'options';
+export type FieldProperty =
+	'name' | 'type' | 'required' | 'unique' | 'hidden' | 'defaultValue' | 'options';
 
 const FIELD_PROPERTIES: FieldProperty[] = [
 	'name',
 	'type',
 	'required',
 	'unique',
+	'hidden',
 	'defaultValue',
 	'options'
 ];

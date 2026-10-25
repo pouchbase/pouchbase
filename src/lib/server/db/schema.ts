@@ -16,8 +16,6 @@ import {
 
 import { parseManifest } from '@pouchbasejs/plugin-sdk';
 
-import { upgradeSettings } from '../../collections/upgrade';
-
 /**
  * The manifest of an installed plugin, with the defaults of the current SDK filled in when read:
  * a plugin installed with an older SDK has no `settings`, for example. A manifest the current
@@ -34,11 +32,11 @@ const pluginManifest = customType<{ data: PluginManifest; driverData: string }>(
 	}
 });
 
-/** JSON settings of a collection, upgraded to the current syntax when read (see `upgradeSettings`). */
+/** JSON settings of a collection. */
 const collectionSettings = customType<{ data: CollectionSettings; driverData: string }>({
 	dataType: () => 'text',
 	toDriver: (value) => JSON.stringify(value),
-	fromDriver: (value) => upgradeSettings(JSON.parse(value) as CollectionSettings)
+	fromDriver: (value) => JSON.parse(value) as CollectionSettings
 });
 
 export const users = sqliteTable('users', {
@@ -104,6 +102,11 @@ export const fields = sqliteTable(
 		type: text('type').$type<FieldTypeId>().notNull(),
 		required: integer('required', { mode: 'boolean' }).notNull().default(false),
 		unique: integer('unique', { mode: 'boolean' }).notNull().default(false),
+		/**
+		 * Only admins, API keys with the service scope, plugins and API rules see the field: the
+		 * records API leaves it out for app users, and they can't filter, sort or write on it.
+		 */
+		hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
 		/** Default value as entered in the form; the column DEFAULT is derived from it. */
 		defaultValue: text('default_value'),
 		options: text('options', { mode: 'json' }).$type<FieldOptions>().notNull().default({}),

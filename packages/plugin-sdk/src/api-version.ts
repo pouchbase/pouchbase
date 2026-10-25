@@ -5,8 +5,8 @@
  * Within one API version, changes are additive only: new optional manifest fields, new
  * contribution kinds and new members of the plugin context. A host ignores what it doesn't know, so a
  * plugin that needs a newer addition declares the lowest Pouchbase version it works with in
- * `engines.pouchbase`. Anything that would break an existing plugin bumps the API version; a host
- * supports the current version and the one before it.
+ * `engines.pouchbase`. Anything that would break an existing plugin bumps the API version; until
+ * Pouchbase 1.0 a host supports only the current version.
  */
 export const API_VERSION = 1;
 

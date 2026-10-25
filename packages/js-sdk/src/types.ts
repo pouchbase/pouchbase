@@ -11,9 +11,6 @@ export const KNOWN_OAUTH_PROVIDERS = [
 	'twitch'
 ] as const;
 
-/** @deprecated Use `KNOWN_OAUTH_PROVIDERS`; instances can have more providers than these. */
-export const OAUTH_PROVIDERS: typeof KNOWN_OAUTH_PROVIDERS = KNOWN_OAUTH_PROVIDERS;
-
 /** One of the built-in provider ids. */
 export type KnownOAuthProvider = (typeof KNOWN_OAUTH_PROVIDERS)[number];
 

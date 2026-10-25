@@ -402,7 +402,7 @@ describe('db', () => {
 		expect(query(calls[0]?.url)).toEqual({
 			where:
 				'status == "published" and views >= 10 and views < 100 and ' +
-				'title contains "say \\"hi\\"" and any(tags) == "news" and ' +
+				'contains(title, "say \\"hi\\"") and any(tags) == "news" and ' +
 				'(published == true or status == null)',
 			order: 'created_at:desc,title:asc',
 			select: 'id,title',
@@ -433,13 +433,14 @@ describe('db', () => {
 		expect(
 			compileWhere({
 				a: { eq: 1, not: 2, gt: 3, gte: 4, lt: 5, lte: 6 },
-				b: { contains: 'x', notContains: 'y' },
+				b: { contains: 'x', notContains: 'y', startsWith: 'p', endsWith: 's' },
 				c: { eq: null },
 				d: { not: null }
 			})
 		).toBe(
 			'a == 1 and a != 2 and a > 3 and a >= 4 and a < 5 and a <= 6 and ' +
-				'b contains "x" and b not contains "y" and c == null and d != null'
+				'contains(b, "x") and not contains(b, "y") and starts_with(b, "p") and ' +
+				'ends_with(b, "s") and c == null and d != null'
 		);
 	});
 
@@ -478,8 +479,8 @@ describe('db', () => {
 		const search = 'a"b\\c';
 
 		expect(
-			compileWhere(condition`author == $user.id or title contains ${search} and n > ${5}`)
-		).toBe('author == $user.id or title contains "a\\"b\\\\c" and n > 5');
+			compileWhere(condition`author == $user.id or contains(title, ${search}) and n > ${5}`)
+		).toBe('author == $user.id or contains(title, "a\\"b\\\\c") and n > 5');
 		expect(compileWhere(condition`published == ${true} and deleted == ${null}`)).toBe(
 			'published == true and deleted == null'
 		);

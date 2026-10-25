@@ -1,6 +1,5 @@
 import type { RequestHandler } from './$types';
 
-import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { bearerToken, json, preflight } from '#lib/server/api.js';
 
 /** The user a `Authorization: Bearer <token>` header belongs to, as a record of `users`. */
@@ -21,10 +20,9 @@ export const GET: RequestHandler = async (event) => {
 		return json({ message: 'Could not load the user' }, 500);
 	}
 
-	// The same shape as the records API: real booleans, parsed JSON and arrays, no blobs.
-	const user = await event.locals.services
-		.records()
-		.apiGet(USERS_COLLECTION, String(result.value.id));
+	// The same shape as the records API: real booleans, parsed JSON and arrays, no blobs, and no
+	// hidden fields. The view rule of `users` doesn't apply: users can always read their own record.
+	const user = await event.locals.services.records().apiSelf(result.value);
 
 	if (user.isErr()) {
 		return json({ message: 'Could not load the user' }, 500);

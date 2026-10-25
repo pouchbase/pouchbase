@@ -4,6 +4,23 @@
  * plugins use the same `h-control`, `h-row`, chart colours and animations as the dashboard.
  */
 
+/*
+ * `dark:` applies with `data-theme="dark"` on <html>, and with the system preference unless
+ * <html> has `data-theme="light"`. Most components need no `dark:` classes: theme.css redefines
+ * the palette in dark mode.
+ */
+@custom-variant dark {
+	&:where([data-theme='dark'], [data-theme='dark'] *) {
+		@slot;
+	}
+
+	@media (prefers-color-scheme: dark) {
+		&:where(:root:not([data-theme='light']), :root:not([data-theme='light']) *) {
+			@slot;
+		}
+	}
+}
+
 @theme {
 	/* Series colours of charts and meters. */
 	--color-chart-1: #2a78d6;

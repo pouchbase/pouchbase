@@ -55,15 +55,23 @@ export function collectionFields(
 		declared.push({ ...field, options: { ...options, collectionId: id } });
 	}
 
+	// The manifest doesn't say whether a field is hidden: that is the admin's choice, kept on updates.
+	for (const field of declared) {
+		if (existing?.fields.find((current) => current.name === field.name)?.hidden) {
+			field.hidden = true;
+		}
+	}
+
 	const names = new Set(declared.map((field) => field.name));
 	const kept: FieldInput[] = (existing?.fields ?? [])
 		.filter((field) => !names.has(field.name))
-		.map(({ id, name, type, required, unique, defaultValue, options }) => ({
+		.map(({ id, name, type, required, unique, hidden, defaultValue, options }) => ({
 			id,
 			name,
 			type,
 			required,
 			unique,
+			hidden,
 			defaultValue,
 			options
 		}));

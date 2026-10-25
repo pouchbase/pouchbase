@@ -6,6 +6,7 @@
 	import * as Logo from '#lib/components/ui/logo/index.js';
 	import * as Navigation from '#lib/components/ui/navigation/index.js';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
+	import * as ThemeSwitch from '#lib/components/ui/theme-switch/index.js';
 	import { getEnvironment } from '#lib/remote/settings.remote.js';
 	import { currentUser, logout } from '../(auth)/auth.remote';
 	import CollectionsNavigation from './collections-navigation.svelte';
@@ -138,6 +139,8 @@
 
 	<Sidebar.Footer>
 		<span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900">{user?.email}</span>
+
+		<ThemeSwitch.Root />
 
 		<Form.Root form={logout}>
 			<Form.Submit variant="ghost" size="icon" aria-label="Log out">

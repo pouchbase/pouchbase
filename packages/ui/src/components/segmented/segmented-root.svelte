@@ -78,7 +78,7 @@
 	<span
 		{@attach track}
 		aria-hidden="true"
-		class="absolute top-0.5 bottom-0.5 left-0 rounded-md bg-white opacity-0 shadow-sm ring-1 ring-zinc-900/5 group-data-ready/segmented:opacity-100 group-data-ready/segmented:transition-[transform,width] group-data-ready/segmented:duration-200 group-data-ready/segmented:ease-out motion-reduce:transition-none"
+		class="absolute top-0.5 bottom-0.5 left-0 rounded-md bg-white opacity-0 shadow-sm ring-1 ring-zinc-900/5 group-data-ready/segmented:opacity-100 group-data-ready/segmented:transition-[transform,width] group-data-ready/segmented:duration-200 group-data-ready/segmented:ease-out motion-reduce:transition-none dark:bg-zinc-200"
 	></span>
 
 	{@render children?.()}

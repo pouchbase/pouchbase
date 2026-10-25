@@ -1,3 +1,4 @@
+import type { FilterSchemaField } from '../filter';
 import type { Field } from '../services/fields.service';
 import type { AccessContext, Subject } from './hub-core';
 
@@ -42,6 +43,10 @@ const db = new DatabaseSync(':memory:');
 db.exec(
 	'CREATE TABLE "posts" ("id" TEXT PRIMARY KEY, "title" TEXT, "author" TEXT, "members" TEXT, "views" INTEGER, "published" INTEGER, "created_at" INTEGER)'
 );
+db.exec(`
+	CREATE TABLE "users" ("id" TEXT PRIMARY KEY, "role" TEXT, "public" INTEGER);
+	INSERT INTO "users" VALUES ('ada', 'editor', 1), ('linus', 'admin', 0);
+`);
 
 function context(subject: Subject, filter: string | null = null): AccessContext {
 	return { key: contextKey(subject, filter), subject, filter, expand: null };
@@ -55,7 +60,8 @@ function allowed(
 		row?: Record<string, unknown>;
 		action?: 'create' | 'update' | 'delete';
 		viewOffered?: boolean;
-		readable?: Pick<Field, 'name' | 'type'>[];
+		readable?: FilterSchemaField[];
+		relations?: Parameters<typeof authorizationChecks>[0]['relations'];
 	} = {}
 ) {
 	const contexts = Object.fromEntries(
@@ -73,7 +79,8 @@ function allowed(
 		table: 'posts',
 		key: 'id',
 		keyParam: String((options.row ?? POST).id),
-		contexts: Object.values(contexts)
+		contexts: Object.values(contexts),
+		relations: options.relations
 	});
 	const keys = new Set(
 		checks
@@ -149,9 +156,9 @@ describe('authorizationChecks', () => {
 		expect(allowed('published == true', { ADA }, { action: 'delete' })).toEqual(['ADA']);
 	});
 
-	it('compares `$now` with created fields in milliseconds', () => {
-		expect(allowed('created_at < $now', { ADA })).toEqual(['ADA']);
-		expect(allowed('created_at > $now', { ADA })).toEqual([]);
+	it('compares `now()` with created fields in milliseconds', () => {
+		expect(allowed('created_at < now()', { ADA })).toEqual(['ADA']);
+		expect(allowed('created_at > now()', { ADA })).toEqual([]);
 	});
 
 	it('lets nothing through a rule or filter that no longer compiles', () => {
@@ -185,7 +192,7 @@ describe('authorizationChecks', () => {
 		const LINUS: Subject = { kind: 'user', auth: { id: 'linus', role: 'editor' } };
 		const checks = authorizationChecks({
 			action: 'update',
-			viewRule: '$user.role contains "edit"',
+			viewRule: 'contains($user.role, "edit")',
 			viewOffered: true,
 			readable: FIELDS,
 			row: POST,
@@ -203,7 +210,10 @@ describe('authorizationChecks', () => {
 		expect(checks[0].statement).toBeDefined();
 		expect(checks[1].statement).toBe(checks[0].statement);
 		expect(checks[2].statement).not.toBe(checks[0].statement);
-		expect(allowed('$user.role contains "edit"', { ADA, LINUS, GRACE })).toEqual(['ADA', 'LINUS']);
+		expect(allowed('contains($user.role, "edit")', { ADA, LINUS, GRACE })).toEqual([
+			'ADA',
+			'LINUS'
+		]);
 	});
 
 	it('keeps subscribers with different filters apart', () => {
@@ -219,7 +229,7 @@ describe('authorizationChecks', () => {
 	it('only binds the fields the condition reads', () => {
 		const [check] = authorizationChecks({
 			action: 'update',
-			viewRule: 'author contains $user.id',
+			viewRule: 'contains(author, $user.id)',
 			viewOffered: true,
 			readable: FIELDS,
 			row: POST,
@@ -263,7 +273,7 @@ describe('authorizationChecks', () => {
 		}));
 		const rule = readable
 			.slice(0, 30)
-			.map((field) => `${field.name} not contains "x"`)
+			.map((field) => `not contains(${field.name}, "x")`)
 			.join(' and ');
 		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
 
@@ -281,7 +291,7 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `${field.name} not contains "x"`)
+						.map((field) => `not contains(${field.name}, "x")`)
 						.join(' and ')
 				)
 			]
@@ -303,12 +313,53 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `${field.name} not contains "x"`)
+						.map((field) => `not contains(${field.name}, "x")`)
 						.join(' and ')
 				)
 			]
 		});
 
 		expect(deleted).toEqual({ key: deleted.key, allowed: false });
+	});
+
+	it('follows relations to the database, with the view rule of the related records for filters', () => {
+		const readable: FilterSchemaField[] = FIELDS.map((field) =>
+			field.name === 'author' || field.name === 'members'
+				? {
+						...field,
+						options: { collectionId: 'users', multiple: field.name === 'members' }
+					}
+				: field
+		);
+		const users = {
+			name: 'users',
+			key: 'id',
+			fields: [
+				{ name: 'id', type: 'id' as const },
+				{ name: 'role', type: 'text' as const },
+				{ name: 'public', type: 'boolean' as const }
+			]
+		};
+		const relations = (subject?: Subject) => () => ({
+			...users,
+			rule: subject && subject.kind !== 'admin' ? 'public == true' : undefined
+		});
+		const options = { readable, relations };
+
+		expect(allowed('author.role == $user.role', { ADA, GRACE }, options)).toEqual(['ADA']);
+		expect(
+			allowed(
+				'',
+				{
+					ADA: [ADA, 'any(members.role) == "admin"'],
+					ADMIN: [ADMIN, 'any(members.role) == "admin"']
+				},
+				options
+			)
+		).toEqual(['ADMIN']);
+		expect(allowed('any(members.role) == "admin"', { ADA, GRACE }, options)).toEqual([
+			'ADA',
+			'GRACE'
+		]);
 	});
 });

@@ -83,7 +83,7 @@ export const bundleSchema = z
 			...(manifest.server ? [manifest.server] : []),
 			...(manifest.icon ? [manifest.icon] : []),
 			...manifest.contributes.fields.flatMap((field) =>
-				[field.input, field.preview ?? [], field.cell ?? [], field.icon ?? []].flat()
+				[field.input, field.preview ?? [], field.icon ?? []].flat()
 			),
 			...manifest.contributes.pages.flatMap((page) => [page.component, page.icon ?? []].flat()),
 			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? [])

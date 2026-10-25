@@ -4,7 +4,7 @@ The Svelte 5 UI components of the [Pouchbase](https://pouchbase.io) dashboard: b
 
 Built on [Svelte 5](https://svelte.dev), [bits-ui](https://bits-ui.com), [Iconify](https://iconify.design) and [Tailwind CSS 4](https://tailwindcss.com).
 
-Every component, with a live preview, examples and its props, is documented at [pouchbase.io/docs/ui](https://pouchbase.io/docs/ui).
+Every component, with a live preview, examples and its props, is documented at [pouchbase.io/docs/plugins/ui](https://pouchbase.io/docs/plugins/ui).
 
 ## Install
 
@@ -23,6 +23,10 @@ Import the theme after Tailwind in your global stylesheet. It holds the design t
 ```
 
 `@pouchbasejs/ui/tokens.css` holds only the design tokens (the `@theme` that `theme.css` imports).
+
+### Dark mode
+
+The components follow the system's color scheme. Set `data-theme="light"` or `data-theme="dark"` on `<html>` to override it. In dark mode `theme.css` redefines the palette the components use (`white`, `zinc` and the 50–300 and 600–950 shades of `red`, `amber`, `emerald`, `sky` and `blue`), so `bg-white` and `text-zinc-900` work in both themes. For anything else there is a `dark:` variant that follows the same rules (it lives in `tokens.css`, so plugins have it too).
 
 Add the Iconify Vite plugin. It bundles only the icons that are used, in your sources (`src` by default) and in these components, so icons render on the server and are never fetched from the Iconify API:
 

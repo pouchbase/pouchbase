@@ -96,6 +96,6 @@
 	<p>
 		Admins turn the provider on and enter its client ID and secret on the
 		<strong>Authentication</strong> page of the dashboard, like the built-in ones (see
-		<a href="{resolve('/docs/authentication')}#sign-in-methods">Sign-in methods</a>).
+		<a href="{resolve('/docs/platform/authentication')}#sign-in-methods">Sign-in methods</a>).
 	</p>
 </DocsPage>

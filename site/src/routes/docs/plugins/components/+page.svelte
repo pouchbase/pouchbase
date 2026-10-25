@@ -128,7 +128,8 @@
 		<li>
 			Nothing else: no other npm packages, no dynamic <Code.Root>import()</Code.Root>. Install
 			<Code.Root>svelte</Code.Root> and <Code.Root>@pouchbasejs/ui</Code.Root> as devDependencies for
-			type checking only (the templates do). The <a href={resolve('/docs/ui')}>UI components</a>
+			type checking only (the templates do). The
+			<a href={resolve('/docs/plugins/ui')}>UI components</a>
 			docs show every component of <Code.Root>@pouchbasejs/ui</Code.Root> with a live preview.
 		</li>
 		<li>
@@ -201,7 +202,7 @@
 	<h3>Icons inside a component</h3>
 
 	<p>
-		Use <a href={resolve('/docs/ui/[component]', { component: 'icon' })}
+		Use <a href={resolve('/docs/plugins/ui/[component]', { component: 'icon' })}
 			><Code.Root>Icon.Root</Code.Root></a
 		>
 		from <Code.Root>@pouchbasejs/ui/icon</Code.Root> with

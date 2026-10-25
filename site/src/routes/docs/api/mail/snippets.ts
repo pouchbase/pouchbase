@@ -1,0 +1,38 @@
+import { snippet } from '#lib/highlight.js';
+
+export const send = snippet(
+	'bash',
+	`
+curl -X POST https://pouchbase.example.com/api/mail/send \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
+	-H "Content-Type: application/json" \\
+	-d '{
+		"template": "welcome",
+		"to": ["ada@example.com", "grace@example.com"],
+		"variables": { "name": "Ada", "items": [{ "title": "Create a project" }] }
+	}'`
+);
+
+export const sent = snippet(
+	'json',
+	`
+{ "sent": 2 }`
+);
+
+export const invalid = snippet(
+	'json',
+	`
+{
+	"message": "Send a JSON body with \`template\`, \`to\` and optionally \`variables\`",
+	"issues": { "template": "Name the template" }
+}`
+);
+
+export const missing = snippet(
+	'json',
+	`
+{
+	"message": "Missing variables: name",
+	"issues": { "variables.name": "Required" }
+}`
+);

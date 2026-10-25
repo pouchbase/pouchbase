@@ -47,14 +47,12 @@ export type FakeContextOptions = {
 	/**
 	 * The plugin's manifest, usually `pouchbase-plugin.json` imported as JSON: `id` and `version`
 	 * become `ctx.plugin`, and `ctx.fetch` reaches only the hosts in `permissions.network` (with
-	 * `*.example.com` wildcards, like the host). Settings in the manifest (legacy layout) are used
-	 * when `plugin` has none.
+	 * `*.example.com` wildcards, like the host).
 	 */
 	manifest?: {
 		id?: string;
 		version?: string;
 		permissions?: { network?: readonly string[] };
-		settings?: readonly PluginSettingDefinition[];
 	};
 	/** The default export of `plugin.ts`, for its setting definitions. */
 	plugin?: { settings?: readonly PluginSettingDefinition[] };
@@ -137,7 +135,7 @@ export function fakeContext(options: FakeContextOptions = {}): FakeContext {
 		plugin: { id: manifest.id ?? 'plugin', version: manifest.version ?? '0.1.0' },
 		fetch,
 		settings: createPluginSettings(
-			options.plugin?.settings ?? manifest.settings,
+			options.plugin?.settings,
 			(options.settings ?? {}) as Record<string, string>
 		),
 		log: { info: logger('info'), warn: logger('warn'), error: logger('error') },

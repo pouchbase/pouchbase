@@ -1,12 +1,11 @@
 import type { FilterExpression } from '#lib/filter/filter.js';
 import type { RealtimeAction } from '#lib/realtime/protocol.js';
-import type { SqlCondition } from '../filter';
-import type { Field } from '../services/fields.service';
+import type { FilterContext, FilterSchemaField, SqlCondition } from '../filter';
 import type { AccessContext, Subject } from './hub-core';
 
-import { filterFields, parseFilter } from '#lib/filter/filter.js';
+import { filterFields, filterValues, parseFilter } from '#lib/filter/filter.js';
 
-import { ALWAYS, both, compileFilter, compileRule, evaluateFilter } from '../filter';
+import { ALWAYS, both, compileFilter, compileRule, evaluateFilter, usesRelations } from '../filter';
 
 /**
  * Who may see a realtime event: the collection's view rule and the subscription's filter, checked
@@ -34,7 +33,7 @@ type Outcome =
 /** D1 allows at most 100 bound parameters per statement. */
 const MAX_PARAMS = 95;
 
-type Readable = Pick<Field, 'name' | 'type'>;
+type Readable = FilterSchemaField;
 
 type Options = {
 	action: RealtimeAction;
@@ -46,6 +45,12 @@ type Options = {
 	key: string;
 	keyParam: string | number;
 	contexts: AccessContext[];
+	/**
+	 * The collections relations point to, for a view rule or filter with a path such as
+	 * `author.role`: as the view rule sees them without a subject, as a subject's filter sees
+	 * them with one.
+	 */
+	relations?: (subject?: Subject) => FilterContext['relations'];
 };
 
 function bindable(value: unknown): string | number | null {
@@ -81,38 +86,35 @@ function referenced(text: string | null | undefined) {
 
 /** The `$user` fields an expression reads, or none when it doesn't parse. */
 function userFields(text: string | null | undefined): string[] {
-	const walk = (node: FilterExpression): string[] =>
-		node.kind === 'compare'
-			? [node.left, node.right].flatMap((operand) =>
-					operand.kind === 'user' ? [operand.name] : []
-				)
-			: [...walk(node.left), ...walk(node.right)];
 	const expression = parsed(text);
 
-	return expression ? walk(expression) : [];
+	return expression
+		? filterValues(expression).flatMap((value) => (value.kind === 'user' ? [value.name] : []))
+		: [];
 }
 
 /**
  * What the outcome for a subject depends on: whether it is an admin (the rule doesn't apply), the
  * filter, and the values of the `$user` fields, bound as `compileFilter` binds them.
  */
-function groupKey(subject: Subject, filter: string | null, names: string[]) {
+function groupKey(subject: Subject, filter: string | null, names: string[] | null) {
 	if (subject.kind === 'admin') {
 		return JSON.stringify(['admin', filter]);
 	}
 
 	const auth = subject.kind === 'user' ? subject.auth : null;
 
+	// `null`: the view rules of related collections may read any field of the user.
 	return JSON.stringify([
 		'subject',
 		filter,
-		names.map((name) => (auth ? bindable(auth[name]) : ''))
+		names ? names.map((name) => (auth ? bindable(auth[name]) : '')) : auth
 	]);
 }
 
 /** The check for one group of contexts, made for one subject of it. */
 function check(options: Options, subject: Subject, filter: string | null): Outcome {
-	const { readable, row } = options;
+	const { readable, row, table } = options;
 	const auth = subject.kind === 'user' ? subject.auth : null;
 	const viewRule = subject.kind === 'admin' ? null : options.viewRule;
 	let condition: SqlCondition | null;
@@ -122,10 +124,24 @@ function check(options: Options, subject: Subject, filter: string | null): Outco
 			subject.kind === 'admin'
 				? ALWAYS
 				: options.viewOffered
-					? compileRule(viewRule, readable, { user: auth })
+					? compileRule(viewRule, readable, {
+							user: auth,
+							table,
+							relations: options.relations?.()
+						})
 					: null;
 
-		condition = rule && filter ? both(rule, compileFilter(filter, readable, { user: auth })) : rule;
+		condition =
+			rule && filter
+				? both(
+						rule,
+						compileFilter(filter, readable, {
+							user: auth,
+							table,
+							relations: options.relations?.(subject)
+						})
+					)
+				: rule;
 	} catch {
 		// A rule or filter that no longer compiles (a field was renamed) lets nothing through.
 		return { allowed: false };
@@ -156,7 +172,7 @@ function check(options: Options, subject: Subject, filter: string | null): Outco
 
 		return {
 			statement: {
-				sql: `SELECT 1 FROM (SELECT ${values}) WHERE ${condition.sql}`,
+				sql: `SELECT 1 FROM (SELECT ${values}) AS "${table}" WHERE ${condition.sql}`,
 				params: [...columns.map((field) => bindable(row[field.name])), ...condition.params]
 			}
 		};
@@ -199,7 +215,11 @@ export function authorizationChecks(options: Options): AuthorizeCheck[] {
 			filterUserFields.set(filter, names);
 		}
 
-		const group = groupKey(subject, filter, subject.kind === 'admin' ? [] : names);
+		const group = groupKey(
+			subject,
+			filter,
+			subject.kind === 'admin' ? [] : usesRelations([filter]) ? null : names
+		);
 		let outcome = groups.get(group);
 
 		if (!outcome) {

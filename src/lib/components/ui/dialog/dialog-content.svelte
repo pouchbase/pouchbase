@@ -31,7 +31,7 @@
 </script>
 
 <Dialog.Portal>
-	<Dialog.Overlay class="fixed inset-0 z-50 bg-zinc-950/40" />
+	<Dialog.Overlay class="fixed inset-0 z-50 bg-black/40 dark:bg-black/60" />
 
 	<Dialog.Content
 		bind:ref

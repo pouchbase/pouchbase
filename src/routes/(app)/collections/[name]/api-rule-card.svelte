@@ -148,7 +148,12 @@
 
 		return checkFilter(text, {
 			fields: names.fields.map((field) => field.name),
-			userFields: names.userFields.length ? names.userFields.map((field) => field.name) : undefined
+			userFields: names.userFields.length ? names.userFields.map((field) => field.name) : undefined,
+			relation: (path) => {
+				const found = Code.filterRelation(names, path);
+
+				return found && { ...found, fields: found.fields.map((field) => field.name) };
+			}
 		});
 	}
 </script>

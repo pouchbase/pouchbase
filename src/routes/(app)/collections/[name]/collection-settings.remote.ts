@@ -53,6 +53,35 @@ export const getUserFields = query(async () => {
 		.map((field) => ({ name: field.name, type: field.type }));
 });
 
+/**
+ * The fields of every collection by name, for paths through relations in API rules
+ * (`author.role`); relations name the collection they point to.
+ */
+export const getFilterCollections = query(async () => {
+	const { services } = requireUser();
+	const result = await services.collections().listWithFields();
+
+	if (result.isErr()) {
+		fail(result.error);
+	}
+
+	const names = new Map(result.value.map(({ collection }) => [collection.id, collection.name]));
+
+	return Object.fromEntries(
+		result.value.map(({ collection, fields }) => [
+			collection.name,
+			fields
+				.filter((field) => field.type !== 'blob')
+				.map((field) => ({
+					name: field.name,
+					type: field.type,
+					target: names.get(field.options.collectionId ?? ''),
+					multiple: !!field.options.multiple
+				}))
+		])
+	);
+});
+
 export const updateThumbnailSettings = form(thumbnailSettingsSchema, async (data, issue) => {
 	const { services } = requireUser();
 

@@ -98,9 +98,9 @@
 	</CodeBlock.Root>
 
 	<p>
-		<a href={resolve('/docs/ui/[component]', { component: 'input' })}>Input</a> comes from
+		<a href={resolve('/docs/plugins/ui/[component]', { component: 'input' })}>Input</a> comes from
 		<Code.Root>@pouchbasejs/ui</Code.Root>, so the input looks like the dashboard's own; see
-		<a href={resolve('/docs/ui')}>UI components</a> for the others.
+		<a href={resolve('/docs/plugins/ui')}>UI components</a> for the others.
 	</p>
 
 	<h2 id="the-preview">The preview</h2>

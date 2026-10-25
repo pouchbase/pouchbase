@@ -45,7 +45,7 @@ export function fileUrl(
 	const search = new URLSearchParams();
 
 	if (options.thumb) {
-		search.set('thumb', options.thumb);
+		search.set('size', options.thumb);
 	}
 
 	if (options.version !== undefined) {

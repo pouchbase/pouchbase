@@ -19,22 +19,16 @@ import { ProjectError } from './project-error.js';
 import {
 	EXAMPLE_PROVIDER_HOST,
 	PLUGIN_FILE,
-	PROVIDER_ICON,
-	authProviderServer,
 	camelCase,
 	entrySource,
 	fieldEntry,
-	fieldFiles,
 	freeName,
 	indented,
 	json,
-	objectKey,
 	pageEntry,
-	pageFiles,
 	pascalCase,
 	pluginFileSource,
 	providerEntry,
-	providerIconPath,
 	routeEntry,
 	settingSource,
 	title,
@@ -47,13 +41,10 @@ import {
  * `pouchbase-plugin add <kind> <id>`: creates the files of a contribution and adds it to
  * `definePlugin({ ... })` in `plugin.ts`, with the imports it needs; without `plugin.ts` it creates
  * one (with the `Register` block that types `ctx.settings`). The manifest only changes for an
- * explicit `categories` list or the example host of an auth provider. In the legacy layout (a
- * manifest with `contributes` or `server`) it appends the contribution to `pouchbase-plugin.json`
- * instead. It never overwrites a file; the manifest keeps its key order and is written
- * tab-indented.
+ * explicit `categories` list or the example host of an auth provider. It never overwrites a file;
+ * the manifest keeps its key order and is written tab-indented.
  *
- * `add setting <key>` appends a setting to `definePlugin({ settings })`; in the legacy layout to
- * the manifest's `settings`.
+ * `add setting <key>` appends a setting to `definePlugin({ settings })`.
  */
 
 export const CONTRIBUTION_KINDS = ['field', 'page', 'auth-provider', 'route', 'setting'] as const;
@@ -64,42 +55,17 @@ export function isContributionKind(value: string): value is ContributionKind {
 	return (CONTRIBUTION_KINDS as readonly string[]).includes(value);
 }
 
-/** The kinds of the legacy layout; its routes live in the server code. */
-type LegacyKind = Exclude<ContributionKind, 'route' | 'setting'>;
-
 export type AddOptions = {
 	/** `add setting`: the setting's type; default `text`. */
 	type?: string;
 };
 
-const KINDS = {
-	field: {
-		key: 'fields',
-		idKey: 'type',
-		category: 'fields',
-		schema: fieldContributionSchema.shape.type
-	},
-	page: {
-		key: 'pages',
-		idKey: 'path',
-		category: 'pages',
-		schema: pageContributionSchema.shape.path
-	},
-	'auth-provider': {
-		key: 'authProviders',
-		idKey: 'id',
-		category: 'auth',
-		schema: authProviderContributionSchema.shape.id
-	}
-} as const satisfies Record<
-	LegacyKind,
-	{
-		key: string;
-		idKey: string;
-		category: PluginCategory;
-		schema: { safeParse(value: unknown): { success: boolean } };
-	}
->;
+/** What an id of each kind with files of its own must match. */
+const ID_SCHEMAS = {
+	field: fieldContributionSchema.shape.type,
+	page: pageContributionSchema.shape.path,
+	'auth-provider': authProviderContributionSchema.shape.id
+};
 
 /** Messages for an id that can't be one of its kind. */
 const INVALID_ID: Record<ContributionKind, (id: string) => string> = {
@@ -115,9 +81,6 @@ const INVALID_ID: Record<ContributionKind, (id: string) => string> = {
 		`"${id}" can't be a setting key; use lowercase letters, numbers and underscores, e.g. api_key`
 };
 
-/** Where a legacy plugin puts its server code when `add auth-provider` creates it. */
-const DEFAULT_SERVER = 'server/index.ts';
-
 export type AddResult = {
 	/** Files created, relative to the plugin. */
 	created: string[];
@@ -127,15 +90,12 @@ export type AddResult = {
 	hints: string[];
 	/** Whether `pouchbase-plugin.json` was written. */
 	manifestChanged: boolean;
-	layout: 'plugin' | 'legacy';
 };
 
 type Manifest = Record<string, unknown> & {
-	contributes?: Record<string, unknown>;
 	settings?: unknown;
 	categories?: unknown;
 	permissions?: { network?: unknown };
-	server?: unknown;
 };
 
 async function exists(path: string) {
@@ -213,6 +173,14 @@ export async function addContribution(
 ): Promise<AddResult> {
 	const manifest = await readManifestJson(root);
 
+	if (manifest.contributes !== undefined || manifest.server !== undefined) {
+		throw new ProjectError(
+			`${MANIFEST_FILE} has "contributes" or "server", which are generated from ${PLUGIN_FILE}`,
+			[],
+			`Move the contributions and server code into definePlugin({ ... }) in ${PLUGIN_FILE} and remove "contributes" and "server" from ${MANIFEST_FILE}.`
+		);
+	}
+
 	if (kind === 'setting') {
 		return addSetting(root, manifest, id, options);
 	}
@@ -225,21 +193,7 @@ export async function addContribution(
 		);
 	}
 
-	if (manifest.contributes === undefined && manifest.server === undefined) {
-		return addToPlugin(root, manifest, kind, id);
-	}
-
-	if (kind === 'route') {
-		const server = typeof manifest.server === 'string' ? manifest.server : 'the server code';
-
-		throw new ProjectError(
-			`add route needs plugin.ts; this plugin lists its contributions in ${MANIFEST_FILE}`,
-			[],
-			`Add "GET ${routePathFor(id)}" to the routes in ${server}, or move the contributions into definePlugin({ ... }) in plugin.ts and remove "contributes" and "server" from ${MANIFEST_FILE}.`
-		);
-	}
-
-	return addLegacy(root, manifest, kind, id);
+	return addToPlugin(root, manifest, kind, id);
 }
 
 /** `plugin.ts` (or `.js`) of the plugin in `root`, or `null` without one. */
@@ -254,8 +208,7 @@ async function findPluginFile(root: string): Promise<string | null> {
 }
 
 /**
- * The plugin's own layout: creates the files of the contribution and adds it to
- * `definePlugin({ ... })` in `plugin.ts`, with the imports it needs; creates `plugin.ts` without one.
+ * Creates the files of the contribution and adds it to `definePlugin({ ... })` in `plugin.ts`, with the imports it needs; creates `plugin.ts` without one.
  */
 async function addToPlugin(
 	root: string,
@@ -267,7 +220,7 @@ async function addToPlugin(
 	let taken: string[] = [];
 	let changed = false;
 
-	if (kind !== 'route' && !KINDS[kind].schema.safeParse(id).success) {
+	if (kind !== 'route' && !ID_SCHEMAS[kind].safeParse(id).success) {
 		throw new ProjectError(INVALID_ID[kind](id));
 	}
 
@@ -340,8 +293,7 @@ async function addToPlugin(
 		created: [...Object.keys(entry.files), ...(file ? [] : [PLUGIN_FILE])],
 		changed: file ? [file] : [],
 		hints,
-		manifestChanged: changed,
-		layout: 'plugin'
+		manifestChanged: changed
 	};
 }
 
@@ -416,93 +368,6 @@ export function addToDefinition(
 	const ownFiles = String((last.source as AstNode | undefined)?.value ?? '').startsWith('.');
 
 	return `${result.slice(0, last.end)}${ownFiles ? '\n' : '\n\n'}${lines}${result.slice(last.end)}`;
-}
-
-/** The legacy layout: the manifest lists the contribution and points to its files. */
-async function addLegacy(
-	root: string,
-	manifest: Manifest,
-	kind: LegacyKind,
-	id: string
-): Promise<AddResult> {
-	const { key, idKey, category, schema } = KINDS[kind];
-
-	if (!schema.safeParse(id).success) {
-		throw new ProjectError(INVALID_ID[kind](id));
-	}
-
-	const contributes = (manifest.contributes ??= {});
-
-	if (typeof contributes !== 'object' || Array.isArray(contributes)) {
-		throw new ProjectError(`contributes in ${MANIFEST_FILE} is not an object`);
-	}
-
-	const list = (contributes[key] ??= []);
-
-	if (!Array.isArray(list)) {
-		throw new ProjectError(`contributes.${key} in ${MANIFEST_FILE} is not a list`);
-	}
-
-	if (list.some((item: unknown) => (item as Record<string, unknown>)?.[idKey] === id)) {
-		throw new ProjectError(`contributes.${key} already has ${id}`);
-	}
-
-	let files: Files;
-	const hints: string[] = [];
-	const server = typeof manifest.server === 'string' ? manifest.server : null;
-
-	switch (kind) {
-		case 'field': {
-			const field = fieldFiles(id);
-
-			list.push(field.contribution);
-			files = field.files;
-
-			if (server) {
-				hints.push(`add fields.${objectKey(id)} to ${server} to validate or convert its values`);
-			}
-
-			break;
-		}
-
-		case 'page': {
-			const page = pageFiles(id);
-
-			list.push(page.contribution);
-			files = page.files;
-			break;
-		}
-
-		case 'auth-provider': {
-			list.push({ id, label: title(id), icon: providerIconPath(id) });
-			files = { [providerIconPath(id)]: PROVIDER_ICON };
-
-			if (server) {
-				hints.push(
-					`add authProviders.${objectKey(id)} to ${server} (e.g. with createOidcProvider) and the provider's hosts to permissions.network`
-				);
-			} else {
-				manifest.server = DEFAULT_SERVER;
-				files[DEFAULT_SERVER] = authProviderServer(id);
-				addExampleHost(manifest);
-				hints.push(
-					`replace the example URLs in ${DEFAULT_SERVER} and ${EXAMPLE_PROVIDER_HOST} in permissions.network with your provider's`
-				);
-			}
-
-			break;
-		}
-	}
-
-	addCategory(manifest, category, hints);
-	await writeNewFiles(root, files);
-
-	// New top-level keys such as `server` go before `contributes`, which stays last.
-	const rest = Object.entries(manifest).filter(([name]) => name !== 'contributes');
-
-	await writeFile(join(root, MANIFEST_FILE), json({ ...Object.fromEntries(rest), contributes }));
-
-	return { created: Object.keys(files), hints, manifestChanged: true, layout: 'legacy' };
 }
 
 // Settings
@@ -645,7 +510,7 @@ export function appendSetting(file: string, source: string, setting: SettingTemp
 	return `${source.slice(0, last.end)},\n${indent}${settingSource(setting, indent)}${source.slice(last.end)}`;
 }
 
-/** `add setting <key>`: appends the setting to `plugin.ts`, or the manifest in the legacy layout. */
+/** `add setting <key>`: appends the setting to `plugin.ts`. */
 async function addSetting(
 	root: string,
 	manifest: Manifest,
@@ -674,28 +539,6 @@ async function addSetting(
 	};
 	const read = `await ctx.settings.get('${key}')`;
 
-	if (manifest.contributes !== undefined || manifest.server !== undefined) {
-		const settings = (manifest.settings ??= []);
-
-		if (!Array.isArray(settings)) {
-			throw new ProjectError(`settings in ${MANIFEST_FILE} is not a list`);
-		}
-
-		if (settings.some((item: unknown) => (item as Record<string, unknown>)?.key === key)) {
-			throw new ProjectError(`settings in ${MANIFEST_FILE} already has ${key}`);
-		}
-
-		settings.push({ key: setting.key, label: setting.label, type: setting.type });
-		await writeFile(join(root, MANIFEST_FILE), json(manifest));
-
-		return {
-			created: [],
-			hints: [`set the label and description of ${key} in ${MANIFEST_FILE}; read it with ${read}.`],
-			manifestChanged: true,
-			layout: 'legacy'
-		};
-	}
-
 	if (manifest.settings !== undefined) {
 		throw new ProjectError(
 			`${MANIFEST_FILE} has "settings"; they belong in ${PLUGIN_FILE}`,
@@ -715,7 +558,7 @@ async function addSetting(
 			`make sure "include" in tsconfig.json has ${PLUGIN_FILE}, so its Register block types ctx.settings.`
 		);
 
-		return { created: [PLUGIN_FILE], hints, manifestChanged: false, layout: 'plugin' };
+		return { created: [PLUGIN_FILE], hints, manifestChanged: false };
 	}
 
 	const source = await readFile(join(root, existing), 'utf8');
@@ -726,7 +569,6 @@ async function addSetting(
 		created: [],
 		changed: [existing],
 		hints,
-		manifestChanged: false,
-		layout: 'plugin'
+		manifestChanged: false
 	};
 }

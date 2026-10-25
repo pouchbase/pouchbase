@@ -269,14 +269,7 @@ describe('ModuleLinker', () => {
 });
 
 describe('embeddedModulePath', () => {
-	it('maps legacy ui/ files as they are', () => {
-		expect(embeddedModulePath('/plugins/demo/ui/overview-page.svelte')).toEqual({
-			pluginId: 'demo',
-			path: 'ui/overview-page.svelte'
-		});
-	});
-
-	it('maps other files of the plugin under ui/', () => {
+	it('maps the files of the plugin under ui/', () => {
 		expect(embeddedModulePath('/plugins/demo/fields/rating/input.svelte')).toEqual({
 			pluginId: 'demo',
 			path: 'ui/fields/rating/input.svelte'

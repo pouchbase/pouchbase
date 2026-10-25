@@ -39,7 +39,6 @@ import {
 	parseBundle,
 	pluginCollectionName,
 	pluginFieldTypeId,
-	previewOf,
 	resolveSettings,
 	splitPluginFieldType
 } from '@pouchbasejs/plugin-sdk';
@@ -47,7 +46,7 @@ import { and, asc, eq, inArray, like, notInArray, sql } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { dev } from '$app/env';
-import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
+import { POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
 import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 import { apiCreateCollectionSchema } from '#lib/schemas/collections.js';
 
@@ -273,8 +272,7 @@ type ModuleRow = typeof pluginModules.$inferInsert;
 type SavedSettings = Map<string, Record<string, string>>;
 
 function registryUrl() {
-	// `PLUGIN_REGISTRY_URL` is the name the variable had up to 0.8.
-	return POUCHBASE_REGISTRY_URL ?? PLUGIN_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
+	return POUCHBASE_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
 }
 
 const HOST = { version: POUCHBASE_VERSION, apiVersions: SUPPORTED_API_VERSIONS };
@@ -371,7 +369,7 @@ function toFieldTypes(manifest: PluginManifest, embedded: boolean): PluginFieldT
 		description: field.description || null,
 		column: field.column,
 		input: field.input,
-		preview: previewOf(field) ?? null,
+		preview: field.preview ?? null,
 		iconUrl: imageUrl(manifest, field.icon)
 	}));
 }

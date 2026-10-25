@@ -249,7 +249,7 @@ The schema can be managed from code too, with an [API key](#email-templates) wit
 - `PATCH` only changes the parts it is given. `fields` and `indexes` are the whole list: a field with an `id`, or else with the name of an existing field, changes that field; other fields are added and fields left out are deleted. `rules` keeps the actions it leaves out.
 - An import creates the collections of the file and changes existing ones (matched by id, then by name) to match it, as a publish between environments does, but only for collections. Other collections stay unless `?removeMissing=true`. Relations to collections outside the file are found by name; `422` when the instance doesn't have them.
 - Changes that delete collections, fields or data (on `PATCH` and import) fail with `409` and the plan unless `?force=true`; `?dryRun=true` only returns the plan. A change that fails stops the rest: `422` with the number of changes made.
-- An export file is `{ format: 2, exportedAt, collections, related }`; files with `format: 1` from older versions are still accepted.
+- An export file is `{ format: 2, exportedAt, collections, related }`.
 - `export` and `import` are reserved names for collections.
 
 ### Database API and API rules
@@ -266,10 +266,12 @@ Every collection has a database API at `/api/db/<collection>`, guarded by the co
 
 Custom rules and the `?where=` parameter are conditions, such as `status == "published" and (views > 10 or author == $user.id)`:
 
-- **Operands**: field names (`author.name` follows a relation), `"strings"` or `'strings'`, numbers, `true`, `false`, `null`, `$now` (the current time), `$user.<field>` (the signed-in user; `null` when signed out) and `$input.<field>` (the submitted value, in create and update rules).
-- **Comparisons**: `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains` and `not contains` (a case-insensitive substring match; `%` in the text is a wildcard).
+- **Values**: field names, `"strings"` or `'strings'`, numbers, `true`, `false`, `null`, `$user.<field>` (the signed-in user; `null` when signed out) and `$input.<field>` (the submitted value, in create and update rules), and function calls.
+- **Comparisons**: `==`, `!=`, `>`, `>=`, `<` and `<=`.
+- **Functions**: text (`contains(title, "x")`, `starts_with`, `ends_with`, `like`, `lower`, `upper`, `trim`, `length`), dates in UTC (`now()`, `today()`, `date`, `date_add(now(), -7, "days")`, `start_of(now(), "week")`, `year`, `month`, `day`, `weekday`, `hour`, `minute`), numbers (`abs`, `round`) and lists (`count(tags)`). `contains`, `starts_with`, `ends_with` and `like` are conditions of their own; the others are values to compare. Dates compare with Created and Updated fields too: `created_at >= date_add(now(), -7, "days")`.
 - **Lists**: `any(<field>) <comparison> <value>` is true when any item of a multiple relation or list matches, e.g. `any(tags) == "news"`.
-- **Combining**: `and`, `or` and parentheses. `#` starts a comment until the end of the line, so a long rule can span several lines.
+- **Related records**: `author.role` is a field of the related record, up to three relations deep (`post.author.team.name`); a multiple relation goes in `any()`: `any(editors.role) == "admin"`. In `where`, related records are checked against the view rule of their collection and hidden fields can't be used; API rules see everything.
+- **Combining**: `not`, `and`, `or` and parentheses. `#` starts a comment until the end of the line, so a long rule can span several lines.
 
 #### Listing and reading
 

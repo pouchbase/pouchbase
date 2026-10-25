@@ -132,7 +132,7 @@
 	<p>
 		<Code.Root>pnpm dev</Code.Root> rebuilds the plugin on every change and serves it from a local registry
 		on <Code.Root>http://localhost:4510</Code.Root>. Point a Pouchbase on the same machine at it
-		with a <a href={resolve('/docs/getting-started')}>server variable</a>:
+		with a <a href={resolve('/docs/platform/getting-started')}>server variable</a>:
 	</p>
 
 	<CodeBlock.Root title=".env">

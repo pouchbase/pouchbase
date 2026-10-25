@@ -518,3 +518,11 @@ export function validateDefaultValue(type: FieldTypeId, value: string): string |
 			return null;
 	}
 }
+
+/**
+ * Whether a field can be hidden from app users: not the `id` field, which every record is read by,
+ * nor the built-in fields of `users` and `files`, which sign-in and uploads rely on.
+ */
+export function canHide(field: { type: FieldTypeId; system: boolean }) {
+	return field.type !== 'id' && !field.system;
+}

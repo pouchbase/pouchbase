@@ -24,8 +24,7 @@ export {
 	uiBundlePath,
 	type DiscoverOptions,
 	type DiscoveredProject,
-	type ProjectContents,
-	type ProjectMode
+	type ProjectContents
 } from './cli/discover.js';
 export {
 	PLUGIN_FILE_IMPORT,

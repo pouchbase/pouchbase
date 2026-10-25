@@ -9,6 +9,7 @@ function field(overrides: Partial<SnapshotField> & { id: string; name: string })
 		type: 'text',
 		required: false,
 		unique: false,
+		hidden: false,
 		defaultValue: null,
 		options: {},
 		system: false,

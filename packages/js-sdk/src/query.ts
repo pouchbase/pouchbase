@@ -39,12 +39,16 @@ type Ordering<V> = {
 	lte?: V;
 };
 
-/** Text search, case-insensitive. A `%` in the value is a wildcard. */
+/** Text search, case-insensitive. */
 type TextSearch = {
 	/** Contains the text. */
 	contains?: string;
 	/** Doesn't contain the text. */
 	notContains?: string;
+	/** Starts with the text. */
+	startsWith?: string;
+	/** Ends with the text. */
+	endsWith?: string;
 };
 
 /** Conditions for multiple relations, files and lists (arrays). */
@@ -143,7 +147,7 @@ function fieldName(name: string) {
  * users.
  *
  * ```ts
- * pouch.db.posts.findMany({ where: condition`author == $user.id or title contains ${search}` });
+ * pouch.db.posts.findMany({ where: condition`author == $user.id or contains(title, ${search})` });
  * ```
  */
 export function condition(strings: TemplateStringsArray, ...values: ConditionValue[]): Condition {
@@ -175,9 +179,15 @@ const OPERATORS: Record<string, string> = {
 	gt: '>',
 	gte: '>=',
 	lt: '<',
-	lte: '<=',
-	contains: 'contains',
-	notContains: 'not contains'
+	lte: '<='
+};
+
+/** Comparisons that are functions of the condition syntax: `contains(title, "x")`. */
+const FUNCTIONS: Record<string, { name: string; not?: boolean }> = {
+	contains: { name: 'contains' },
+	notContains: { name: 'contains', not: true },
+	startsWith: { name: 'starts_with' },
+	endsWith: { name: 'ends_with' }
 };
 
 /** One field's comparisons as parts of a condition. */
@@ -212,6 +222,14 @@ function fieldParts(name: string, comparisons: unknown): string[] {
 			case 'isEmpty':
 				return [`${name} ${value ? '==' : '!='} ""`];
 			default: {
+				const fn = FUNCTIONS[operator];
+
+				if (fn) {
+					const call = `${fn.name}(${name}, ${literal(value as ConditionValue)})`;
+
+					return [fn.not ? `not ${call}` : call];
+				}
+
 				const symbol = OPERATORS[operator];
 
 				if (!symbol) {

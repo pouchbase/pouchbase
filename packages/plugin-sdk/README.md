@@ -160,7 +160,7 @@ The CLI turns `plugin.ts` into the full manifest that hosts and the registry see
 npx pouchbase-plugin manifest > manifest.json   # the JSON on stdout, the steps on stderr
 ```
 
-`"$schema": "https://pouchbase.io/schemas/plugin-manifest.json"` (`MANIFEST_SCHEMA_URL`) gives editors completion and checks. `pouchbase-plugin schema` prints the same JSON Schema (`manifestJsonSchema()`), which describes the full manifest: `apiVersion` is optional there (it defaults to `API_VERSION`), and `contributes`, `server` and `settings` are marked deprecated, because the CLI fills them in from `plugin.ts`. `parseManifest(json)` validates a full manifest the same way Pouchbase does on install.
+`"$schema": "https://pouchbase.io/schemas/plugin-manifest.json"` (`MANIFEST_SCHEMA_URL`) gives editors completion and checks. `pouchbase-plugin schema` prints the same JSON Schema (`manifestJsonSchema()`), which describes the full manifest: `apiVersion` is optional there (it defaults to `API_VERSION`), and it leaves out `contributes`, `server` and `settings`, which the CLI fills in from `plugin.ts` and refuses in `pouchbase-plugin.json`. `parseManifest(json)` validates a full manifest the same way Pouchbase does on install.
 
 ### Settings
 
@@ -238,7 +238,7 @@ export default defineField({
 
 - `validate(value, options, ctx)` checks a value from the record form (a string) or the API before it is saved, `serialize(value, ctx)` turns it into the stored column value and `deserialize(value, ctx)` turns the stored value into what the API returns; each one is optional.
 - `input` receives `FieldInputProps` and must submit the value with a form control named `name` (a hidden `<input>` when something else edits it).
-- `preview` is the type's **preview**: it shows the value, read-only, in the records grid, and receives `FieldPreviewProps`; without one the grid shows the value as text. Previews used to be called cells: in a manifest, `cell` and `FieldCellProps` still work in plugin API version 1.
+- `preview` is the type's **preview**: it shows the value, read-only, in the records grid, and receives `FieldPreviewProps`; without one the grid shows the value as text.
 
 ### Pages
 
@@ -275,7 +275,7 @@ Field types and pages have an icon in the dashboard, drawn like its own icons: i
 - an [Iconify](https://icon-sets.iconify.design) name, e.g. `lucide:palette` (the set of the dashboard's own icons). The CLI turns it into an SVG file of the bundle (`ui/icons/lucide/palette.svg`), so Pouchbase never fetches an icon. It looks the name up in the icon set `@iconify-json/<prefix>` installed in the plugin, then in the SDK, which comes with `@iconify-json/lucide`; for other sets it fetches the icon from `https://api.iconify.design` once and keeps it in `node_modules/.cache/pouchbase-plugin/icons`. Install the set (`pnpm add -D @iconify-json/mdi`) to build offline. The log says where each icon comes from: `Resolved icon lucide:palette for fields.color.icon (@iconify-json/lucide of @pouchbasejs/plugin-sdk)`.
 - an `.svg` file of the plugin, imported like a module: `import icon from './icon.svg'`, then `icon` (or `icon: logo`). A path as a string is not an icon.
 
-An icon is a plain SVG image of at most 32 KiB (`MAX_ICON_SIZE`): it starts with `<svg` (after an optional `<?xml ?>` prolog and comments), has no `<script>`, `<foreignObject>`, `<!DOCTYPE>`, event handler attributes (`onload="…"`) or `javascript:` URLs, and refers to nothing outside itself (`href` and `url()` only point to `#id`s). `svgIconIssues(svg)` checks one; `validate`, `build` and Pouchbase (`parseBundle`) refuse icons that break these rules. The logo of an auth provider keeps its own colors. In the manifest, `icon` of a contribution is the bundle path of the file (`ui/icons/lucide/palette.svg`); a plugin in the [legacy layout](#legacy-layout) sets that path itself.
+An icon is a plain SVG image of at most 32 KiB (`MAX_ICON_SIZE`): it starts with `<svg` (after an optional `<?xml ?>` prolog and comments), has no `<script>`, `<foreignObject>`, `<!DOCTYPE>`, event handler attributes (`onload="…"`) or `javascript:` URLs, and refers to nothing outside itself (`href` and `url()` only point to `#id`s). `svgIconIssues(svg)` checks one; `validate`, `build` and Pouchbase (`parseBundle`) refuse icons that break these rules. The logo of an auth provider keeps its own colors. In the manifest, `icon` of a contribution is the bundle path of the file (`ui/icons/lucide/palette.svg`).
 
 ### Routes
 
@@ -437,32 +437,6 @@ Nothing else: no other packages, which aren't in the browser, and no files outsi
 - with `src`, draws an SVG image from a URL in the text color: a `data:image/svg+xml,...` URL of markup in a `.ts` module, or an icon in the bundle, which Pouchbase serves at `/api/plugins/<id>/assets/<bundle path>` (`ui/icons/lucide/palette.svg` for a field type's `lucide:palette`). This always works.
 - with `icon="lucide:…"`, renders at once only the icons the dashboard bundles for its own use; for any other name, `@iconify/svelte` fetches the icon from the Iconify API in the admin's browser, so it appears late or not at all offline, and the bundled set can change between Pouchbase versions. Prefer `src`.
 
-### Legacy layout
-
-Plugins written before `plugin.ts` list their contributions in `contributes` and point `server` to an entry that default-exports the server code itself (a `ServerDefinition`: `{ fields, authProviders, routes }` with keys such as `'GET /stats'`), with every component and image in `ui/`:
-
-```json
-{
-	"apiVersion": 1,
-	"id": "color-picker",
-	"name": "Color picker",
-	"server": "server/index.ts",
-	"contributes": {
-		"fields": [
-			{
-				"type": "color",
-				"label": "Color",
-				"description": "A hex color.",
-				"column": "TEXT",
-				"input": "ui/color-input.svelte"
-			}
-		]
-	}
-}
-```
-
-A manifest with `contributes` or `server` still builds, with a deprecation warning; the layout stops working in plugin API version 2, and the CLI doesn't read `plugin.ts` in it. To move a plugin, put each contribution in `definePlugin({ ... })` in `plugin.ts`: a field type's entry in `contributes.fields` and its handler become one `defineField({ ... })` that imports its components (`input: Input` for `ui/color-input.svelte`), a page's entry becomes an entry of `pages` with its component imported, `routes['GET /stats']` becomes `routes: { '/stats': { GET } }`, and the manifest's `settings` move into `settings`. Then remove `contributes`, `server` and `settings` from the manifest, and compare the result with `pouchbase-plugin manifest`. `add field|page|auth-provider` keeps writing the legacy layout in a legacy plugin, and `add setting` appends to the manifest's `settings`; `add route` needs `plugin.ts`. The `ui/` files of a legacy plugin may import `.svelte` and `.js` files; every `.css` file in `ui/` is loaded with the plugin without an import.
-
 ### Categories
 
 The registry and the Plugins page group plugins by category. The list is fixed (`PLUGIN_CATEGORIES`, with names in `PLUGIN_CATEGORY_LABELS`):
@@ -479,9 +453,9 @@ The registry and the Plugins page group plugins by category. The list is fixed (
 
 ### Versioning
 
-- `API_VERSION` is the version of everything in this package: the manifest, `definePlugin`, the bundle format, the server API and the component props, and of the modules the host provides to UI files (`HOST_MODULES`), including the component names and props of `@pouchbasejs/ui`.
+- `API_VERSION` is the version of everything in this package: the manifest, `definePlugin`, the bundle format, the server API and the component props, and of the modules the host provides to UI files (`HOST_MODULE_IDS`), including the component names and props of `@pouchbasejs/ui`.
 - Within an API version, changes are only additive (new optional manifest fields, new contribution kinds, new context members). Pouchbase ignores what it doesn't know. A plugin that needs something added later sets `engines.pouchbase`.
-- A change that would break existing plugins bumps the API version. Pouchbase supports the current API version and the one before it (`SUPPORTED_API_VERSIONS`), and refuses plugins it can't run (`checkCompatibility`).
+- A change that would break existing plugins bumps the API version. Until Pouchbase 1.0, Pouchbase supports only the current API version (`SUPPORTED_API_VERSIONS`) and refuses plugins it can't run (`checkCompatibility`), so a plugin built for an older API version has to be rebuilt.
 - Plugins built from `plugin.ts`, previews and Tailwind classes ship with Pouchbase 0.10.0, so `engines.pouchbase` starts at `>=0.10.0`; raise it when a plugin uses something newer. Pouchbase only installs a version whose range it satisfies.
 
 An update replaces the plugin's code and keeps its data and saved settings, but some changes break existing installations:

@@ -64,6 +64,7 @@
 	import type { Attachment } from 'svelte/attachments';
 	import type * as Monaco from 'monaco-editor';
 	import { untrack } from 'svelte';
+	import { theme } from '#lib/theme.svelte.js';
 	import * as Spinner from '../../spinner';
 	import {
 		FILTER_LANGUAGE,
@@ -72,6 +73,10 @@
 		setDiagnostics
 	} from './code-filter';
 	import { loadMonaco, registerCompletions } from './code-monaco';
+
+	// Monaco has one theme for all editors on the page.
+	const LIGHT_THEME = 'pouchbase';
+	const DARK_THEME = 'pouchbase-dark';
 
 	let {
 		value = $bindable(''),
@@ -181,12 +186,16 @@
 					monaco.Uri.parse(`file:///${settings.key}.${extension}`)
 				);
 
-				// The light theme, with scrollbars in the colors of `ScrollArea` (zinc 300/400/500).
-				monaco.editor.defineTheme('pouchbase', {
+				// The light and dark themes, with scrollbars in the colors of `ScrollArea` (zinc
+				// 300/400/500); the dark one on the background of the dashboard's dark surfaces.
+				monaco.editor.defineTheme(LIGHT_THEME, {
 					base: 'vs',
 					inherit: true,
-					// `variable`: `$user.*`, `$input.*` and `$now` in conditions.
-					rules: [{ token: 'variable', foreground: '7c3aed' }],
+					// In conditions, `variable`: `$user.*` and `$input.*`; `predefined`: function names.
+					rules: [
+						{ token: 'variable', foreground: '7c3aed' },
+						{ token: 'predefined', foreground: '0369a1' }
+					],
 					colors: {
 						'scrollbar.shadow': '#00000000',
 						'scrollbarSlider.background': '#d4d4d8',
@@ -194,10 +203,28 @@
 						'scrollbarSlider.activeBackground': '#71717a'
 					}
 				});
+				monaco.editor.defineTheme(DARK_THEME, {
+					base: 'vs-dark',
+					inherit: true,
+					rules: [
+						{ token: 'variable', foreground: 'a78bfa' },
+						{ token: 'predefined', foreground: '38bdf8' }
+					],
+					colors: {
+						'editor.background': '#111114',
+						'editorGutter.background': '#111114',
+						'editor.lineHighlightBackground': '#1e1e21',
+						'editor.lineHighlightBorder': '#00000000',
+						'scrollbar.shadow': '#00000000',
+						'scrollbarSlider.background': '#3f3f45',
+						'scrollbarSlider.hoverBackground': '#686871',
+						'scrollbarSlider.activeBackground': '#8b8b95'
+					}
+				});
 
 				const instance = monaco.editor.create(node, {
 					model,
-					theme: 'pouchbase',
+					theme: untrack(() => (theme.dark ? DARK_THEME : LIGHT_THEME)),
 					readOnly: settings.readonly,
 					automaticLayout: true,
 					minimap: { enabled: false },
@@ -280,6 +307,11 @@
 			widgets.remove();
 		};
 	};
+
+	// Follows the dashboard when it switches between light and dark.
+	$effect(() => {
+		monacoApi?.editor.setTheme(theme.dark ? DARK_THEME : LIGHT_THEME);
+	});
 
 	// Problems are underlined again after every edit, and when `diagnostics` changes.
 	$effect(() => {

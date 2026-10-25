@@ -8,6 +8,7 @@ import { API_VERSION } from '../api-version.js';
 import { SERVER_FILE } from '../bundle.js';
 import { unknownCategoryIssues } from '../categories.js';
 import {
+	GENERATED_MANIFEST_KEYS,
 	MANIFEST_FILE,
 	UI_DIR,
 	authProviderContributionSchema,
@@ -34,14 +35,10 @@ import { iconifyBundlePath, isIconifyName, resolveIconifyIcon } from './icons.js
 import {
 	HOST_MODULES_SUMMARY,
 	IMPORT,
-	checkServer,
-	collectUi,
 	isDynamicImport,
 	isObject,
-	loadManifest,
 	loadPackageJson,
-	missingProviderMembers,
-	toPosix
+	missingProviderMembers
 } from './project.js';
 import { ProjectError } from './project-error.js';
 import {
@@ -78,14 +75,7 @@ import { title } from './templates.js';
  * `icons.ts`), or an imported `.svg` file. `pouchbase-plugin.json` keeps what isn't code: `id`,
  * `name`, `permissions`, `icon`, `categories`, `engines`, ...; the plugin's icon is `icon.svg`
  * unless the manifest names another.
- *
- * A manifest with `contributes` or `server` is the legacy layout (`ui/` and a server entry), which
- * still works with a deprecation warning. Its settings stay in the manifest, and `plugin.ts` is not
- * read (it may be the server entry).
  */
-
-/** Manifest keys of the legacy layout. */
-const LEGACY_KEYS = ['contributes', 'server'] as const;
 
 /** Folders never read, wherever they are. */
 const IGNORED_DIRS = new Set(['node_modules', 'dist', 'build', 'coverage']);
@@ -130,8 +120,6 @@ const ROUTE_PARAM = /^:[A-Za-z_][A-Za-z0-9_]*$/;
 /** First segments of a route path that the host serves itself. */
 const RESERVED_ROUTE_SEGMENTS = ['assets', 'modules'];
 
-export type ProjectMode = 'definition' | 'legacy';
-
 /** What a project contributes, by id, for messages and the CLI's summary. */
 export type ProjectContents = {
 	fields: string[];
@@ -145,7 +133,6 @@ export type ProjectContents = {
 };
 
 export type DiscoveredProject = {
-	mode: ProjectMode;
 	/**
 	 * The manifest as a bundle has it: validated, with defaults and the fields from `package.json`
 	 * filled in, `server` set to `server.js` when there is server code and every path a bundle path.
@@ -159,9 +146,9 @@ export type DiscoveredProject = {
 	 */
 	uiSources: Record<string, string>;
 	/**
-	 * Source of the server entry module, or `null` without server code: generated for `plugin.ts`
-	 * (see `generateServerEntry`), a re-export of the manifest's `server` in the legacy layout. It
-	 * imports project files by their absolute path, so a bundler can serve it as a virtual module.
+	 * Source of the server entry module, or `null` without server code: generated from `plugin.ts`
+	 * (see `generateServerEntry`). It imports project files by their absolute path, so a bundler can
+	 * serve it as a virtual module.
 	 */
 	serverEntry: string | null;
 	/** `serverEntry` bundled into one module without imports, as `server.js` of the bundle. */
@@ -169,7 +156,7 @@ export type DiscoveredProject = {
 	/** Route keys of the server code, sorted as found. */
 	routes: string[];
 	found: ProjectContents;
-	/** Problems that don't stop a build, such as the legacy layout's deprecation. */
+	/** Problems that don't stop a build. */
 	warnings: ManifestIssue[];
 };
 
@@ -244,11 +231,6 @@ async function readManifestJson(root: string): Promise<Record<string, unknown>> 
 	return json;
 }
 
-/** The legacy keys a manifest has. */
-function legacyKeys(json: Record<string, unknown>) {
-	return LEGACY_KEYS.filter((key) => json[key] !== undefined);
-}
-
 /** `2 field types (color, rating)`; `null` for none. */
 function listed(ids: readonly string[], singular: string, plural?: string) {
 	return ids.length ? `${count(ids.length, singular, plural)} (${ids.join(', ')})` : null;
@@ -268,22 +250,10 @@ export function describeContents(found: ProjectContents): string {
 	return parts.length ? `Found ${parts.join(', ')}` : 'Found nothing to contribute yet';
 }
 
-/** The contents of a manifest's `contributes`, for the legacy layout. */
-function manifestContents(manifest: PluginManifest, routes: string[]): ProjectContents {
-	return {
-		fields: manifest.contributes.fields.map((field) => field.type),
-		pages: manifest.contributes.pages.map((page) => page.path),
-		authProviders: manifest.contributes.authProviders.map((provider) => provider.id),
-		collections: manifest.contributes.collections.map((collection) => collection.name),
-		routes,
-		settings: manifest.settings.map((setting) => setting.key)
-	};
-}
-
 /**
  * Finds what the plugin in `root` contributes and builds its manifest, UI files and server code:
- * from `plugin.ts`, or from `pouchbase-plugin.json` in the legacy layout. Throws a `ProjectError`
- * for every problem, with the file it concerns and a hint.
+ * from `plugin.ts` and `pouchbase-plugin.json`. Throws a `ProjectError` for every problem, with
+ * the file it concerns and a hint.
  */
 export async function discoverProject(
 	directory: string,
@@ -297,95 +267,7 @@ export async function discoverProject(
 	const json = await readManifestJson(root);
 	const files = await projectFiles(root);
 
-	return legacyKeys(json).length
-		? discoverLegacy(root, files, log)
-		: discoverDefinition(root, json, files, log);
-}
-
-/** The legacy layout: the manifest lists the contributions, `ui/` and `server` hold the code. */
-async function discoverLegacy(
-	root: string,
-	files: string[],
-	log?: Logger
-): Promise<DiscoveredProject> {
-	const manifest = await loadManifest(root);
-	const warnings: ManifestIssue[] = [
-		{
-			path: MANIFEST_FILE,
-			message:
-				'"contributes" and "server" are deprecated and stop working in plugin API version 2: move the contributions into definePlugin({ ... }) in plugin.ts (see the README of @pouchbasejs/plugin-sdk)'
-		}
-	];
-
-	log?.detail(
-		`${manifest.id}@${manifest.version} (API version ${manifest.apiVersion}), legacy layout`
-	);
-
-	if (manifest.permissions.network.length) {
-		log?.detail(`May reach ${manifest.permissions.network.join(', ')}`);
-	}
-
-	log?.step(`Checking ${UI_DIR}/`);
-
-	const ui = await collectUi(root);
-	const uiCount = Object.keys(ui.files).length;
-
-	log?.detail(
-		uiCount
-			? `${count(uiCount, 'file')}${ui.compiled ? `, ${ui.compiled} compiled from TypeScript` : ''}`
-			: `No files in ${UI_DIR}/`
-	);
-
-	for (const path of ui.skipped) {
-		log?.debug(`Left out ${path}: not a .svelte, .ts, .js, .css, .json or .svg file`);
-	}
-
-	const routes: string[] = [];
-	let serverEntry: string | null = null;
-	let serverCode: string | null = null;
-
-	if (manifest.server) {
-		log?.step(`Bundling ${manifest.server}`);
-
-		serverCode = await bundleServerCode(root, { file: manifest.server });
-		serverEntry = `export { default } from ${JSON.stringify(toPosix(join(root, manifest.server)))};\n`;
-
-		log?.detail(`${kib(Buffer.byteLength(serverCode))} of server code, in one module`);
-		log?.step('Checking the server handlers against the manifest');
-
-		const result = await checkServer(manifest, serverCode);
-
-		if (result.issues.length) {
-			throw new ProjectError('The server code does not match the manifest', result.issues);
-		}
-
-		warnings.push(...result.warnings);
-		routes.push(...(result.routes ?? []));
-	} else {
-		log?.debug('No server code (no "server" in the manifest)');
-	}
-
-	const found = manifestContents(manifest, routes);
-
-	log?.detail(describeContents(found));
-
-	return {
-		mode: 'legacy',
-		manifest: { ...manifest, server: manifest.server ? SERVER_FILE : undefined },
-		uiFiles: ui.files,
-		uiSources: Object.fromEntries(
-			Object.keys(ui.files).map((path) => {
-				const typescript = path.replace(/\.js$/, '.ts');
-
-				return [path, path.endsWith('.js') && files.includes(typescript) ? typescript : path];
-			})
-		),
-		serverEntry,
-		serverCode,
-		routes,
-		found,
-		warnings
-	};
+	return discoverDefinition(root, json, files, log);
 }
 
 // Ids and paths
@@ -689,6 +571,16 @@ async function discoverDefinition(
 			path: MANIFEST_FILE,
 			message: '"settings" belong in definePlugin({ settings }) in plugin.ts',
 			hint: 'Move the settings to definePlugin({ settings }) in plugin.ts and remove "settings" from pouchbase-plugin.json; pouchbase-plugin add setting <key> adds one.'
+		});
+	}
+
+	for (const key of GENERATED_MANIFEST_KEYS.filter(
+		(key) => key !== 'settings' && json[key] !== undefined
+	)) {
+		problems.push({
+			path: MANIFEST_FILE,
+			message: `"${key}" is generated from plugin.ts`,
+			hint: 'Move the contributions and server code into definePlugin({ ... }) in plugin.ts and remove "contributes" and "server" from pouchbase-plugin.json.'
 		});
 	}
 
@@ -1217,7 +1109,6 @@ async function discoverDefinition(
 	}
 
 	return {
-		mode: 'definition',
 		manifest,
 		uiFiles: ui.uiFiles,
 		uiSources: ui.uiSources,

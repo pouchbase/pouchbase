@@ -159,16 +159,8 @@
 		</li>
 		<li>
 			Within plugin API version 1, changes are only additive. A change that would break plugins
-			bumps the API version; Pouchbase supports the current one and the one before.
-		</li>
-		<li>
-			Plugins written before <Code.Root>definePlugin</Code.Root> in <Code.Root>plugin.ts</Code.Root
-			>, with
-			<Code.Root>contributes</Code.Root> and
-			<Code.Root>server</Code.Root> in the manifest, still build with a warning until API version 2. The
-			<a href="https://github.com/pouchbase/pouchbase/tree/main/packages/plugin-sdk#legacy-layout"
-				>SDK README</a
-			> explains how to move them.
+			bumps the API version. Until Pouchbase 1.0 only the current API version is supported, so a
+			plugin built for an older one has to be rebuilt.
 		</li>
 	</ul>
 

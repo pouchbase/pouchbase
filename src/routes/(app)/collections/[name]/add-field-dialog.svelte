@@ -138,6 +138,17 @@
 					</Form.Description>
 				</Form.Field>
 			{/if}
+
+			{#if type !== 'id'}
+				<Form.Field field={form.fields.hidden} orientation="horizontal">
+					<Form.Checkbox />
+					<Form.Label>Hidden</Form.Label>
+					<Form.Description class="w-full pl-6">
+						Only admins, API keys with the service scope and API rules see it; app users can't read,
+						filter or write it.
+					</Form.Description>
+				</Form.Field>
+			{/if}
 		</div>
 
 		<Dialog.Footer>

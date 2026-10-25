@@ -9,6 +9,7 @@
 	import * as Sortable from '#lib/components/ui/sortable/index.js';
 	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 	import {
+		canHide,
 		COMPUTED_TRANSFORMS,
 		ID_GENERATORS,
 		idGenerator,
@@ -55,6 +56,7 @@
 			name: field.name,
 			required: field.required,
 			unique: field.unique,
+			hidden: field.hidden,
 			remove: false
 		};
 	}
@@ -82,6 +84,7 @@
 			name: row?.name ?? '',
 			required: !!row?.required,
 			unique: !!row?.unique,
+			hidden: !!row?.hidden,
 			remove: !!row?.remove
 		}))
 	);
@@ -197,6 +200,11 @@
 					<span class="flex-1">Field</span>
 					<span class="w-16 text-center">Required</span>
 					<span class="w-16 text-center">Unique</span>
+					<span
+						class="w-16 text-center"
+						title="Only admins, API keys with the service scope and API rules see hidden fields"
+						>Hidden</span
+					>
 					<span class="w-16"></span>
 				{/snippet}
 
@@ -269,6 +277,19 @@
 									</Form.Field>
 								{:else}
 									<span class="text-zinc-300" title="Not available for this field type">—</span>
+								{/if}
+							</div>
+
+							<div class="flex w-16 justify-center">
+								{#if canHide(field)}
+									<Form.Field field={form.fields.fields[index].hidden} orientation="horizontal">
+										<Form.Checkbox defaultChecked={field.hidden} disabled={locked} />
+										<Form.Label class="sr-only">{field.name} is hidden from app users</Form.Label>
+									</Form.Field>
+								{:else}
+									<span class="text-zinc-300" title="The ID and built-in fields are always shown"
+										>—</span
+									>
 								{/if}
 							</div>
 

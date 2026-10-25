@@ -8,6 +8,7 @@ const field = {
 	type: 'integer' as const,
 	required: true,
 	unique: false,
+	hidden: false,
 	defaultValue: null,
 	options: {},
 	system: false,

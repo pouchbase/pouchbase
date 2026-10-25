@@ -7,7 +7,7 @@ import type { FieldOptions, RelationOnDelete } from '#lib/fields/field-types.js'
 import type { PluginGrant } from '../plugins/grant';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
 import type { RealtimeAction } from '#lib/realtime/protocol.js';
-import type { SqlCondition } from '../filter';
+import type { FilterContext, SqlCondition } from '../filter';
 
 import { asc, eq, inArray } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
@@ -27,7 +27,8 @@ import { apiActions, protectedApiFields } from '#lib/filter/rules.js';
 
 import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from '../computed';
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
-import { ALWAYS, both, compileFilter, compileOrder, compileRule } from '../filter';
+import { ALWAYS, both, compileFilter, compileOrder, compileRule, usesRelations } from '../filter';
+import { checkUserFields, visibleFields } from '../hidden-fields';
 import { generateId } from '../crypto';
 import { pluginMay } from '../plugins/grant';
 import {
@@ -152,6 +153,7 @@ export type ApiRecordList = {
 };
 
 type GuardError =
+	| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
 	| ServiceError<8013, 'ACTION_NOT_AVAILABLE'>
 	| ServiceError<8014, 'RULE_LOCKED'>
 	| (ServiceError<8016, 'INVALID_RULE'> & { data: { action: ApiRuleAction; message: string } })
@@ -458,6 +460,54 @@ function apiFields(collectionFields: Field[]) {
 	return collectionFields.filter((field) => field.type !== 'blob');
 }
 
+/**
+ * The view rule a path through relations (`author.role`) checks on records of `collection`:
+ * none without `access` (admins, and API rules, which the admin wrote), `null` when the API
+ * doesn't show them to `access`, and otherwise its view rule, as for `?include=`.
+ */
+function relatedViewRule(collection: Collection, access: ApiAccess | undefined) {
+	if (!access) {
+		return undefined;
+	}
+
+	if (!apiActions(collection).includes('view')) {
+		return null;
+	}
+
+	if ('plugin' in access) {
+		return pluginMay(access.plugin, 'view', collection.name) ? undefined : null;
+	}
+
+	return collection.settings?.rules?.view ?? null;
+}
+
+/**
+ * The collections that relations point to, by id, for conditions with paths such as
+ * `post.author.role`; their records are checked against their view rule for `access`.
+ */
+export function relatedCollections(
+	all: { collection: Collection; fields: Field[] }[],
+	access: ApiAccess | undefined
+): NonNullable<FilterContext['relations']> {
+	const byId = new Map(all.map((entry) => [entry.collection.id, entry]));
+
+	return (id) => {
+		const entry = byId.get(id);
+
+		if (!entry) {
+			return undefined;
+		}
+
+		return {
+			name: entry.collection.name,
+			key: entry.fields.find((field) => field.type === 'id')?.name ?? null,
+			// Hidden fields aren't for app users, so their filters can't reach them either.
+			fields: visibleFields(entry.fields, access),
+			rule: relatedViewRule(entry.collection, access)
+		};
+	};
+}
+
 /** Whether a field holds a JSON array of values. */
 function isMultiple(field: Field) {
 	return (
@@ -760,7 +810,7 @@ export class RecordsService extends Service {
 		return this.context(collectionName).andThen((context) =>
 			this.guard(context, 'list', access).andThen((rule) => {
 				const { collection, fields: collectionFields, databaseId } = context;
-				const readable = apiFields(collectionFields);
+				const readable = visibleFields(collectionFields, access);
 				const { key, created } = autoFields(collectionFields);
 
 				// Without fields the collection has no table yet.
@@ -768,57 +818,78 @@ export class RecordsService extends Service {
 					return okAsync({ items: [], total: 0, limit: options.limit, offset: options.offset });
 				}
 
-				return this.compileQuery('where', () =>
-					options.where?.trim()
-						? both(rule, compileFilter(options.where, readable, { user: accessUser(access) }))
-						: rule
-				).andThen((where) =>
-					this.compileQuery('order', () => compileOrder(options.order ?? '', readable))
-						.andThen((sort) =>
-							this.compileQuery('include', () => includeTree(readable, options.include)).map(
-								(tree) => ({ sort, tree })
-							)
-						)
-						.andThen(({ sort, tree }) =>
-							this.compileQuery('select', () =>
-								selectFields(readable, withIncluded(options.select, tree))
-							).map((selected) => ({ sort, tree, selected }))
-						)
-						.andThen(({ sort, tree, selected }) => {
-							// Without an order, records come in the order they were created.
-							const order = [
-								...(sort.length ? sort : [`"${created[0] ?? key}" ASC`]),
-								`"${key}" ASC`
-							];
-							const columns = selected.map((field) => `"${field.name}"`).join(', ');
+				return this.filterRelations([options.where], access)
+					.andThen((relations) =>
+						this.userFields(options.where, access).map((userFields) => ({
+							relations,
+							userFields
+						}))
+					)
+					.andThen(({ relations, userFields }) =>
+						this.compileQuery('where', () => {
+							if (userFields) {
+								checkUserFields(options.where, userFields);
+							}
 
-							return fromPromise(
-								batchDatabase(databaseId, [
-									{
-										sql: `SELECT count(*) FROM "${collection.name}" WHERE ${where.sql}`,
-										params: where.params
-									},
-									{
-										sql: `SELECT ${columns} FROM "${collection.name}" WHERE ${where.sql} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`,
-										params: [...where.params, options.limit, options.offset]
-									}
-								]),
-								(error) => this.error(8000, 'LIST_RECORDS_FAILED', error)
-							)
-								.map(([[total], rows]) => {
-									return {
-										items: rows.map((row) => toApiRecord(selected, row)),
-										total: Number(total?.[0] ?? 0),
-										limit: options.limit,
-										offset: options.offset
-									} satisfies ApiRecordList;
-								})
-								.andThen((list) => this.deserialize(collectionFields, list.items).map(() => list))
-								.andThen((list) =>
-									this.include(collectionFields, list.items, tree, access).map(() => list)
-								);
+							return options.where?.trim()
+								? both(
+										rule,
+										compileFilter(options.where, readable, {
+											user: accessUser(access),
+											table: collection.name,
+											relations
+										})
+									)
+								: rule;
 						})
-				);
+					)
+					.andThen((where) =>
+						this.compileQuery('order', () => compileOrder(options.order ?? '', readable))
+							.andThen((sort) =>
+								this.compileQuery('include', () => includeTree(readable, options.include)).map(
+									(tree) => ({ sort, tree })
+								)
+							)
+							.andThen(({ sort, tree }) =>
+								this.compileQuery('select', () =>
+									selectFields(readable, withIncluded(options.select, tree))
+								).map((selected) => ({ sort, tree, selected }))
+							)
+							.andThen(({ sort, tree, selected }) => {
+								// Without an order, records come in the order they were created.
+								const order = [
+									...(sort.length ? sort : [`"${created[0] ?? key}" ASC`]),
+									`"${key}" ASC`
+								];
+								const columns = selected.map((field) => `"${field.name}"`).join(', ');
+
+								return fromPromise(
+									batchDatabase(databaseId, [
+										{
+											sql: `SELECT count(*) FROM "${collection.name}" WHERE ${where.sql}`,
+											params: where.params
+										},
+										{
+											sql: `SELECT ${columns} FROM "${collection.name}" WHERE ${where.sql} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`,
+											params: [...where.params, options.limit, options.offset]
+										}
+									]),
+									(error) => this.error(8000, 'LIST_RECORDS_FAILED', error)
+								)
+									.map(([[total], rows]) => {
+										return {
+											items: rows.map((row) => toApiRecord(selected, row)),
+											total: Number(total?.[0] ?? 0),
+											limit: options.limit,
+											offset: options.offset
+										} satisfies ApiRecordList;
+									})
+									.andThen((list) => this.deserialize(collectionFields, list.items).map(() => list))
+									.andThen((list) =>
+										this.include(collectionFields, list.items, tree, access).map(() => list)
+									);
+							})
+					);
 			})
 		);
 	}
@@ -834,6 +905,16 @@ export class RecordsService extends Service {
 		options: ApiReadOptions & { access?: ApiAccess } = {}
 	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
 		return this.readApiRecord(collectionName, id, options, options.access, options.access);
+	}
+
+	/**
+	 * The signed-in user's own record, as `/api/auth/me` returns it: whatever the view rule of
+	 * `users` says, but without the hidden fields, like every record an app user reads.
+	 */
+	apiSelf(
+		user: Record<string, unknown>
+	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
+		return this.readApiRecord(USERS_COLLECTION, String(user.id), {}, undefined, { user });
 	}
 
 	/** Creates a record through the records API (see `create`) and returns it (see `apiGet`). */
@@ -1046,7 +1127,7 @@ export class RecordsService extends Service {
 						return fromPromise(
 							queryDatabase(
 								databaseId,
-								`INSERT INTO "${collection.name}" ${target} SELECT ${selected} FROM (SELECT ${row.map((name) => `? AS "${name}"`).join(', ')}) WHERE ${condition.sql} RETURNING ${returning(key, collectionFields)}`,
+								`INSERT INTO "${collection.name}" ${target} SELECT ${selected} FROM (SELECT ${row.map((name) => `? AS "${name}"`).join(', ')}) AS "${collection.name}" WHERE ${condition.sql} RETURNING ${returning(key, collectionFields)}`,
 								[...row.map((name) => values[name] ?? null), ...condition.params]
 							),
 							(error) => this.writeError(error, 8004, 'CREATE_RECORD_FAILED')
@@ -1805,9 +1886,9 @@ export class RecordsService extends Service {
 		access: ApiAccess | undefined
 	): ResultAsync<void, IncludeError> {
 		return this.context(collectionName).andThen(({ fields: collectionFields }) =>
-			this.compileQuery('include', () => includeTree(apiFields(collectionFields), expand)).andThen(
-				(tree) => this.include(collectionFields, records, tree, access)
-			)
+			this.compileQuery('include', () =>
+				includeTree(visibleFields(collectionFields, access), expand)
+			).andThen((tree) => this.include(collectionFields, records, tree, access))
 		);
 	}
 
@@ -1843,7 +1924,7 @@ export class RecordsService extends Service {
 		return this.context(collectionName).andThen((context) =>
 			this.guard(context, 'view', viewer).andThen((rule) => {
 				const { collection, fields: collectionFields, databaseId } = context;
-				const readable = apiFields(collectionFields);
+				const readable = visibleFields(collectionFields, access);
 				const { key } = autoFields(collectionFields);
 
 				if (!collectionFields.length) {
@@ -1934,7 +2015,7 @@ export class RecordsService extends Service {
 		access: ApiAccess | undefined
 	): ResultAsync<Map<string, ApiRecord>, IncludeError> {
 		const { collection, fields: collectionFields, databaseId } = context;
-		const readable = apiFields(collectionFields);
+		const readable = visibleFields(collectionFields, access);
 		const { id: idColumn } = autoFields(collectionFields);
 		const ids = [...new Set(records.flatMap((record) => relatedIds(record[name])))];
 
@@ -2013,7 +2094,14 @@ export class RecordsService extends Service {
 			return errAsync(this.error(8014, 'RULE_LOCKED'));
 		}
 
-		const written = protectedApiFields(collection).filter((name) => input && name in input);
+		// App users can't write hidden fields, as they can't read them either.
+		const hidden =
+			'user' in access
+				? collectionFields.filter((field) => field.hidden).map((field) => field.name)
+				: [];
+		const written = [...protectedApiFields(collection), ...hidden].filter(
+			(name) => input && name in input
+		);
 
 		if (written.length) {
 			return errAsync<never, InvalidRecordError>({
@@ -2031,21 +2119,64 @@ export class RecordsService extends Service {
 			return okAsync(ALWAYS);
 		}
 
-		let condition: SqlCondition | null;
+		const rule = collection.settings.rules?.[action];
 
-		try {
-			condition = compileRule(collection.settings.rules?.[action], apiFields(collectionFields), {
-				user: access.user,
-				input
-			});
-		} catch (error) {
-			return errAsync({
-				...this.error(8016, 'INVALID_RULE'),
-				data: { action, message: error instanceof Error ? error.message : String(error) }
-			});
+		// The rule's own paths through relations see every related record.
+		return this.filterRelations([rule]).andThen((relations) => {
+			let condition: SqlCondition | null;
+
+			try {
+				condition = compileRule(rule, apiFields(collectionFields), {
+					user: access.user,
+					input,
+					table: collection.name,
+					relations
+				});
+			} catch (error) {
+				return errAsync({
+					...this.error(8016, 'INVALID_RULE'),
+					data: { action, message: error instanceof Error ? error.message : String(error) }
+				});
+			}
+
+			return condition ? okAsync(condition) : errAsync(this.error(8014, 'RULE_LOCKED'));
+		});
+	}
+
+	/**
+	 * The collections that relations point to, when one of `texts` (conditions) has a path such as
+	 * `author.role`; `undefined` otherwise, so plain conditions read nothing. Related records are
+	 * checked against their view rule for `access` (see `relatedCollections`).
+	 */
+	filterRelations(
+		texts: (string | null | undefined)[],
+		access?: ApiAccess
+	): ResultAsync<FilterContext['relations'], ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>> {
+		if (!usesRelations(texts)) {
+			return okAsync(undefined);
 		}
 
-		return condition ? okAsync(condition) : errAsync(this.error(8014, 'RULE_LOCKED'));
+		return this.services
+			.collections()
+			.listWithFields()
+			.map((all) => relatedCollections(all, access));
+	}
+
+	/**
+	 * The fields of `users` that `access` may read through `$user` in a condition of its own, when
+	 * `text` uses `$user` and `access` is an app user; `null` otherwise (nothing to check).
+	 */
+	userFields(
+		text: string | null | undefined,
+		access: ApiAccess | undefined
+	): ResultAsync<Field[] | null, ContextError> {
+		if (!access || !('user' in access) || !text?.includes('$user.')) {
+			return okAsync(null);
+		}
+
+		return this.context(USERS_COLLECTION).map(({ fields: userFields }) =>
+			visibleFields(userFields, access)
+		);
 	}
 
 	/** Runs `compile` for a query parameter; a `FilterError` becomes an `INVALID_QUERY`. */

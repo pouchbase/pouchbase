@@ -46,7 +46,7 @@
 	<p>
 		Every handler gets <Code.Root>ctx.pouch</Code.Root>: a client of the JS SDK, signed in as the
 		plugin. It has the same
-		<a href={resolve('/docs/collections')}>records API</a> as in an app, through
+		<a href={resolve('/docs/platform/collections')}>records API</a> as in an app, through
 		<Code.Root>db</Code.Root>: <Code.Root>findMany</Code.Root>,
 		<Code.Root>find</Code.Root>, <Code.Root>insert</Code.Root>, <Code.Root>patch</Code.Root>,
 		<Code.Root>remove</Code.Root>, with <Code.Root>where</Code.Root>, <Code.Root>orderBy</Code.Root
@@ -73,8 +73,8 @@
 		<Code.Root>definePlugin(&#123; … &#125;)</Code.Root>, by name. In Pouchbase each name gets the
 		plugin id as prefix, with <Code.Root>_</Code.Root> for <Code.Root>-</Code.Root>:
 		<Code.Root>notes</Code.Root> of the plugin <Code.Root>demo</Code.Root> is
-		<Code.Root>demo_notes</Code.Root>. Pouchbase creates them when the plugin is installed and deletes
-		them, with their records, when it is removed. The plugin can always read and write them.
+		<Code.Root>demo_notes</Code.Root>. Pouchbase creates them when the plugin is installed and
+		deletes them, with their records, when it is removed. The plugin can always read and write them.
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
@@ -140,9 +140,9 @@
 		</li>
 		<li>
 			<strong>Removing the plugin</strong> deletes its collections with all their records, also those
-			an earlier version added; the dashboard lists them before the admin confirms. While a relation
-			field of another collection points to one of them, removing fails and nothing changes: delete
-			or change that field first.
+			an earlier version added; the dashboard lists them before the admin confirms. While a relation field
+			of another collection points to one of them, removing fails and nothing changes: delete or change
+			that field first.
 		</li>
 	</ul>
 

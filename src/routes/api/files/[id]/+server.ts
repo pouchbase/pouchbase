@@ -5,15 +5,15 @@ import { json, preflight } from '#lib/server/api.js';
 
 /**
  * Serves a file of the built-in `files` collection, or one of its thumbnails
- * (`?thumb=100x100`, only for sizes configured in the collection's settings; otherwise the
- * original is served). File ids are random, so URLs can't be guessed; files are
- * public.
+ * (`?size=100x100`, only for sizes configured in the collection's settings; otherwise the
+ * original is served). File ids are random, so URLs can't be guessed; files are public.
  *
  * Files are served from the admin's own origin, so only safe image types are shown inline; all
  * other types (HTML, SVG, ...) are downloads and can't run scripts.
  */
 export const GET: RequestHandler = async ({ params, url, locals }) => {
-	const result = await locals.services.files().open(params.id, url.searchParams.get('thumb'));
+	const thumbnail = url.searchParams.get('size');
+	const result = await locals.services.files().open(params.id, thumbnail);
 
 	if (result.isErr()) {
 		return json({ message: 'Could not load the file' }, 500);

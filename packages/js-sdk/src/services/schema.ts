@@ -66,6 +66,11 @@ export type CollectionField = {
 	type: FieldType;
 	required: boolean;
 	unique: boolean;
+	/**
+	 * Only admins, API keys with the service scope, plugins and API rules see the field: the records
+	 * API leaves it out for app users, who can't filter, sort or write on it either.
+	 */
+	hidden: boolean;
 	defaultValue: string | null;
 	options: FieldOptions;
 	/** Built-in fields (such as `users.email`) can't be renamed or deleted. */
@@ -106,6 +111,8 @@ export type FieldInput = {
 	type: FieldType;
 	required?: boolean;
 	unique?: boolean;
+	/** Hides the field from app users (see `CollectionField.hidden`); not for `id` fields. */
+	hidden?: boolean;
 	defaultValue?: string | null;
 	options?: FieldOptions;
 };
@@ -132,7 +139,7 @@ export type UpdateCollectionInput = Partial<CreateCollectionInput>;
 /** An export file of collections, without records (`GET /api/schema/export`). */
 export type CollectionExport = {
 	/** The version of the file format: `2`; files of format `1` can still be imported. */
-	format: 1 | 2;
+	format: 2;
 	exportedAt: string;
 	collections: CollectionSchema[];
 	/** Collections relations point at that aren't in the file; an import finds them by name. */

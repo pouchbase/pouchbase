@@ -31,7 +31,7 @@ import {
 	withPackageDefaults
 } from '../src/index.js';
 import { TEMPLATES, projectFiles } from '../src/cli/templates.js';
-import { HOST_MODULE_IDS, HOST_MODULES, isHostModule } from '../src/ui.js';
+import { HOST_MODULE_IDS } from '../src/ui.js';
 
 const valid = defineManifest({
 	apiVersion: API_VERSION,
@@ -325,38 +325,14 @@ describe('serverCodeIssues', () => {
 	});
 });
 
-describe('HOST_MODULES', () => {
-	it('lets UI files import svelte, the prop types and @pouchbasejs/ui', () => {
-		expect(HOST_MODULES).toContain('@pouchbasejs/ui');
-
-		for (const specifier of [
-			'svelte',
-			'svelte/store',
-			'@pouchbasejs/plugin-sdk/ui',
-			'@pouchbasejs/ui',
-			'@pouchbasejs/ui/button',
-			'@pouchbasejs/ui/inputs/input'
-		]) {
-			expect(isHostModule(specifier)).toBe(true);
-		}
-
-		for (const specifier of [
-			'svelte-ui',
-			'svelte/',
-			'@pouchbasejs/plugin-sdk',
-			'@pouchbasejs/plugin-sdk/server',
-			'@pouchbasejs/uix',
-			'bits-ui'
-		]) {
-			expect(isHostModule(specifier)).toBe(false);
-		}
-	});
-});
-
 describe('HOST_MODULE_IDS', () => {
-	it('only lists modules that HOST_MODULES allows, once each', () => {
+	it('lists svelte, the prop types and @pouchbasejs/ui, once each', () => {
+		for (const id of ['svelte', 'svelte/store', '@pouchbasejs/plugin-sdk/ui', '@pouchbasejs/ui']) {
+			expect(HOST_MODULE_IDS, id).toContain(id);
+		}
+
 		for (const id of HOST_MODULE_IDS) {
-			expect(isHostModule(id), id).toBe(true);
+			expect(id, id).toMatch(/^(?:svelte|@pouchbasejs\/plugin-sdk\/ui|@pouchbasejs\/ui)(?:\/|$)/);
 		}
 
 		expect(new Set(HOST_MODULE_IDS).size).toBe(HOST_MODULE_IDS.length);
@@ -571,20 +547,15 @@ describe('manifestJsonSchema', () => {
 		).toEqual([...PLUGIN_CATEGORIES]);
 	});
 
-	it('marks the keys plugin.ts replaces as deprecated', () => {
-		const properties = manifestJsonSchema().properties as Record<string, Record<string, unknown>>;
+	it('leaves out the keys the CLI generates from plugin.ts', () => {
+		const properties = manifestJsonSchema().properties as Record<string, unknown>;
 
 		for (const key of ['settings', 'contributes', 'server']) {
-			expect(properties[key]).toMatchObject({
-				deprecated: true,
-				description: expect.stringMatching(/^Deprecated: /)
-			});
+			expect(properties[key]).toBeUndefined();
 		}
-
-		expect(properties.apiVersion?.deprecated).toBeUndefined();
 	});
 
-	it('accepts the manifest of every template and of the demo, without deprecated keys', () => {
+	it('accepts the manifest of every template and of the demo', () => {
 		const schema = manifestJsonSchema();
 		const manifests: [string, unknown][] = [
 			...TEMPLATES.map((template): [string, unknown] => [
@@ -611,7 +582,7 @@ describe('manifestJsonSchema', () => {
 		// The check itself finds problems.
 		expect(schemaProblems(schema, { id: 'Xyz', settings: [], colour: 'red' })).toEqual([
 			'$.id: does not match ^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
-			'$.settings: deprecated',
+			'$.settings: unknown key',
 			'$.colour: unknown key'
 		]);
 	});
@@ -619,7 +590,7 @@ describe('manifestJsonSchema', () => {
 
 /**
  * What `value` breaks of a JSON Schema, for the keywords `manifestJsonSchema` uses: `type`,
- * `enum`, `required`, `properties` (unknown and deprecated keys count as problems), `items`,
+ * `enum`, `required`, `properties` (unknown keys count as problems), `items`,
  * `pattern`, `minLength`, `maxLength`, `maxItems`, `exclusiveMinimum` and `maximum`.
  */
 function schemaProblems(schema: Record<string, unknown>, value: unknown, path = '$'): string[] {
@@ -694,8 +665,6 @@ function schemaProblems(schema: Record<string, unknown>, value: unknown, path = 
 
 			if (!property) {
 				problems.push(`${path}.${key}: unknown key`);
-			} else if (property.deprecated) {
-				problems.push(`${path}.${key}: deprecated`);
 			} else {
 				problems.push(...schemaProblems(property, item, `${path}.${key}`));
 			}

@@ -42,6 +42,15 @@ type PluginTypes = {
 	deserializes: ReadonlySet<string>;
 };
 
+/** `note`, and for a hidden field who gets and sets it. */
+function withHiddenNote(field: Field, note: string | undefined) {
+	return field.hidden
+		? [note, 'Hidden: only admins and API keys with the service scope read and write it.']
+				.filter(Boolean)
+				.join(' ')
+		: note;
+}
+
 /** A JSDoc comment for a field. */
 function fieldDoc(field: Field, note: string | undefined, pluginTypes: PluginTypes) {
 	const label = fieldTypeInfo(field, pluginTypes.installed).label;
@@ -56,7 +65,8 @@ function fieldDoc(field: Field, note: string | undefined, pluginTypes: PluginTyp
  * TypeScript declarations for every collection, matching the records API:
  *
  * - `<Name>Record`: a record as the API returns it. Fields that are required or filled in by
- *   Pouchbase are not nullable; multiple relations, files and lists are arrays.
+ *   Pouchbase are not nullable; multiple relations, files and lists are arrays. Hidden fields are
+ *   optional: only admins and API keys with the service scope get them.
  * - `<Name>Create`: what to send to create one. Fields Pouchbase fills in (id, timestamps,
  *   computed fields) are left out; required fields without a default are required.
  * - `Schema`: both per collection, for the SDK: `createClient<Schema>(url)`.
@@ -94,8 +104,8 @@ function declarations(list: Collection[], all: Field[], pluginTypes: PluginTypes
 			const nullable = !filled && !field.required && !isMultiple(field);
 
 			return [
-				fieldDoc(field, value.note, pluginTypes),
-				`\t${field.name}: ${value.type}${nullable ? ' | null' : ''};`
+				fieldDoc(field, withHiddenNote(field, value.note), pluginTypes),
+				`\t${field.name}${field.hidden ? '?' : ''}: ${value.type}${nullable ? ' | null' : ''};`
 			];
 		});
 
@@ -105,12 +115,13 @@ function declarations(list: Collection[], all: Field[], pluginTypes: PluginTypes
 				const value = fieldValueType(field, target(field), {
 					deserializes: pluginTypes.deserializes.has(field.type)
 				});
-				const optional = !field.required || !!field.defaultValue;
+				// Only API keys with the service scope may send a hidden field.
+				const optional = !field.required || !!field.defaultValue || field.hidden;
 				// Dates may also be sent as a `Date`; it is sent as ISO 8601 text.
 				const type = field.type === 'date' ? `${value.type} | Date` : value.type;
 
 				return [
-					fieldDoc(field, value.note, pluginTypes),
+					fieldDoc(field, withHiddenNote(field, value.note), pluginTypes),
 					`\t${field.name}${optional ? '?' : ''}: ${type}${optional ? ' | null' : ''};`
 				];
 			});

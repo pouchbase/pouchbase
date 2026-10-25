@@ -75,7 +75,7 @@ export type {
 } from './query.js';
 export { fetchTypes } from './typegen.js';
 export type { FetchTypesOptions } from './typegen.js';
-export { KNOWN_OAUTH_PROVIDERS, OAUTH_PROVIDERS } from './types.js';
+export { KNOWN_OAUTH_PROVIDERS } from './types.js';
 export type {
 	AuthResult,
 	DefaultCollections,

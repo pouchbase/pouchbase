@@ -441,8 +441,7 @@ export type PluginDefinition = {
 /**
  * What the server code of a bundle default-exports, and what the host runs: the handlers of
  * `PluginDefinition` without their components and icons, with a key per route and method
- * (`"GET /items/:id"`). The CLI generates it from `plugin.ts`; in the deprecated legacy layout, the
- * manifest's `server` file default-exports it.
+ * (`"GET /items/:id"`). The CLI generates it from `plugin.ts`.
  */
 export type ServerDefinition = {
 	settings?: readonly PluginSettingDefinition[];

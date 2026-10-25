@@ -62,7 +62,7 @@
 				<Button.Root variant="ghost" href={resolve('/account')}>Account</Button.Root>
 			</span>
 
-			<Button.Root variant="brand" href={resolve('/docs/getting-started')}>Get started</Button.Root>
+			<Button.Root variant="brand" href={resolve('/docs/platform/getting-started')}>Get started</Button.Root>
 
 			<Button.Root
 				variant="ghost"
@@ -121,7 +121,7 @@
 		<Sheet.Footer class="justify-start">
 			<Button.Root
 				variant="brand"
-				href={resolve('/docs/getting-started')}
+				href={resolve('/docs/platform/getting-started')}
 				onclick={() => (menuOpen = false)}
 			>
 				Get started

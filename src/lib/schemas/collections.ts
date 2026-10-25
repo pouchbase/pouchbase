@@ -43,10 +43,7 @@ export const deleteCollectionSchema = z.object({
 	name: z.string()
 });
 
-/**
- * Version of the export file format. Files of format 1 (before Pouchbase 0.9) are still read: their
- * rules and thumbnail sizes are upgraded to the current syntax.
- */
+/** Version of the export file format. */
 export const COLLECTION_EXPORT_FORMAT = 2;
 
 /**
@@ -56,7 +53,7 @@ export const COLLECTION_EXPORT_FORMAT = 2;
  * another instance finds them by name.
  */
 export const collectionExportSchema = z.object({
-	format: z.union([z.literal(1), z.literal(COLLECTION_EXPORT_FORMAT)]),
+	format: z.literal(COLLECTION_EXPORT_FORMAT),
 	exportedAt: z.string(),
 	collections: z.array(snapshotCollectionSchema),
 	related: z.array(z.object({ id: z.string(), name: z.string() })).default([])
@@ -93,6 +90,8 @@ export const apiFieldSchema = z.object({
 	type: fieldTypeIdSchema(),
 	required: z.boolean().default(false),
 	unique: z.boolean().default(false),
+	/** Only admins, service keys, plugins and API rules see the field. */
+	hidden: z.boolean().default(false),
 	defaultValue: z.string().nullable().default(null),
 	options: fieldOptionsSchema.default({})
 });

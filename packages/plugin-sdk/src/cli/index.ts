@@ -176,7 +176,7 @@ async function main(log: Logger, positionals: string[], values: Values) {
 
 			log.step(`Adding ${target} ${name}`);
 
-			const { created, changed, hints, manifestChanged, layout } = await addContribution(
+			const { created, changed, hints, manifestChanged } = await addContribution(
 				root,
 				target,
 				name,
@@ -196,12 +196,6 @@ async function main(log: Logger, positionals: string[], values: Values) {
 			}
 
 			log.success(`Added ${target} ${name}`);
-
-			if (layout === 'legacy') {
-				log.warn(
-					'This plugin uses the legacy layout ("contributes" in pouchbase-plugin.json), which is deprecated; move the contributions into definePlugin({ ... }) in plugin.ts (see the README of @pouchbasejs/plugin-sdk).'
-				);
-			}
 
 			for (const hint of hints) {
 				log.next(hint);

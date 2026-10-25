@@ -52,6 +52,7 @@ export const createField = form(createFieldSchema, async (data, issue) => {
 		type: data.type,
 		required: data.required,
 		unique: data.unique,
+		hidden: data.hidden,
 		defaultValue: data.defaultValue,
 		options: {
 			format: data.format,

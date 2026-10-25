@@ -28,9 +28,11 @@
 		rules: ApiRules | undefined;
 		/** Fields of `users`, for `$user.*`. */
 		userFields: Code.FilterName[];
+		/** Fields of every collection, for paths through relations (`author.role`). */
+		collections: Record<string, Code.FilterName[]>;
 	};
 
-	let { collection, fields, relationTargets, rules, userFields }: Props = $props();
+	let { collection, fields, relationTargets, rules, userFields, collections }: Props = $props();
 
 	const form = $derived.by(() => {
 		const key = `rules-${collection.id}`;
@@ -43,8 +45,14 @@
 	const names = $derived<Code.FilterNames>({
 		fields: fields
 			.filter((field) => field.type !== 'blob')
-			.map((field) => ({ name: field.name, type: field.type })),
-		userFields
+			.map((field) => ({
+				name: field.name,
+				type: field.type,
+				target: relationTargets[field.name],
+				multiple: !!field.options.multiple
+			})),
+		userFields,
+		collections
 	});
 
 	// "Owner" choices: relation fields that point to `users`, or the user itself in `users`.
@@ -140,7 +148,11 @@
 		['Verified users', '$user.verified == true'],
 		['Published, or your own', 'status == "published" or author == $user.id'],
 		['Only as yourself (create)', '$input.author == $user.id'],
-		['Any of a multiple relation', 'any(editors) == $user.id']
+		['Any of a multiple relation', 'any(editors) == $user.id'],
+		['A field of a related record', 'author.role == "admin"'],
+		['Published by now', 'published_at <= now()'],
+		['Created this week', 'created_at >= start_of(now(), "week")'],
+		['Company addresses only', 'ends_with($user.email, "@example.com")']
 	];
 </script>
 
@@ -206,7 +218,7 @@
 					A custom rule is a condition: a request is only allowed for records that match it. Combine
 					comparisons with <code class="font-mono">and</code> and
 					<code class="font-mono">or</code>, group them with parentheses, and start a comment with
-					<code class="font-mono">#</code>. The editor suggests fields as you type.
+					<code class="font-mono">#</code>. The editor suggests fields and functions as you type.
 				</p>
 
 				<Table.Root>
@@ -227,10 +239,6 @@
 							<Table.Cell>A submitted value, in create and update rules</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">$now</Table.Cell>
-							<Table.Cell>The current date and time</Table.Cell>
-						</Table.Row>
-						<Table.Row>
 							<Table.Cell class="font-mono whitespace-nowrap"
 								>== != &gt; &gt;= &lt; &lt;=</Table.Cell
 							>
@@ -239,8 +247,24 @@
 							>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">contains, not contains</Table.Cell>
-							<Table.Cell>Contains, doesn't contain (case-insensitive)</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">contains(title, "x")</Table.Cell>
+							<Table.Cell
+								>Text functions: also <span class="font-mono">starts_with</span>,
+								<span class="font-mono">ends_with</span>, <span class="font-mono">like</span>,
+								<span class="font-mono">lower</span>, <span class="font-mono">length</span>, …
+							</Table.Cell>
+						</Table.Row>
+						<Table.Row>
+							<Table.Cell class="font-mono whitespace-nowrap">now(), today()</Table.Cell>
+							<Table.Cell
+								>Date functions: also <span class="font-mono">date_add</span>,
+								<span class="font-mono">start_of</span>, <span class="font-mono">year</span>,
+								<span class="font-mono">weekday</span>, … (UTC)
+							</Table.Cell>
+						</Table.Row>
+						<Table.Row>
+							<Table.Cell class="font-mono whitespace-nowrap">not</Table.Cell>
+							<Table.Cell>The opposite of a condition</Table.Cell>
 						</Table.Row>
 						<Table.Row>
 							<Table.Cell class="font-mono whitespace-nowrap">any(editors) == …</Table.Cell>

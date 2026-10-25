@@ -415,6 +415,7 @@ export class EnvironmentsService extends Service {
 					type: field.type,
 					required: field.required,
 					unique: field.unique,
+					hidden: field.hidden,
 					defaultValue: field.defaultValue,
 					options: field.options,
 					system: field.system,
@@ -773,6 +774,7 @@ export class EnvironmentsService extends Service {
 				name: field.name,
 				required: field.required,
 				unique: field.unique,
+				hidden: field.hidden,
 				remove: false
 			}));
 	}
@@ -785,6 +787,7 @@ export class EnvironmentsService extends Service {
 				type: field.type,
 				required: field.required,
 				unique: field.unique,
+				hidden: field.hidden,
 				defaultValue: field.defaultValue ?? undefined,
 				options: field.options,
 				system: field.system
@@ -874,14 +877,17 @@ export class EnvironmentsService extends Service {
 					throw new StepError(`Field ${step.from} not found in ${collection.name}`);
 				}
 
-				if (step.changes.some((change) => ['name', 'required', 'unique'].includes(change))) {
+				if (
+					step.changes.some((change) => ['name', 'required', 'unique', 'hidden'].includes(change))
+				) {
 					const changes = (await this.fieldChanges(collection.id)).map((change) =>
 						change.id === field.id
 							? {
 									...change,
 									name: step.field.name,
 									required: step.field.required,
-									unique: step.field.unique
+									unique: step.field.unique,
+									hidden: step.field.hidden
 								}
 							: change
 					);

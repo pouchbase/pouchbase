@@ -4,17 +4,23 @@
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
-	import { docsLink } from './docs-nav';
+	import { docsLink, docsTab } from './docs-nav';
 	import DocsSidebar from './docs-sidebar.svelte';
+	import DocsTabs from './docs-tabs.svelte';
 
 	let { children }: LayoutProps = $props();
 
 	let menuOpen = $state(false);
 
 	const current = $derived(docsLink(page.url.pathname));
+	const tab = $derived(docsTab(page.url.pathname));
 </script>
 
-<div class="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-6 lg:flex-row lg:gap-12 lg:py-14">
+<div class="mx-auto max-w-6xl px-6 pt-4 lg:pt-6">
+	<DocsTabs />
+</div>
+
+<div class="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-6 lg:flex-row lg:gap-12 lg:py-10">
 	<!-- On small screens the sidebar opens in a sheet, so the page starts at the top. -->
 	<div class="border-b border-zinc-200 pb-4 lg:hidden">
 		<Button.Root variant="ghost" class="-ml-3" onclick={() => (menuOpen = true)}>
@@ -38,7 +44,7 @@
 <Sheet.Root bind:open={menuOpen}>
 	<Sheet.Content class="max-w-sm">
 		<Sheet.Header>
-			<Sheet.Title>Documentation</Sheet.Title>
+			<Sheet.Title>{tab.label}</Sheet.Title>
 		</Sheet.Header>
 
 		<Sheet.Body>

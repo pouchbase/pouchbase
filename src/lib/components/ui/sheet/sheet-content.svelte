@@ -19,7 +19,7 @@
 
 <Dialog.Portal>
 	<Dialog.Overlay
-		class="fixed inset-0 z-50 bg-zinc-950/20 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in motion-reduce:animate-none"
+		class="fixed inset-0 z-50 bg-black/20 data-[state=closed]:animate-fade-out data-[state=open]:animate-fade-in motion-reduce:animate-none dark:bg-black/50"
 	/>
 
 	<!--

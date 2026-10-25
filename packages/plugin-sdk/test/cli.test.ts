@@ -20,10 +20,10 @@ import {
 import { askTemplate, initProject, parseTemplate } from '../src/cli/init.js';
 import { printManifest } from '../src/cli/manifest-command.js';
 import { createLogger } from '../src/cli/output.js';
-import { buildBundle, checkServer, loadManifest } from '../src/cli/project.js';
+import { buildBundle } from '../src/cli/project.js';
 import { generateServerEntry } from '../src/cli/server-entry.js';
 import { TEMPLATES } from '../src/cli/templates.js';
-import { parseManifest, previewOf } from '../src/manifest.js';
+import { parseManifest } from '../src/manifest.js';
 import { contributionSummary } from '../src/registry.js';
 
 const SDK_ROOT = resolve(import.meta.dirname, '..');
@@ -79,30 +79,18 @@ function capture() {
 	return { log, stdout, stderr };
 }
 
-/** A plugin in the legacy layout: `contributes` and `server` in the manifest, `ui/`, `server/`. */
-async function legacyProject(id = 'legacy-plugin') {
+/** A plugin whose manifest lists its contributions and server code, which the CLI generates. */
+async function manifestOnlyProject(id = 'manifest-only') {
 	const root = await project(id, 'empty');
 
 	await write(root, {
 		'pouchbase-plugin.json': JSON.stringify({
 			apiVersion: 1,
 			id,
-			name: 'Legacy',
+			name: 'Manifest only',
 			server: 'server/index.ts',
-			contributes: {
-				fields: [
-					{
-						type: 'color',
-						label: 'Color',
-						description: 'A color.',
-						column: 'TEXT',
-						input: 'ui/color-input.svelte'
-					}
-				]
-			}
-		}),
-		'ui/color-input.svelte': '<input />\n',
-		'server/index.ts': `export default { fields: { color: {} }, routes: { 'GET /ping': () => new Response('pong') } };\n`
+			contributes: { fields: [] }
+		})
 	});
 
 	return root;
@@ -128,7 +116,7 @@ describe('init', () => {
 		const root = await project('auth-acme', template);
 		const manifest = await readJson(join(root, 'pouchbase-plugin.json'));
 		const tsconfig = JSON.parse(await readFile(join(root, 'tsconfig.json'), 'utf8'));
-		const { bundle, warnings, project: found } = await buildBundle(root);
+		const { bundle, warnings } = await buildBundle(root);
 
 		expect(manifest.$schema).toBe('https://pouchbase.io/schemas/plugin-manifest.json');
 		expect(manifest.version).toBeUndefined();
@@ -140,7 +128,6 @@ describe('init', () => {
 		expect(await readFile(join(root, 'vitest.config.ts'), 'utf8')).toContain('pouchbasePlugin()');
 		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain('interface Register');
 		expect(manifest.engines).toEqual({ pouchbase: '>=0.10.0' });
-		expect(found.mode).toBe('definition');
 		expect(bundle.manifest.apiVersion).toBe(1);
 		expect(bundle.manifest.version).toBe('0.1.0');
 		expect(bundle.manifest.license).toBe('MIT');
@@ -271,8 +258,7 @@ describe('add', () => {
 				'fields/rich_color/preview.svelte'
 			],
 			changed: ['plugin.ts'],
-			manifestChanged: false,
-			layout: 'plugin'
+			manifestChanged: false
 		});
 		expect(await readFile(join(root, 'pouchbase-plugin.json'), 'utf8')).toBe(before);
 		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain(
@@ -453,19 +439,11 @@ import ReportsMonthly from './pages/reports/monthly.svelte';
 		);
 	});
 
-	it('keeps the legacy layout in a legacy plugin, without routes', async () => {
-		const root = await legacyProject();
-		const result = await addContribution(root, 'page', 'stats');
-		const manifest = await loadManifest(root);
+	it('refuses a manifest with contributes or server', async () => {
+		const root = await manifestOnlyProject();
 
-		expect(result).toMatchObject({
-			created: ['ui/stats-page.svelte'],
-			manifestChanged: true,
-			layout: 'legacy'
-		});
-		expect(manifest.contributes.pages.map((page) => page.path)).toEqual(['stats']);
-		await expect(addContribution(root, 'route', 'stats')).rejects.toThrow(
-			'add route needs plugin.ts'
+		await expect(addContribution(root, 'page', 'stats')).rejects.toThrow(
+			'pouchbase-plugin.json has "contributes" or "server", which are generated from plugin.ts'
 		);
 	});
 });
@@ -881,21 +859,15 @@ describe('discoverProject', () => {
 		});
 	});
 
-	it('still builds the legacy layout, with a deprecation warning', async () => {
-		const root = await legacyProject();
-		const { bundle, warnings, routes, project: found } = await buildBundle(root);
+	it('refuses contributes and server in the manifest', async () => {
+		const root = await manifestOnlyProject();
 
-		expect(found.mode).toBe('legacy');
-		expect(found.serverEntry).toContain('server/index.ts');
-		expect(warnings).toEqual([
-			{
-				path: 'pouchbase-plugin.json',
-				message: expect.stringContaining('"contributes" and "server" are deprecated')
-			}
-		]);
-		expect(routes).toEqual(['GET /ping']);
-		expect(bundle.manifest.server).toBe('server.js');
-		expect(bundle.manifest.contributes.fields[0]?.input).toBe('ui/color-input.svelte');
+		await expect(buildBundle(root)).rejects.toMatchObject({
+			issues: expect.arrayContaining([
+				{ path: 'pouchbase-plugin.json', message: '"contributes" is generated from plugin.ts' },
+				{ path: 'pouchbase-plugin.json', message: '"server" is generated from plugin.ts' }
+			])
+		});
 	});
 });
 
@@ -930,74 +902,6 @@ describe('generateServerEntry', () => {
 		expect(generateServerEntry({ plugin: 'plugin.js' })).toContain(
 			'import plugin from "./plugin.js";'
 		);
-	});
-});
-
-describe('checkServer', () => {
-	const manifest = (contributes: Record<string, unknown>) => {
-		const result = parseManifest({
-			apiVersion: 1,
-			id: 'my-plugin',
-			name: 'My plugin',
-			version: '1.0.0',
-			description: 'A plugin.',
-			license: 'MIT',
-			server: 'server/index.ts',
-			contributes
-		});
-
-		if (!result.success) {
-			throw new Error(JSON.stringify(result.issues));
-		}
-
-		return result.manifest;
-	};
-
-	it('finds missing, incomplete and unknown handlers', async () => {
-		const { issues } = await checkServer(
-			manifest({
-				authProviders: [
-					{ id: 'acme', label: 'Acme' },
-					{ id: 'other', label: 'Other' }
-				]
-			}),
-			`export default {
-				authProviders: { acme: { authorizeUrl: 'x', tokenUrl: 'y', scopes: [] } },
-				fields: { color: {} },
-				routes: { 'stats': () => new Response(), 'GET /ok': () => new Response() }
-			};`
-		);
-
-		expect(issues).toEqual([
-			{
-				path: 'contributes.authProviders.0',
-				message: 'The handler in server/index.ts lacks pkce, profile'
-			},
-			{
-				path: 'contributes.authProviders.1',
-				message: 'No handler: add authProviders.other to server/index.ts'
-			},
-			{
-				path: 'server/index.ts',
-				message: 'fields.color has no contribution in contributes.fields of pouchbase-plugin.json'
-			},
-			{
-				path: 'server/index.ts',
-				message: 'routes["stats"]: use a method and a path, e.g. "GET /stats"'
-			}
-		]);
-	});
-
-	it('asks for a default export and warns when the code does not load', async () => {
-		await expect(checkServer(manifest({}), 'export const x = 1;')).resolves.toEqual({
-			issues: [{ path: 'server/index.ts', message: 'Must default-export definePlugin({ ... })' }],
-			warnings: []
-		});
-
-		const { issues, warnings } = await checkServer(manifest({}), 'throw new Error("boom");');
-
-		expect(issues).toEqual([]);
-		expect(warnings[0]?.message).toContain('boom');
 	});
 });
 
@@ -1039,33 +943,3 @@ function manifestFor(version: string) {
 
 	return result.manifest;
 }
-
-describe('field previews', () => {
-	it('reads cell in a manifest as the preview', () => {
-		const result = parseManifest({
-			id: 'old',
-			name: 'Old',
-			description: 'A plugin from before the preview.',
-			license: 'MIT',
-			version: '1.0.0',
-			apiVersion: 1,
-			contributes: {
-				fields: [
-					{
-						type: 'color',
-						label: 'Color',
-						description: 'A color.',
-						column: 'TEXT',
-						input: 'ui/input.svelte',
-						cell: 'ui/cell.svelte'
-					}
-				]
-			}
-		});
-
-		expect(result.success).toBe(true);
-		expect(result.success && previewOf(result.manifest.contributes.fields[0]!)).toBe(
-			'ui/cell.svelte'
-		);
-	});
-});

@@ -105,13 +105,6 @@ export const fieldContributionSchema = z.object({
 	 */
 	preview: componentPath.optional(),
 	/**
-	 * @deprecated The former name of `preview`, still read as it in plugin API version 1; use
-	 * `preview` (see `previewOf`).
-	 */
-	cell: componentPath
-		.optional()
-		.meta({ deprecated: true, description: 'Deprecated: the former name of preview.' }),
-	/**
 	 * The type's icon in the dashboard, e.g. `ui/fields/color/icon.svg`: drawn in one color at 16
 	 * pixels, like the built-in types' icons (see `svgIconIssues`). Missing shows a puzzle piece.
 	 */
@@ -465,11 +458,6 @@ export type PluginManifest = z.output<typeof manifestSchema>;
 
 export type FieldContribution = z.output<typeof fieldContributionSchema>;
 
-/** Bundle path of a field type's preview component, also under its former name `cell`. */
-export function previewOf(field: Pick<FieldContribution, 'preview' | 'cell'>) {
-	return field.preview ?? field.cell;
-}
-
 export type PageContribution = z.output<typeof pageContributionSchema>;
 
 export type AuthProviderContribution = z.output<typeof authProviderContributionSchema>;
@@ -596,24 +584,16 @@ export function withPackageDefaults(
 }
 
 /**
- * Manifest keys that `pouchbase-plugin.json` no longer needs, and where they go now: the CLI
- * refuses `settings` next to `plugin.ts` and reads `contributes` and `server` as the deprecated
- * legacy layout. They stay in the manifest a bundle has, which the CLI generates.
+ * Keys of the manifest a bundle has that the CLI generates from `plugin.ts`, so
+ * `pouchbase-plugin.json` can't have them.
  */
-export const DEPRECATED_MANIFEST_KEYS = {
-	settings:
-		'Deprecated: settings belong in definePlugin({ settings }) in plugin.ts; the CLI refuses them here.',
-	contributes:
-		'Deprecated: the legacy layout. Contributions come from definePlugin({ ... }) in plugin.ts; the CLI fills this in the bundle.',
-	server:
-		'Deprecated: the legacy layout. Server code comes from plugin.ts; the CLI fills this in the bundle.'
-} as const;
+export const GENERATED_MANIFEST_KEYS = ['settings', 'contributes', 'server'] as const;
 
 /**
  * The JSON Schema of `pouchbase-plugin.json` (draft 2020-12), served at `MANIFEST_SCHEMA_URL`
  * and printed by `pouchbase-plugin schema`. Fields that `package.json` can fill are optional, so
  * is `apiVersion` (the CLI writes `API_VERSION`), `categories` lists the known categories, which
- * the CLI requires, and the `DEPRECATED_MANIFEST_KEYS` are marked `deprecated`.
+ * the CLI requires, and the `GENERATED_MANIFEST_KEYS` are left out.
  */
 export function manifestJsonSchema(): Record<string, unknown> {
 	const schema = z.toJSONSchema(manifestSchema, {
@@ -622,16 +602,18 @@ export function manifestJsonSchema(): Record<string, unknown> {
 		unrepresentable: 'any'
 	}) as Record<string, unknown>;
 	const properties = schema.properties as Record<string, Record<string, unknown>>;
-	const optional = new Set<string>([...PACKAGE_DEFAULT_KEYS, 'apiVersion']);
+	const optional = new Set<string>([
+		...PACKAGE_DEFAULT_KEYS,
+		'apiVersion',
+		...GENERATED_MANIFEST_KEYS
+	]);
 
 	if (properties.categories?.items) {
 		properties.categories.items = { type: 'string', enum: [...PLUGIN_CATEGORIES] };
 	}
 
-	for (const [key, description] of Object.entries(DEPRECATED_MANIFEST_KEYS)) {
-		if (properties[key]) {
-			properties[key] = { ...properties[key], deprecated: true, description };
-		}
+	for (const key of GENERATED_MANIFEST_KEYS) {
+		delete properties[key];
 	}
 
 	const required = Array.isArray(schema.required)

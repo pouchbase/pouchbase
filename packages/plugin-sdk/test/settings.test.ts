@@ -233,25 +233,6 @@ describe('plugin.ts', () => {
 		});
 	});
 
-	it('keeps settings in the manifest in the legacy layout', async () => {
-		const root = await project('legacy-settings', 'empty');
-
-		await write(root, {
-			'pouchbase-plugin.json': JSON.stringify({
-				apiVersion: 1,
-				id: 'legacy-settings',
-				name: 'Legacy',
-				settings: [{ key: 'greeting', label: 'Greeting', default: 'Hi' }],
-				contributes: { pages: [{ path: 'a', title: 'A', component: 'ui/a.svelte' }] }
-			}),
-			'ui/a.svelte': '<p></p>\n'
-		});
-
-		const { bundle } = await buildBundle(root);
-
-		expect(bundle.manifest.settings.map((setting) => setting.key)).toEqual(['greeting']);
-	});
-
 	it('is part of the generated server entry', () => {
 		const source = generateServerEntry({ plugin: 'plugin.ts' });
 
@@ -303,20 +284,6 @@ describe('add setting', () => {
 		);
 	});
 
-	it('appends to a legacy manifest', async () => {
-		const root = await project('legacy', 'empty');
-
-		await write(root, {
-			'pouchbase-plugin.json': JSON.stringify({ apiVersion: 1, id: 'legacy', contributes: {} })
-		});
-
-		const result = await addContribution(root, 'setting', 'region');
-		const manifest = JSON.parse(await readFile(join(root, 'pouchbase-plugin.json'), 'utf8'));
-
-		expect(result).toMatchObject({ layout: 'legacy', manifestChanged: true });
-		expect(manifest.settings).toEqual([{ key: 'region', label: 'Region', type: 'text' }]);
-	});
-
 	it('adds settings to definePlugin calls without any', () => {
 		const setting = { key: 'region', label: 'Region', type: 'text' } as const;
 
@@ -360,34 +327,6 @@ describe('UI imports', () => {
 				}
 			],
 			hint: expect.stringContaining('<style> block')
-		});
-	});
-
-	it('refuses them in the legacy layout too', async () => {
-		const root = await project('legacy-ui', 'empty');
-
-		await write(root, {
-			'pouchbase-plugin.json': JSON.stringify({
-				apiVersion: 1,
-				id: 'legacy-ui',
-				name: 'Legacy',
-				contributes: { pages: [{ path: 'a', title: 'A', component: 'ui/a.svelte' }] }
-			}),
-			'ui/a.svelte': "<script>\n\timport './a.css';\n\timport logo from './logo.svg';\n</script>\n",
-			'ui/a.css': 'p { color: red; }\n',
-			'ui/logo.svg': '<svg></svg>\n'
-		});
-		await expect(discoverProject(root)).rejects.toMatchObject({
-			issues: [
-				{
-					path: 'ui/a.svelte',
-					message: expect.stringContaining('Imports ./a.css; every .css file')
-				},
-				{
-					path: 'ui/a.svelte',
-					message: expect.stringContaining('Imports ./logo.svg; UI files may only import')
-				}
-			]
 		});
 	});
 });

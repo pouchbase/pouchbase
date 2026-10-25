@@ -44,10 +44,6 @@ export const variables = defineEnvVars({
 			'Plugin registry the Plugins page searches and installs from; defaults to the public registry on pouchbase.io. `pouchbase-plugin dev` prints the URL of a local one, and `pouchbase-plugin publish` reads the same variable',
 		schema: z.url().optional()
 	},
-	PLUGIN_REGISTRY_URL: {
-		description: 'Deprecated: the old name of `POUCHBASE_REGISTRY_URL`, used when that is not set',
-		schema: z.url().optional()
-	},
 	POUCHBASE_LOG_TIMING: {
 		description:
 			'`true` logs the duration of every request and database round-trip, to find out what makes a page slow',

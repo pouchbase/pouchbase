@@ -1,12 +1,48 @@
+import type { FilterFunctionArgument } from '#lib/filter/functions.js';
 import type * as MonacoApi from 'monaco-editor';
+
+import { FILTER_FUNCTIONS, functionSignature } from '#lib/filter/functions.js';
 
 type Monaco = typeof MonacoApi;
 
-/** A field that a condition can use, for autocomplete. */
-export type FilterName = { name: string; type: string };
+/**
+ * A field that a condition can use, for autocomplete. A relation also has the collection it points
+ * to (`target`), so `author.` suggests that collection's fields.
+ */
+export type FilterName = { name: string; type: string; target?: string; multiple?: boolean };
 
-/** What the autocomplete of a condition offers: the collection's fields and those of `users`. */
-export type FilterNames = { fields: FilterName[]; userFields: FilterName[] };
+/**
+ * What the autocomplete of a condition offers: the collection's fields, those of `users`, and the
+ * fields of every collection by name, for paths through relations (`author.role`).
+ */
+export type FilterNames = {
+	fields: FilterName[];
+	userFields: FilterName[];
+	collections?: Record<string, FilterName[]>;
+};
+
+/** The relation at the end of a path of field names (`['post', 'author']`), or `null`. */
+export function filterRelation(
+	names: FilterNames,
+	path: string[]
+): { collection: string; fields: FilterName[]; multiple: boolean } | null {
+	let fields = names.fields;
+	let found: { collection: string; fields: FilterName[]; multiple: boolean } | null = null;
+
+	for (const part of path) {
+		const field = fields.find((candidate) => candidate.name === part);
+		const target = field?.type === 'relation' && field.target;
+
+		if (!target || !names.collections?.[target]) {
+			return null;
+		}
+
+		fields = names.collections[target];
+		found = { collection: target, fields, multiple: !!field.multiple };
+	}
+
+	return found;
+}
 
 /** A problem to underline in the code, with offsets in the text (`end` exclusive). */
 export type Diagnostic = { message: string; start: number; end: number };
@@ -37,16 +73,17 @@ export function registerFilterLanguage(monaco: Monaco) {
 		tokenizer: {
 			root: [
 				[/#.*$/, 'comment'],
-				// `$user.*`, `$input.*` and `$now`.
+				// `$user.*` and `$input.*`.
 				[/[$][\w.]*/, 'variable'],
 				[/\b(true|false|null)\b/, 'keyword'],
 				[/-?\d+(\.\d+)?/, 'number'],
 				[/"([^"\\]|\\.)*"?/, 'string'],
 				[/'([^'\\]|\\.)*'?/, 'string'],
-				[/\b(and|or|any)\b/, 'keyword'],
-				[/\b(not\s+contains|contains)\b/, 'operator'],
+				[/\b(and|or|not)\b/, 'keyword'],
+				// `contains(`, `now(` and `any(`; a name without `(` is a field.
+				[/[a-z]\w*(?=\s*\()/, 'predefined'],
 				[/==|!=|>=|<=|>|</, 'operator'],
-				[/[()]/, '@brackets'],
+				[/[(),]/, '@brackets'],
 				[/[a-z][\w]*/, 'identifier']
 			]
 		}
@@ -81,7 +118,8 @@ export function registerFilterCompletions(
 				endLineNumber: position.lineNumber,
 				endColumn: position.column
 			};
-			const { fields = [], userFields = [] } = names() ?? {};
+			const current = names();
+			const { fields = [], userFields = [] } = current ?? {};
 			// Picking `$user.` suggests what follows, like in a code editor.
 			const retrigger = { id: 'editor.action.triggerSuggest', title: 'Suggest' };
 			const field = (name: FilterName, insert: string, detail: string) => ({
@@ -122,8 +160,7 @@ export function registerFilterCompletions(
 					label: '$input.',
 					detail: 'A submitted value, for create and update rules',
 					command: retrigger
-				},
-				{ label: '$now', detail: 'The current date and time' }
+				}
 			].map((variable) => ({
 				...variable,
 				kind: CompletionItemKind.Variable,
@@ -135,23 +172,67 @@ export function registerFilterCompletions(
 				return { incomplete: true, suggestions: variables };
 			}
 
+			// `post.author.`: the fields of the record the relation points to.
+			if (prefix.includes('.') && current) {
+				const path = prefix.split('.').slice(0, -1);
+				const relation = filterRelation(current, path);
+
+				return {
+					incomplete: true,
+					suggestions: (relation?.fields ?? []).map((name) =>
+						field(name, `${path.join('.')}.${name.name}`, `field of ${relation!.collection}`)
+					)
+				};
+			}
+
+			const functions = [
+				...Object.entries(FILTER_FUNCTIONS).map(([name, fn]) => ({
+					label: name,
+					detail: functionSignature(name as keyof typeof FILTER_FUNCTIONS),
+					documentation: `${fn.description}\n\n${fn.example}`,
+					insertText: functionSnippet(name, fn.args)
+				})),
+				{
+					label: 'any',
+					detail: 'any(field)',
+					documentation:
+						'Each item of a multiple relation or list: true when the condition holds for any.\n\nany(editors) == $user.id',
+					insertText: 'any(${1:field})'
+				}
+			].map((fn) => ({
+				...fn,
+				kind: CompletionItemKind.Function,
+				insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+				range
+			}));
+
 			return {
 				incomplete: true,
 				suggestions: [
 					...fields.map((name) => field(name, name.name, 'field of this collection')),
 					...variables,
-					...['and', 'or', 'any(', 'contains', 'not contains', 'true', 'false', 'null'].map(
-						(label) => ({
-							label,
-							kind: CompletionItemKind.Keyword,
-							insertText: label,
-							range
-						})
-					)
+					...functions,
+					...['and', 'or', 'not', 'true', 'false', 'null'].map((label) => ({
+						label,
+						kind: CompletionItemKind.Keyword,
+						insertText: label,
+						range
+					}))
 				]
 			};
 		}
 	});
+}
+
+/** What autocomplete inserts for a function: `date_add(${1:date}, ${2:amount}, "${3:days}")`. */
+function functionSnippet(name: string, args: readonly FilterFunctionArgument[]) {
+	const placeholders = args
+		.filter((arg) => !arg.optional)
+		.map((arg, index) =>
+			arg.units ? `"\${${index + 1}:${arg.units[0]}}"` : `\${${index + 1}:${arg.name}}`
+		);
+
+	return `${name}(${placeholders.join(', ')})`;
 }
 
 /** Underlines `diagnostics` in the model; an empty list clears them. */

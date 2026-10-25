@@ -217,6 +217,7 @@ export const createFieldSchema = z
 		type: fieldTypeIdSchema('Choose a type'),
 		required: z.boolean().default(false),
 		unique: z.boolean().default(false),
+		hidden: z.boolean().default(false),
 		/** Only used for relation fields: id of the related collection. */
 		relationCollection: z.string().optional(),
 		...settingsFields,
@@ -297,6 +298,8 @@ export const updateFieldsSchema = z
 				name: fieldName,
 				required: z.boolean().default(false),
 				unique: z.boolean().default(false),
+				/** Only admins, service keys, plugins and API rules see the field. */
+				hidden: z.boolean().default(false),
 				/** Hidden field: drop the field when saving. */
 				remove: z.boolean().default(false)
 			})

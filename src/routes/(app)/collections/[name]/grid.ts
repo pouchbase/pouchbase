@@ -15,6 +15,8 @@ export type GridField = {
 	type: FieldTypeId;
 	required: boolean;
 	unique: boolean;
+	/** Left out of the records API for app users. */
+	hidden: boolean;
 	defaultValue: string | null;
 	options: FieldOptions;
 	/** Fields of built-in collections (like `users`) can't be renamed or deleted. */

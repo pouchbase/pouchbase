@@ -19,12 +19,13 @@ import { FilterError } from '#lib/filter/filter.js';
 import { apiActions } from '#lib/filter/rules.js';
 
 import { batchDatabase } from '../db/query';
-import { compileFilter, compileRule } from '../filter';
+import { compileFilter, compileRule, usesRelations } from '../filter';
 import { authorizationChecks } from '../realtime/authorize';
 import { background } from '../platform/runtime';
 import { publish } from '../realtime/broker';
 import { Service } from './base.service';
-import { apiRecord } from './records.service';
+import { checkUserFields, visibleFields } from '../hidden-fields';
+import { apiRecord, relatedCollections } from './records.service';
 
 /** What the hub asks before it adds a subscription. */
 export type SubscriptionRequest = {
@@ -135,6 +136,7 @@ export class RealtimeService extends Service {
 		request: SubscriptionRequest
 	): ResultAsync<
 		void,
+		| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
 		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
 		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
 		| ForbiddenError
@@ -144,9 +146,24 @@ export class RealtimeService extends Service {
 		return this.services
 			.collections()
 			.requireWithFields(request.collection)
-			.andThen(({ collection, fields: collectionFields }) => {
+			.andThen(({ collection, fields: collectionFields }) =>
+				(usesRelations([collection.settings.rules?.view, request.filter])
+					? this.services.collections().listWithFields()
+					: okAsync<{ collection: Collection; fields: Field[] }[]>([])
+				).map((all) => ({ collection, collectionFields, all }))
+			)
+			.andThen((found) =>
+				this.services
+					.records()
+					.userFields(request.filter, apiAccess(request.subject))
+					.map((userFields) => ({ ...found, userFields }))
+			)
+			.andThen(({ collection, collectionFields, all, userFields }) => {
 				const readable = readableFields(collectionFields);
+				// What the subscriber may filter on and select: no hidden fields for app users.
+				const visible = visibleFields(collectionFields, apiAccess(request.subject));
 				const auth = request.subject.kind === 'user' ? request.subject.auth : null;
+				const table = collection.name;
 
 				if (request.subject.kind !== 'admin') {
 					if (!apiActions(collection).includes('view')) {
@@ -154,7 +171,15 @@ export class RealtimeService extends Service {
 					}
 
 					try {
-						if (!compileRule(collection.settings.rules?.view, readable, { user: auth })) {
+						const relations = relatedCollections(all, undefined);
+
+						if (
+							!compileRule(collection.settings.rules?.view, readable, {
+								user: auth,
+								table,
+								relations
+							})
+						) {
 							return errAsync(this.error(22002, 'SUBSCRIPTION_FORBIDDEN'));
 						}
 					} catch {
@@ -164,14 +189,22 @@ export class RealtimeService extends Service {
 
 				if (request.filter) {
 					try {
-						compileFilter(request.filter, readable, { user: auth });
+						if (userFields) {
+							checkUserFields(request.filter, userFields);
+						}
+
+						compileFilter(request.filter, visible, {
+							user: auth,
+							table,
+							relations: relatedCollections(all, apiAccess(request.subject))
+						});
 					} catch (error) {
 						return errAsync(this.invalid('where', error));
 					}
 				}
 
 				const unknown = request.fields?.find(
-					(name) => !readable.some((field) => field.name === name)
+					(name) => !visible.some((field) => field.name === name)
 				);
 
 				if (unknown) {
@@ -210,6 +243,7 @@ export class RealtimeService extends Service {
 		AuthorizeResult,
 		| ServiceError<1004, 'APP_DATABASE_MISSING'>
 		| ServiceError<5000, 'GET_SETTING_FAILED'>
+		| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
 		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
 		| ServiceError<22004, 'AUTHORIZE_FAILED'>
 	> {
@@ -224,12 +258,21 @@ export class RealtimeService extends Service {
 				}
 
 				const { collection, fields: collectionFields } = found;
+				const filters = request.items.flatMap(({ contexts }) =>
+					contexts.map((context) => context.filter)
+				);
+				const related = usesRelations([collection.settings.rules?.view, ...filters])
+					? this.services.collections().listWithFields()
+					: okAsync<{ collection: Collection; fields: Field[] }[]>([]);
 
-				return this.services
-					.database()
-					.requireApp()
-					.andThen((appDatabase) =>
-						this.runChecks(appDatabase.id, collection, collectionFields, request)
+				return related
+					.andThen((all) =>
+						this.services
+							.database()
+							.requireApp()
+							.andThen((appDatabase) =>
+								this.runChecks(appDatabase.id, collection, collectionFields, request, all)
+							)
 					)
 					.andThen((result) => this.expandAllowed(request, result));
 			});
@@ -264,7 +307,10 @@ export class RealtimeService extends Service {
 				};
 
 				// A copy per context: what one subject may see of a relation, another may not.
-				group.items.push({ index, record: { ...found.record } });
+				const base =
+					context.subject.kind === 'admin' ? found.record : (found.userRecord ?? found.record);
+
+				group.items.push({ index, record: { ...base } });
 				groups.set(context.key, group);
 			}
 		});
@@ -318,7 +364,8 @@ export class RealtimeService extends Service {
 		databaseId: string,
 		collection: Collection,
 		collectionFields: Field[],
-		request: AuthorizeRequest
+		request: AuthorizeRequest,
+		all: { collection: Collection; fields: Field[] }[]
 	): ResultAsync<AuthorizeResult, ServiceError<22004, 'AUTHORIZE_FAILED'>> {
 		const readable = readableFields(collectionFields);
 		const key = collectionFields.find((field) => field.type === 'id')?.name ?? 'rowid';
@@ -333,7 +380,10 @@ export class RealtimeService extends Service {
 				table: collection.name,
 				key,
 				keyParam: key === 'rowid' ? Number(event.id) : event.id,
-				contexts
+				contexts,
+				relations: all.length
+					? (subject) => relatedCollections(all, subject ? apiAccess(subject) : undefined)
+					: undefined
 			})
 		);
 		// Contexts in one group share their statement, so each runs once.
@@ -349,9 +399,14 @@ export class RealtimeService extends Service {
 				statements.map((statement, index) => [statement, Boolean(rows[index]?.length)])
 			);
 
+			// App users get the record without its hidden fields; only made when there are any.
+			const shown = collectionFields.filter((field) => !field.hidden);
+			const hides = shown.length < collectionFields.length;
+
 			return {
 				results: request.items.map(({ event }, index) => ({
 					record: apiRecord(collectionFields, event.row),
+					...(hides ? { userRecord: apiRecord(shown, event.row) } : {}),
 					allowed: checks[index]
 						.filter((check) => (check.statement ? matched.get(check.statement) : check.allowed))
 						.map((check) => check.key)

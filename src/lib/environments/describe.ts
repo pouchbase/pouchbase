@@ -23,6 +23,7 @@ const SETTING_LABELS: Record<SnapshotSettingKey, string> = {
 const FIELD_CHANGES: Record<Exclude<FieldProperty, 'name' | 'type'>, string> = {
 	required: 'required',
 	unique: 'unique',
+	hidden: 'visibility',
 	defaultValue: 'default value',
 	options: 'options'
 };

@@ -62,7 +62,7 @@ Sign-ins return `{ token, user_id }`; the token is a JWT (HS256, 7 days) sent as
 | `POST /api/schema/import?removeMissing&force&dryRun`                                                   | `pouch.schema.import()`                                                          |
 | `GET /api/types?token=…` (text, not JSON)                                                              | `fetchTypes()`, `pouchbase types`                                                |
 
-Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, `contains`, `not contains`, `any(field) == value`, `and`, `or` and `$user.<field>` / `$now`; `src/query.ts` compiles `where` objects to them. `order` is `created_at:desc,title:asc`.
+Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(field, "x")`, `starts_with()`, `ends_with()`, `lower()`, `now()` and `date_add()` (the list is in `../../src/lib/filter/functions.ts`), `any(field) == value`, `not`, `and`, `or` and `$user.<field>`; `src/query.ts` compiles `where` objects to them (`contains`, `notContains`, `startsWith` and `endsWith` become function calls). `order` is `created_at:desc,title:asc`.
 
 ## Code style
 

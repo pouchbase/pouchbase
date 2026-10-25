@@ -108,10 +108,13 @@ export type SubscribeRefusal = { code: RealtimeErrorCode; message: string };
 /**
  * What `/internal/realtime/authorize` answers: per item, the record, the allowed context keys and,
  * for allowed contexts with `expand`, the record with its relations expanded, by context key.
+ * `userRecord` is the record without its hidden fields, for subjects other than admins; it is only
+ * there when the collection has hidden fields.
  */
 export type AuthorizeResult = {
 	results: ({
 		record: Record<string, unknown>;
+		userRecord?: Record<string, unknown>;
 		allowed: string[];
 		expanded?: Record<string, Record<string, unknown>>;
 	} | null)[];
@@ -362,7 +365,8 @@ export class HubCore {
 						id: subscription.id,
 						action: event.action,
 						record: pickFields(
-							result.expanded?.[key] ?? result.record,
+							result.expanded?.[key] ??
+								(subject.kind === 'admin' ? result.record : (result.userRecord ?? result.record)),
 							subscription.fields,
 							subscription.expand
 						),

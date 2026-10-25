@@ -110,6 +110,7 @@ function toSnapshot(
 				type: field.type,
 				required: field.required,
 				unique: field.unique,
+				hidden: field.hidden,
 				defaultValue: field.defaultValue,
 				options: field.options,
 				system: current?.system ?? false,
@@ -133,6 +134,25 @@ export class CollectionsService extends Service {
 	list(): ResultAsync<Collection[], ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>> {
 		return fromPromise(this.db.select().from(collections).orderBy(asc(collections.name)), (error) =>
 			this.error(6000, 'LIST_COLLECTIONS_FAILED', error)
+		);
+	}
+
+	/** Every collection with its fields (in position order), read in one round-trip. */
+	listWithFields(): ResultAsync<
+		{ collection: Collection; fields: Field[] }[],
+		ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
+	> {
+		return fromPromise(
+			this.db.batch([
+				this.db.select().from(collections).orderBy(asc(collections.name)),
+				this.db.select().from(fields).orderBy(asc(fields.position), asc(fields.createdAt))
+			]),
+			(error) => this.error(6000, 'LIST_COLLECTIONS_FAILED', error)
+		).map(([all, allFields]) =>
+			all.map((collection) => ({
+				collection,
+				fields: allFields.filter((field) => field.collectionId === collection.id)
+			}))
 		);
 	}
 
@@ -441,32 +461,45 @@ export class CollectionsService extends Service {
 		ApiRules,
 		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
 		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
+		| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
 		| ServiceError<6013, 'UPDATE_SETTINGS_FAILED'>
 		| (ServiceError<6014, 'INVALID_API_RULES'> & { data: { issues: Record<string, string> } })
 	> {
-		return this.requireWithFields(name).andThen(({ collection, fields: collectionFields }) => {
-			const issues: Record<string, string> = {};
-			const readable = collectionFields.filter((field) => field.type !== 'blob');
-			const saved: ApiRules = {};
+		return this.requireWithFields(name)
+			.andThen(({ collection, fields: collectionFields }) =>
+				this.services
+					.records()
+					.filterRelations(Object.values(rules))
+					.map((relations) => ({ collection, collectionFields, relations }))
+			)
+			.andThen(({ collection, collectionFields, relations }) => {
+				const issues: Record<string, string> = {};
+				const readable = collectionFields.filter((field) => field.type !== 'blob');
+				const saved: ApiRules = {};
 
-			for (const action of apiActions(collection)) {
-				const rule = rules[action] ?? null;
+				for (const action of apiActions(collection)) {
+					const rule = rules[action] ?? null;
 
-				try {
-					// Compiled as a signed-in request, so every part of the rule is checked.
-					compileRule(rule, readable, { user: {}, input: {} });
-					saved[action] = rule === null ? null : rule.trim();
-				} catch (error) {
-					issues[action] = error instanceof Error ? error.message : 'Invalid rule';
+					try {
+						// Compiled as a signed-in request, so every part of the rule is checked.
+						compileRule(rule, readable, {
+							user: {},
+							input: {},
+							table: collection.name,
+							relations
+						});
+						saved[action] = rule === null ? null : rule.trim();
+					} catch (error) {
+						issues[action] = error instanceof Error ? error.message : 'Invalid rule';
+					}
 				}
-			}
 
-			if (Object.keys(issues).length) {
-				return errAsync({ ...this.error(6014, 'INVALID_API_RULES'), data: { issues } });
-			}
+				if (Object.keys(issues).length) {
+					return errAsync({ ...this.error(6014, 'INVALID_API_RULES'), data: { issues } });
+				}
 
-			return this.updateSettings(name, { rules: saved }).map(() => saved);
-		});
+				return this.updateSettings(name, { rules: saved }).map(() => saved);
+			});
 	}
 
 	/** Every collection with its fields, indexes, API rules and settings, by name. */

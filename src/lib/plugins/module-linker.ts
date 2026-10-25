@@ -236,9 +236,8 @@ export class ModuleLinker {
 
 /**
  * The plugin and bundle path of a file of a built-in plugin, from its key in `import.meta.glob`:
- * `/plugins/demo/ui/overview.svelte` → `ui/overview.svelte` (the legacy layout, as is) and
- * `/plugins/demo/pages/stats.svelte` → `ui/pages/stats.svelte` (any other file, which the bundle
- * keeps under `ui/` at its path in the plugin).
+ * `/plugins/demo/pages/stats.svelte` → `ui/pages/stats.svelte`: the bundle keeps every UI file
+ * under `ui/` at its path in the plugin.
  */
 export function embeddedModulePath(key: string): { pluginId: string; path: string } | null {
 	const match = /^\/plugins\/([^/]+)\/(.+)$/.exec(key);
@@ -249,5 +248,5 @@ export function embeddedModulePath(key: string): { pluginId: string; path: strin
 
 	const [, pluginId, file] = match as unknown as [string, string, string];
 
-	return { pluginId, path: file.startsWith('ui/') ? file : `ui/${file}` };
+	return { pluginId, path: `ui/${file}` };
 }

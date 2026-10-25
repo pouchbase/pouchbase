@@ -23,7 +23,7 @@
 	{...rest}
 	data-segmented-value={value}
 	class={[
-		'relative z-10 inline-flex min-w-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 data-[state=on]:bg-white data-[state=on]:text-zinc-900 data-[state=on]:shadow-sm group-data-ready/segmented:data-[state=on]:bg-transparent group-data-ready/segmented:data-[state=on]:shadow-none',
+		'relative z-10 inline-flex min-w-7 cursor-pointer items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-zinc-500 transition-colors hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 data-[state=on]:bg-white data-[state=on]:text-zinc-900 data-[state=on]:shadow-sm group-data-ready/segmented:data-[state=on]:bg-transparent group-data-ready/segmented:data-[state=on]:shadow-none dark:data-[state=on]:bg-zinc-200',
 		className
 	]}
 >

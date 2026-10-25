@@ -10,6 +10,7 @@ function field(overrides: Partial<SnapshotField> & { id: string; name: string })
 		type: 'text',
 		required: false,
 		unique: false,
+		hidden: false,
 		defaultValue: null,
 		options: {},
 		system: false,
@@ -124,6 +125,23 @@ describe('diff', () => {
 				collection: 'articles',
 				from: 'title',
 				changes: ['name']
+			})
+		]);
+	});
+
+	it('updates a field that becomes hidden', () => {
+		const source = collection({
+			...posts,
+			fields: [posts.fields[0], { ...posts.fields[1], hidden: true }]
+		});
+		const plan = diff(snapshot({ collections: [source] }), snapshot({ collections: [posts] }));
+
+		expect(plan.steps).toEqual([
+			expect.objectContaining({
+				kind: 'field.update',
+				severity: 'safe',
+				from: 'title',
+				changes: ['hidden']
 			})
 		]);
 	});

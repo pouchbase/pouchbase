@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { upgradeSettings, upgradeThumbnailSize } from '#lib/collections/upgrade.js';
 import { parseThumbnailSize } from '#lib/files/thumbnails.js';
 
 import { checkFilter, parseFilter } from './filter';
-import { upgradeFilter } from './legacy';
 import { ownerRule, SIGNED_IN_RULE } from './rules';
 
 describe('parseFilter', () => {
@@ -14,7 +12,6 @@ describe('parseFilter', () => {
 			left: {
 				kind: 'compare',
 				operator: '==',
-				any: false,
 				left: { kind: 'field', name: 'status', position: 0 },
 				right: { kind: 'string', value: 'published' }
 			},
@@ -23,14 +20,12 @@ describe('parseFilter', () => {
 				left: {
 					kind: 'compare',
 					operator: '>',
-					any: false,
 					left: { kind: 'field', name: 'views', position: 27 },
 					right: { kind: 'number', value: 10 }
 				},
 				right: {
 					kind: 'compare',
 					operator: '==',
-					any: false,
 					left: { kind: 'field', name: 'author', position: 41 },
 					right: { kind: 'user', name: 'id', position: 51 }
 				}
@@ -38,17 +33,50 @@ describe('parseFilter', () => {
 		});
 	});
 
-	it('parses contains, not contains, any() and the variables', () => {
-		expect(parseFilter('title not contains "x"')).toMatchObject({ operator: 'not contains' });
-		expect(parseFilter('title contains $input.title')).toMatchObject({
-			operator: 'contains',
-			right: { kind: 'input', name: 'title' }
+	it('parses functions, not, any() and the variables', () => {
+		expect(parseFilter('not contains(title, "x")')).toMatchObject({
+			kind: 'not',
+			expression: {
+				kind: 'call',
+				name: 'contains',
+				args: [
+					{ kind: 'field', name: 'title' },
+					{ kind: 'string', value: 'x' }
+				]
+			}
+		});
+		expect(parseFilter('contains(title, $input.title)')).toMatchObject({
+			args: [{ kind: 'field' }, { kind: 'input', name: 'title' }]
 		});
 		expect(parseFilter('any(editors) == $user.id')).toMatchObject({
-			any: true,
-			left: { kind: 'field', name: 'editors' }
+			left: { kind: 'any', name: 'editors' }
 		});
-		expect(parseFilter('published_at <= $now')).toMatchObject({ right: { kind: 'now' } });
+		expect(parseFilter('contains(any(tags), "re")')).toMatchObject({
+			args: [{ kind: 'any', name: 'tags' }, { kind: 'string' }]
+		});
+		expect(parseFilter('published_at <= now()')).toMatchObject({
+			right: { kind: 'call', name: 'now', args: [] }
+		});
+		expect(parseFilter('created_at >= date_add(now(), -7, "day")')).toMatchObject({
+			right: {
+				name: 'date_add',
+				args: [{ name: 'now' }, { kind: 'number', value: -7 }, { value: 'day' }]
+			}
+		});
+		expect(parseFilter('round(views, 1) == 4.5')).toMatchObject({
+			left: { name: 'round', args: [{ name: 'views' }, { value: 1 }] }
+		});
+		expect(parseFilter('not a == 1 and b == 2')).toMatchObject({
+			kind: 'and',
+			left: { kind: 'not' }
+		});
+	});
+
+	it('takes fields named like functions', () => {
+		expect(parseFilter('date == "x" and count > 1')).toMatchObject({
+			left: { left: { kind: 'field', name: 'date' } },
+			right: { left: { kind: 'field', name: 'count' } }
+		});
 	});
 
 	it('skips comments', () => {
@@ -60,11 +88,20 @@ describe('parseFilter', () => {
 		['a == 1 && b == 2', 'Use `and` to combine conditions'],
 		['a == 1 || b == 2', 'Use `or` to combine conditions'],
 		['author == @request.auth.id', 'Unexpected character `@`'],
-		[
-			'$request.id == 1',
-			'Unknown variable `$request.id`; use $now, $user.<field> or $input.<field>'
-		],
+		['$request.id == 1', 'Unknown variable `$request.id`; use $user.<field> or $input.<field>'],
 		['any($user.id) == 1', '`any()` takes a field of this collection'],
+		['any(a) == any(b)', 'Use `any()` once per comparison'],
+		['published_at <= $now', 'Use `now()` for the current date and time'],
+		['title contains "x"', 'Use `contains(text, search)` or `not contains(text, search)`'],
+		['title not contains "x"', 'Use `contains(text, search)` or `not contains(text, search)`'],
+		['nope(title) == 1', 'Unknown function `nope()`'],
+		['contains(title)', 'Call it as `contains(text, search)`'],
+		['round(a, 1, 2) == 1', 'Call it as `round(number, digits?)`'],
+		['date_add(now(), 1, "fortnight") > a', 'The unit of `date_add()` is one of "years"'],
+		['start_of(now(), unit) > a', 'The unit of `start_of()` is one of "year"'],
+		['contains(a, "x") == true', '`contains()` is a condition of its own; use `not` to negate it'],
+		['lower(a)', 'Compare `lower()` with a value, e.g. `lower(status) == "draft"`'],
+		['!contains(a, "x")', 'Use `not` to negate a condition'],
 		['a == 1 b == 2', 'Expected `and` or `or` between conditions'],
 		['', 'The condition is empty']
 	])('rejects %j', (text, message) => {
@@ -78,6 +115,10 @@ describe('parseFilter', () => {
 		expect(checkFilter('$user.nope == 1', { fields: [], userFields: ['id'] })).toMatchObject({
 			message: '`nope` is not a field of users'
 		});
+		expect(checkFilter('contains(any(nope), "x")', { fields: ['title'] })).toMatchObject({
+			message: '`nope` is not a field of this collection',
+			start: 13
+		});
 		expect(checkFilter('title == $user.id', { fields: ['title'] })).toBeNull();
 	});
 
@@ -88,48 +129,7 @@ describe('parseFilter', () => {
 	});
 });
 
-describe('upgradeFilter', () => {
-	it.each([
-		['author = @request.auth.id', 'author == $user.id'],
-		['@request.auth.id != ""', '$user.id != null'],
-		['status = "a && b" && views > 10', 'status == "a && b" and views > 10'],
-		['(a = 1 || b = 2) && c != 3', '(a == 1 or b == 2) and c != 3'],
-		['title ~ "x" && body !~ \'y\'', 'title contains "x" and body not contains \'y\''],
-		['editors ?= @request.auth.id', 'any(editors) == $user.id'],
-		['tags ?~ "news"', 'any(tags) contains "news"'],
-		['@request.body.author = @request.auth.id', '$input.author == $user.id'],
-		['published_at <= @now // live posts', 'published_at <= $now # live posts']
-	])('upgrades %j', (legacy, current) => {
-		expect(upgradeFilter(legacy)).toBe(current);
-	});
-
-	it('keeps conditions that are current, empty or invalid', () => {
-		expect(upgradeFilter('author == $user.id')).toBe('author == $user.id');
-		expect(upgradeFilter('views > 10')).toBe('views > 10');
-		expect(upgradeFilter('')).toBe('');
-		expect(upgradeFilter('a = = 1')).toBe('a = = 1');
-	});
-});
-
-describe('upgradeSettings', () => {
-	it('upgrades rules and thumbnail sizes', () => {
-		expect(
-			upgradeSettings({
-				rules: { list: '', view: 'author = @request.auth.id', create: null },
-				thumbnails: {
-					enabled: true,
-					sizes: ['100x100', '100x100t', '200x200b', '300x300f', '0x50']
-				}
-			})
-		).toEqual({
-			rules: { list: '', view: 'author == $user.id', create: null },
-			thumbnails: {
-				enabled: true,
-				sizes: ['100x100', '100x100:top', '200x200:bottom', '300x300:fit', '0x50']
-			}
-		});
-	});
-
+describe('parseThumbnailSize', () => {
 	it('parses only the current thumbnail syntax', () => {
 		expect(parseThumbnailSize('100x100:fit')).toEqual({
 			spec: '100x100:fit',
@@ -139,6 +139,5 @@ describe('upgradeSettings', () => {
 		});
 		expect(parseThumbnailSize('100x100f')).toBeNull();
 		expect(parseThumbnailSize('100x0:top')).toBeNull();
-		expect(upgradeThumbnailSize('100x100f')).toBe('100x100:fit');
 	});
 });

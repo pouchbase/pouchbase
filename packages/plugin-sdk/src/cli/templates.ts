@@ -1,4 +1,4 @@
-import type { FieldContribution, PageContribution, PluginSettingType } from '../manifest.js';
+import type { PluginSettingType } from '../manifest.js';
 
 import { MANIFEST_FILE, MANIFEST_SCHEMA_URL } from '../manifest.js';
 
@@ -29,11 +29,6 @@ export function title(id: string) {
 	return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** `rich_color` → `rich-color`, `reports/monthly` → `reports-monthly`: a file name. */
-function fileName(id: string) {
-	return id.replace(/[_/]/g, '-');
-}
-
 /** JSON as the templates write it: tab-indented, with a final newline. */
 export function json(value: unknown) {
 	return `${JSON.stringify(value, null, '\t')}\n`;
@@ -44,141 +39,17 @@ export function providerIdFor(pluginId: string) {
 	return pluginId.replace(/^auth-(?=.)/, '');
 }
 
-// Legacy layout: `add` in a project whose manifest has `contributes`
-
-// Fields
-
-/** A field contribution with a text input and a preview, and its components. */
-export function fieldFiles(type: string): { contribution: FieldContribution; files: Files } {
-	const input = `ui/${fileName(type)}-input.svelte`;
-	const preview = `ui/${fileName(type)}-preview.svelte`;
-
-	return {
-		contribution: {
-			type,
-			label: title(type),
-			description: `A ${title(type).toLowerCase()} value.`,
-			column: 'TEXT',
-			input,
-			preview
-		},
-		files: {
-			[input]: `<script lang="ts">
-	import type { FieldInputProps } from '@pouchbasejs/plugin-sdk/ui';
-
-	let { name, value, required, disabled, id, errorId }: FieldInputProps<string> = $props();
-</script>
-
-<input
-	type="text"
-	{id}
-	{name}
-	value={value ?? ''}
-	{required}
-	{disabled}
-	aria-describedby={errorId}
-/>
-`,
-			[preview]: `<script lang="ts">
-	import type { FieldPreviewProps } from '@pouchbasejs/plugin-sdk/ui';
-
-	let { value }: FieldPreviewProps<string> = $props();
-</script>
-
-{value ?? ''}
-`
-		}
-	};
-}
-
-// Pages
-
-/** A page contribution and its component. */
-export function pageFiles(path: string): {
-	contribution: Pick<PageContribution, 'path' | 'title' | 'component'>;
-	files: Files;
-} {
-	const component = `ui/${fileName(path)}-page.svelte`;
-
-	return {
-		contribution: { path, title: title(path), component },
-		files: {
-			[component]: `<script lang="ts">
-	import type { PageProps } from '@pouchbasejs/plugin-sdk/ui';
-
-	let { params }: PageProps = $props();
-</script>
-
-<h1>${title(path)}</h1>
-
-<p>Path below the page: /{params.join('/')}</p>
-`
-		}
-	};
-}
-
 // Auth providers
 
 /** Example endpoints of the provider that the templates use; the author replaces them. */
 export const EXAMPLE_PROVIDER_HOST = 'id.example.com';
 
-/** Path of a provider's icon, e.g. `ui/acme.svg`. */
-export function providerIconPath(id: string) {
-	return `ui/${id}.svg`;
-}
-
 /** A placeholder icon for the sign-in button; the author replaces it with the provider's logo. */
-export const PROVIDER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+const PROVIDER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
 `;
-
-/** The server entry with one OpenID Connect provider. */
-export function authProviderServer(id: string) {
-	return `import { createOidcProvider, definePlugin } from '@pouchbasejs/plugin-sdk/server';
-
-/**
- * Replace the URLs with those of your provider, and its host in permissions.network in
- * ${MANIFEST_FILE}. For a provider without OpenID Connect, write the handler yourself:
- *
- *   import { defineAuthProvider, fetchJson } from '@pouchbasejs/plugin-sdk/server';
- *
- *   const provider = defineAuthProvider({
- *   	authorizeUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/authorize',
- *   	tokenUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/token',
- *   	scopes: ['read:user'],
- *   	pkce: true,
- *   	async profile(accessToken, credentials, ctx) {
- *   		const user = await fetchJson<{ id: number; email: string }>(
- *   			ctx,
- *   			'https://${EXAMPLE_PROVIDER_HOST}/api/user',
- *   			accessToken
- *   		);
- *
- *   		return {
- *   			id: String(user.id),
- *   			email: user.email,
- *   			emailVerified: false,
- *   			name: null,
- *   			avatarUrl: null
- *   		};
- *   	}
- *   });
- */
-const ${camelCase(id)} = createOidcProvider({
-	authorizeUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/authorize',
-	tokenUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/token',
-	userinfoUrl: 'https://${EXAMPLE_PROVIDER_HOST}/oauth/userinfo'
-});
-
-export default definePlugin({
-	authProviders: {
-		${objectKey(id)}: ${camelCase(id)}
-	}
-});
-`;
-}
 
 /** `acme` → `acme`, `my-sso` → `'my-sso'`. */
-export function objectKey(id: string) {
+function objectKey(id: string) {
 	return /^[a-z_$][\w$]*$/i.test(id) ? id : `'${id}'`;
 }
 

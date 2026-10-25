@@ -111,7 +111,7 @@ export function apiExamples(
 	const created = fields.find((field) => field.type === 'created')?.name;
 	const textField = readable.find((field) => field.type === 'text')?.name;
 	const order = created ? `${created}:desc` : undefined;
-	const where = textField ? `${textField} contains "hello"` : undefined;
+	const where = textField ? `contains(${textField}, "hello")` : undefined;
 
 	const path = `/api/db/${collection.name}`;
 	const url = `${origin}${path}`;

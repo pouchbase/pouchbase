@@ -5,7 +5,7 @@
 	import type { ApiRules } from '#lib/filter/rules.js';
 	import ApiPreview from './api-preview.svelte';
 	import ApiRulesForm from './api-rules.svelte';
-	import { getUserFields } from './collection-settings.remote';
+	import { getFilterCollections, getUserFields } from './collection-settings.remote';
 	import type { GridField } from './grid';
 
 	type Props = {
@@ -54,6 +54,7 @@
 					{relationTargets}
 					{rules}
 					userFields={await getUserFields()}
+					collections={await getFilterCollections()}
 				/>
 
 				{#snippet pending()}

@@ -912,10 +912,10 @@ export const uiComponents: UiComponent[] = [
 /** The docs page of an import specifier, e.g. `@pouchbasejs/ui/inputs/input`, if it is one of the package. */
 export function uiComponentHref(specifier: string) {
 	if (specifier === '@pouchbasejs/ui') {
-		return resolve('/docs/ui');
+		return resolve('/docs/plugins/ui');
 	}
 
 	const component = uiComponents.find((item) => `@pouchbasejs/ui/${item.entry}` === specifier);
 
-	return component ? resolve('/docs/ui/[component]', { component: component.slug }) : undefined;
+	return component ? resolve('/docs/plugins/ui/[component]', { component: component.slug }) : undefined;
 }

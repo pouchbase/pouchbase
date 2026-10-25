@@ -14,12 +14,10 @@ export async function printManifest(
 	root: string,
 	{ log, write }: { log?: Logger; write: (text: string) => void }
 ): Promise<PluginManifest> {
-	const { bundle, warnings, project } = await buildBundle(root, { log });
+	const { bundle, warnings } = await buildBundle(root, { log });
 
 	log?.warnings(warnings);
-	log?.success(
-		`Generated the manifest of ${bundle.manifest.id}@${bundle.manifest.version}${project.mode === 'legacy' ? ' (legacy layout)' : ''}`
-	);
+	log?.success(`Generated the manifest of ${bundle.manifest.id}@${bundle.manifest.version}`);
 	write(json(bundle.manifest));
 
 	return bundle.manifest;

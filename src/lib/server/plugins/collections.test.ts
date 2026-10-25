@@ -104,6 +104,7 @@ describe('collectionFields', () => {
 			type: type as SnapshotCollection['fields'][number]['type'],
 			required: false,
 			unique: false,
+			hidden: false,
 			defaultValue: null,
 			options: {},
 			system: false,
@@ -132,6 +133,38 @@ describe('collectionFields', () => {
 			{ columns: ['score'], unique: false },
 			{ columns: ['note'], unique: false }
 		]);
+	});
+
+	it('keeps the fields that an admin hid hidden on an update', () => {
+		const plugin = manifest();
+		const hidden = (name: string, type: SnapshotCollection['fields'][number]['type']) => ({
+			id: `${name}-id`,
+			name,
+			type,
+			required: false,
+			unique: false,
+			hidden: true,
+			defaultValue: null,
+			options: {},
+			system: false,
+			position: 0
+		});
+		const existing: SnapshotCollection = {
+			id: 'reviews-id',
+			name: 'plugin_demo_reviews',
+			system: false,
+			settings: {},
+			fields: [hidden('score', 'integer'), hidden('note', 'text')],
+			indexes: []
+		};
+		const result = collectionFields(plugin, plugin.contributes.collections[0]!, ids, existing);
+		const byName =
+			'fields' in result ? new Map(result.fields.map((item) => [item.name, item])) : null;
+
+		// Declared by the manifest, and a field the admin added.
+		expect(byName?.get('score')?.hidden).toBe(true);
+		expect(byName?.get('note')?.hidden).toBe(true);
+		expect(byName?.get('post')?.hidden).toBeUndefined();
 	});
 });
 
