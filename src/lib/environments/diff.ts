@@ -17,6 +17,8 @@ import type {
 	SnapshotPlugin
 } from '#lib/schemas/environments.js';
 
+import { splitPluginFieldType } from '@pouchbasejs/plugin-sdk';
+
 import { SNAPSHOT_SETTING_KEYS, stableStringify } from './snapshot';
 
 /**
@@ -101,18 +103,25 @@ export type PlanWarning =
 	| { kind: 'oauth.plugin'; provider: string; label?: string; pluginId?: string }
 	| { kind: 'setting.secret'; key: string }
 	| { kind: 'plugin.api'; plugin: string; apiVersion: number }
-	| { kind: 'collection.system'; collection: string };
+	| { kind: 'collection.system'; collection: string }
+	/** A field gets a plugin's type, and the target won't have the plugin (see `diff`). */
+	| { kind: 'field.plugin'; collection: string; field: string; type: string; pluginId: string };
 
 export type Plan = {
 	steps: PlanStep[];
 	warnings: PlanWarning[];
 };
 
-/** The order steps run in: removals first, so names they free can be reused by the rest. */
+/**
+ * The order steps run in: removals first, so names they free can be reused by the rest. Plugins
+ * come before the fields: a field can only get a plugin's type once the plugin is installed.
+ */
 const STEP_ORDER: PlanStepKind[] = [
 	'index.drop',
 	'field.delete',
 	'collection.delete',
+	'plugin.remove',
+	'plugin.install',
 	'collection.rename',
 	'collection.create',
 	'field.update',
@@ -124,8 +133,6 @@ const STEP_ORDER: PlanStepKind[] = [
 	'function.delete',
 	'function.create',
 	'function.update',
-	'plugin.remove',
-	'plugin.install',
 	'setting.set',
 	'oauth.update'
 ];
@@ -570,6 +577,46 @@ function diffSettings(
 	}
 }
 
+/**
+ * Warns about fields the plan gives a plugin's type when the target won't have that plugin: it
+ * isn't installed there and the plan doesn't install it (e.g. its plugin API isn't supported).
+ * Only plugins in the source's snapshot count; built-in plugins aren't in snapshots and come
+ * with Pouchbase itself.
+ */
+function warnPluginFields(
+	source: Snapshot,
+	target: Snapshot,
+	steps: PlanStep[],
+	warnings: PlanWarning[]
+) {
+	const available = new Set([
+		...target.plugins.map((plugin) => plugin.id),
+		...steps.flatMap((step) => (step.kind === 'plugin.install' ? [step.plugin.id] : []))
+	]);
+	const published = new Set(source.plugins.map((plugin) => plugin.id));
+
+	for (const step of steps) {
+		if (
+			step.kind !== 'field.create' &&
+			!(step.kind === 'field.update' && step.changes.includes('type'))
+		) {
+			continue;
+		}
+
+		const parts = splitPluginFieldType(step.field.type);
+
+		if (parts && published.has(parts.pluginId) && !available.has(parts.pluginId)) {
+			warnings.push({
+				kind: 'field.plugin',
+				collection: step.collection,
+				field: step.field.name,
+				type: step.field.type,
+				pluginId: parts.pluginId
+			});
+		}
+	}
+}
+
 /** The plan that makes `target` match `source`, with its steps in the order they run. */
 export function diff(source: Snapshot, target: Snapshot): Plan {
 	const steps: PlanStep[] = [];
@@ -579,6 +626,7 @@ export function diff(source: Snapshot, target: Snapshot): Plan {
 	diffFunctions(source, target, steps, warnings);
 	diffPlugins(source, target, steps, warnings);
 	diffSettings(source, target, steps, warnings);
+	warnPluginFields(source, target, steps, warnings);
 
 	return sorted(steps, warnings);
 }

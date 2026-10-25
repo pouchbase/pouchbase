@@ -2,15 +2,17 @@ import type { PluginContext } from '../src/server.js';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { createOidcProvider, fetchJson } from '../src/server.js';
+import { createOidcProvider, createPluginSettings, definePage, fetchJson } from '../src/server.js';
 
 function context(body: unknown, status = 200) {
 	const fetch = vi.fn(async () => Response.json(body, { status }));
 	const ctx: PluginContext = {
 		plugin: { id: 'auth-test', version: '1.0.0' },
 		fetch: fetch as unknown as typeof globalThis.fetch,
-		settings: { get: async () => null },
-		log: { info() {}, warn() {}, error() {} }
+		settings: createPluginSettings([]),
+		log: { info() {}, warn() {}, error() {} },
+		admin: false,
+		user: null
 	};
 
 	return { ctx, fetch };
@@ -108,5 +110,13 @@ describe('createOidcProvider', () => {
 		await expect(
 			createOidcProvider(options).profile('token', { clientId: 'id' }, ctx)
 		).rejects.toThrow('no sub claim');
+	});
+});
+
+describe('definePage', () => {
+	it('returns the metadata unchanged', () => {
+		const meta = { title: 'Stats', navigation: false };
+
+		expect(definePage(meta)).toBe(meta);
 	});
 });

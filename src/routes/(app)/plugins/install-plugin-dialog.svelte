@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import type { PluginSummary } from '@pouchbasejs/plugin-sdk';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
@@ -8,6 +9,7 @@
 	import * as Link from '#lib/components/ui/link/index.js';
 	import * as Skeleton from '#lib/components/ui/skeleton/index.js';
 	import { errorMessage } from '#lib/errors.js';
+	import { describeContributions } from './contributions';
 	import PluginCategories from './plugin-categories.svelte';
 	import { getPluginDetails, installPlugin } from './plugins.remote';
 
@@ -19,7 +21,11 @@
 
 	let { plugin, installedVersion, close }: Props = $props();
 
-	const form = $derived(installPlugin.for(plugin.id));
+	const form = $derived.by(() => {
+		const key = plugin.id;
+
+		return untrack(() => installPlugin.for(key));
+	});
 	const action = $derived(installedVersion ? 'Update' : 'Install');
 </script>
 
@@ -36,6 +42,7 @@
 			details.versions.find((version) => version.version === details.version) ??
 			details.versions[0]}
 		{@const hosts = latest?.permissions.network ?? []}
+		{@const adds = describeContributions(latest?.contributes)}
 
 		<dl class="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
 			<dt class="text-zinc-500">Version</dt>
@@ -54,6 +61,12 @@
 
 			<dt class="text-zinc-500">License</dt>
 			<dd class="text-zinc-900">{details.license}</dd>
+
+			<!-- Registries before the contributions summary don't say; then this stays out. -->
+			{#if adds}
+				<dt class="text-zinc-500">Adds</dt>
+				<dd class="text-zinc-900">{adds}</dd>
+			{/if}
 
 			{#if details.homepage ?? details.repository}
 				<dt class="text-zinc-500">Website</dt>

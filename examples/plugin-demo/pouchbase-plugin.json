@@ -1,34 +1,12 @@
 {
 	"$schema": "https://pouchbase.io/schemas/plugin-manifest.json",
-	"apiVersion": 1,
 	"id": "demo",
 	"name": "Demo",
-	"icon": "ui/icon.svg",
 	"categories": ["fields", "pages", "developer-tools"],
 	"engines": {
-		"pouchbase": ">=0.8.0"
+		"pouchbase": ">=0.10.0"
 	},
 	"permissions": {
 		"network": ["www.githubstatus.com"]
-	},
-	"server": "server/index.ts",
-	"contributes": {
-		"fields": [
-			{
-				"type": "rating",
-				"label": "Rating",
-				"description": "A whole number of stars, from 1 to 5.",
-				"column": "INTEGER",
-				"input": "ui/rating-input.svelte",
-				"cell": "ui/rating-cell.svelte"
-			}
-		],
-		"pages": [
-			{
-				"path": "overview",
-				"title": "Demo",
-				"component": "ui/overview-page.svelte"
-			}
-		]
 	}
 }

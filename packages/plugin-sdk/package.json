@@ -26,6 +26,8 @@
 		".": "./src/index.ts",
 		"./server": "./src/server.ts",
 		"./ui": "./src/ui.ts",
+		"./project": "./src/project.ts",
+		"./testing": "./src/testing.ts",
 		"./package.json": "./package.json"
 	},
 	"publishConfig": {
@@ -43,6 +45,14 @@
 				"types": "./dist/ui.d.ts",
 				"default": "./dist/ui.js"
 			},
+			"./project": {
+				"types": "./dist/project.d.ts",
+				"default": "./dist/project.js"
+			},
+			"./testing": {
+				"types": "./dist/testing.d.ts",
+				"default": "./dist/testing.js"
+			},
 			"./package.json": "./package.json"
 		}
 	},
@@ -57,8 +67,11 @@
 		"prepublishOnly": "pnpm build"
 	},
 	"dependencies": {
+		"@iconify-json/lucide": "^1.2.147",
+		"es-module-lexer": "^2.3.2",
 		"rolldown": "^1.2.15",
 		"semver": "^7.8.5",
+		"tailwindcss": "^4.3.3",
 		"zod": "^4.6.7"
 	},
 	"devDependencies": {

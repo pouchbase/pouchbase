@@ -16,6 +16,9 @@ export {
 	PACKAGE_DEFAULT_KEYS,
 	UI_DIR,
 	PLUGIN_ID_PATTERN,
+	PLUGIN_FIELD_TYPE_PATTERN,
+	pluginFieldTypeId,
+	splitPluginFieldType,
 	PROVIDER_ID_PATTERN,
 	RESERVED_PROVIDER_IDS,
 	manifestSchema,
@@ -23,11 +26,19 @@ export {
 	pageContributionSchema,
 	authProviderContributionSchema,
 	permissionsSchema,
+	pluginSettingSchema,
+	pluginSettingsSchema,
+	PLUGIN_SETTING_TYPES,
+	SETTING_KEY_PATTERN,
+	MAX_PLUGIN_SETTINGS,
+	resolveSettings,
 	parseManifest,
+	previewOf,
 	defineManifest,
 	checkCompatibility,
 	withPackageDefaults,
 	manifestJsonSchema,
+	DEPRECATED_MANIFEST_KEYS,
 	type PackageJson,
 	type PluginManifest,
 	type PluginManifestInput,
@@ -35,6 +46,8 @@ export {
 	type PageContribution,
 	type AuthProviderContribution,
 	type PluginPermissions,
+	type PluginSetting,
+	type PluginSettingType,
 	type ManifestIssue,
 	type ManifestResult
 } from './manifest.js';
@@ -52,11 +65,14 @@ export {
 	type PluginBundle,
 	type BundleResult
 } from './bundle.js';
+export { MAX_ICON_SIZE, svgIconIssues } from './svg.js';
 export {
 	REGISTRY_API_PREFIX,
 	DEFAULT_REGISTRY_URL,
 	pluginSummarySchema,
 	pluginVersionSchema,
+	contributionSummarySchema,
+	contributionSummary,
 	pluginDetailsSchema,
 	pluginListSchema,
 	registryErrorBodySchema,
@@ -64,6 +80,7 @@ export {
 	RegistryError,
 	type PluginSummary,
 	type PluginVersion,
+	type ContributionSummary,
 	type PluginDetails,
 	type PluginList,
 	type RegistryErrorBody,
@@ -71,3 +88,14 @@ export {
 	type RegistryClient,
 	type RegistryClientOptions
 } from './registry.js';
+export {
+	SVELTE_COMPILE_OPTIONS,
+	compileUi,
+	formatCompileIssue,
+	resolveRelative,
+	type CompiledModule,
+	type CompileIssue,
+	type CompiledUi,
+	type SvelteCompiler
+} from './compile.js';
+export { hostMatches, blockedReason } from './network.js';

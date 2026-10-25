@@ -5,11 +5,13 @@ export default defineConfig({
 		index: 'src/index.ts',
 		server: 'src/server.ts',
 		ui: 'src/ui.ts',
+		project: 'src/project.ts',
+		testing: 'src/testing.ts',
 		cli: 'src/cli/index.ts'
 	},
 	format: 'esm',
 	platform: 'neutral',
-	// Only the `pouchbase-plugin` command (src/cli) uses Node built-ins and rolldown.
+	// Only the `pouchbase-plugin` command (src/cli) and `./project` use Node built-ins and rolldown.
 	deps: { neverBundle: [/^node:/, /^rolldown/] },
 	target: 'es2022',
 	dts: true,

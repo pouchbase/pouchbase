@@ -23,6 +23,32 @@ export const PLUGIN_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 /** `color`, `rich_color`: same rules as the built-in field types. */
 const FIELD_TYPE_PATTERN = /^[a-z][a-z0-9_]{0,31}$/;
 
+/**
+ * How a host stores a plugin's field type: `<plugin>:<type>`, e.g. `color-picker:color`. The
+ * built-in field types have no `:`, so the two never clash. Both halves follow
+ * `PLUGIN_ID_PATTERN` and the pattern of a field contribution's `type`.
+ */
+export const PLUGIN_FIELD_TYPE_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*:[a-z][a-z0-9_]{0,31}$/;
+
+/** The stored id of a plugin's field type: `pluginFieldTypeId('color-picker', 'color')`. */
+export function pluginFieldTypeId<P extends string, T extends string>(
+	pluginId: P,
+	type: T
+): `${P}:${T}` {
+	return `${pluginId}:${type}`;
+}
+
+/** The plugin id and the type of a stored plugin field type id, or `null` when it isn't one. */
+export function splitPluginFieldType(id: string): { pluginId: string; type: string } | null {
+	if (!PLUGIN_FIELD_TYPE_PATTERN.test(id)) {
+		return null;
+	}
+
+	const index = id.indexOf(':');
+
+	return { pluginId: id.slice(0, index), type: id.slice(index + 1) };
+}
+
 /** A sign-in provider id: `gitlab`, `my-sso`. Hosts use it in URLs and the API as is. */
 export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
@@ -73,8 +99,23 @@ export const fieldContributionSchema = z.object({
 	column: z.enum(['TEXT', 'INTEGER', 'REAL', 'BLOB']),
 	/** Edits the value in the record form; receives `FieldInputProps`. */
 	input: componentPath,
-	/** Shows the value in the records grid; receives `FieldCellProps`. Missing shows it as text. */
-	cell: componentPath.optional()
+	/**
+	 * The type's preview: shows the value, read-only, in the records grid; receives
+	 * `FieldPreviewProps`. Missing shows the value as text.
+	 */
+	preview: componentPath.optional(),
+	/**
+	 * @deprecated The former name of `preview`, still read as it in plugin API version 1; use
+	 * `preview` (see `previewOf`).
+	 */
+	cell: componentPath
+		.optional()
+		.meta({ deprecated: true, description: 'Deprecated: the former name of preview.' }),
+	/**
+	 * The type's icon in the dashboard, e.g. `ui/fields/color/icon.svg`: drawn in one color at 16
+	 * pixels, like the built-in types' icons (see `svgIconIssues`). Missing shows a puzzle piece.
+	 */
+	icon: imagePath.optional()
 });
 
 export const pageContributionSchema = z.object({
@@ -84,7 +125,12 @@ export const pageContributionSchema = z.object({
 	/** Receives `PageProps`. */
 	component: componentPath,
 	/** Whether the page gets a link in the sidebar. */
-	navigation: z.boolean().default(true)
+	navigation: z.boolean().default(true),
+	/**
+	 * The page's icon in the sidebar, e.g. `ui/pages/stats.svg`: drawn in one color at 16 pixels,
+	 * like the dashboard's own links (see `svgIconIssues`). Missing shows a neutral icon.
+	 */
+	icon: imagePath.optional()
 });
 
 export const authProviderContributionSchema = z.object({
@@ -115,6 +161,81 @@ export const permissionsSchema = z.object({
 		.max(20)
 		.default([])
 });
+
+/** `api_key`, `region`: a setting's key, as `ctx.settings.get(key)` reads it. */
+export const SETTING_KEY_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
+
+/**
+ * How a setting is entered and checked: `text` and `url` (an absolute URL) are strings, `number`
+ * and `boolean` are typed in the form, `secret` is a string that is never shown again once saved.
+ * Values are stored as strings (`'42'`, `'true'`); `ctx.settings.get(key)` parses them by type
+ * (`parseSettingValue` in `@pouchbasejs/plugin-sdk/server`).
+ */
+export const PLUGIN_SETTING_TYPES = ['text', 'secret', 'number', 'boolean', 'url'] as const;
+
+/** Most settings a plugin can have. */
+export const MAX_PLUGIN_SETTINGS = 30;
+
+/** Why `value` can't be the default of a setting of `type`, or `null` when it can. */
+function settingDefaultProblem(
+	type: (typeof PLUGIN_SETTING_TYPES)[number],
+	value: string | number | boolean | undefined
+): string | null {
+	if (value === undefined) {
+		return null;
+	}
+
+	switch (type) {
+		case 'secret':
+			return 'A secret setting has no default';
+		case 'number':
+			return typeof value === 'number' && Number.isFinite(value) ? null : 'Must be a number';
+		case 'boolean':
+			return typeof value === 'boolean' ? null : 'Must be true or false';
+		case 'url':
+			return typeof value === 'string' && URL.canParse(value) ? null : 'Must be an absolute URL';
+		default:
+			return typeof value === 'string' ? null : 'Must be a string';
+	}
+}
+
+export const pluginSettingSchema = z
+	.object({
+		key: z.string().regex(SETTING_KEY_PATTERN, 'Use lowercase letters, numbers and underscores'),
+		label,
+		description: description.optional(),
+		type: z.enum(PLUGIN_SETTING_TYPES).default('text'),
+		/** The plugin can't work without it; an admin is asked to fill it in. */
+		required: z.boolean().default(false),
+		/** Used while no value is saved; of the setting's type, not for `secret`. */
+		default: z.union([z.string().max(2000), z.number(), z.boolean()]).optional()
+	})
+	.superRefine((setting, ctx) => {
+		const problem = settingDefaultProblem(setting.type, setting.default);
+
+		if (problem) {
+			ctx.addIssue({ code: 'custom', path: ['default'], message: problem });
+		}
+	});
+
+/**
+ * The settings of a plugin: at most `MAX_PLUGIN_SETTINGS`, with unique keys. The manifest carries
+ * them; in the convention layout they come from `definePlugin({ settings })` in `plugin.ts`.
+ */
+export const pluginSettingsSchema = z
+	.array(pluginSettingSchema)
+	.max(MAX_PLUGIN_SETTINGS)
+	.superRefine((settings, ctx) => {
+		settings.forEach((setting, index) => {
+			if (settings.findIndex((other) => other.key === setting.key) !== index) {
+				ctx.addIssue({
+					code: 'custom',
+					path: [index, 'key'],
+					message: `Duplicate key: ${setting.key}`
+				});
+			}
+		});
+	});
 
 export const manifestSchema = z
 	.object({
@@ -169,6 +290,12 @@ export const manifestSchema = z
 			.partial()
 			.default({}),
 		permissions: permissionsSchema.default({ network: [] }),
+		/**
+		 * What an admin can set for the plugin on the Plugins page; the server code reads the values
+		 * with `ctx.settings.get(key)`. Keys are unique. In the convention layout the CLI fills it
+		 * from `definePlugin({ settings })` in `plugin.ts`.
+		 */
+		settings: pluginSettingsSchema.default([]),
 		/** Entry of the server code; it default-exports `definePlugin(...)`. */
 		server: relativePath
 			.refine((path) => /\.(?:ts|js|mjs)$/.test(path), 'Must be a .ts, .js or .mjs file')
@@ -228,11 +355,43 @@ export type PluginManifest = z.output<typeof manifestSchema>;
 
 export type FieldContribution = z.output<typeof fieldContributionSchema>;
 
+/** Bundle path of a field type's preview component, also under its former name `cell`. */
+export function previewOf(field: Pick<FieldContribution, 'preview' | 'cell'>) {
+	return field.preview ?? field.cell;
+}
+
 export type PageContribution = z.output<typeof pageContributionSchema>;
 
 export type AuthProviderContribution = z.output<typeof authProviderContributionSchema>;
 
 export type PluginPermissions = z.output<typeof permissionsSchema>;
+
+export type PluginSetting = z.output<typeof pluginSettingSchema>;
+
+export type PluginSettingType = (typeof PLUGIN_SETTING_TYPES)[number];
+
+/**
+ * The values of the settings as strings, as the host passes them to the plugin: for each setting
+ * of the manifest the saved value, else its default as a string (`'42'`, `'true'`); settings with
+ * neither are left out (`get` returns `null`). Saved values of keys the manifest no longer has
+ * are left out too. `ctx.settings.get(key)` parses them by type (`parseSettingValue`).
+ */
+export function resolveSettings(
+	settings: readonly Pick<PluginSetting, 'key' | 'default'>[] | undefined,
+	saved: Readonly<Record<string, string>>
+): Record<string, string> {
+	const values: Record<string, string> = {};
+
+	for (const setting of settings ?? []) {
+		if (Object.hasOwn(saved, setting.key)) {
+			values[setting.key] = saved[setting.key]!;
+		} else if (setting.default !== undefined) {
+			values[setting.key] = String(setting.default);
+		}
+	}
+
+	return values;
+}
 
 /** A problem with a manifest, e.g. `contributes.fields.0.type: Use lowercase letters, …`. */
 export type ManifestIssue = { path: string; message: string };
@@ -325,9 +484,24 @@ export function withPackageDefaults(
 }
 
 /**
+ * Manifest keys that `pouchbase-plugin.json` no longer needs, and where they go now: the
+ * convention layout refuses `settings` and reads `contributes` and `server` as the deprecated
+ * legacy layout. They stay in the manifest a bundle has, which the CLI generates.
+ */
+export const DEPRECATED_MANIFEST_KEYS = {
+	settings:
+		'Deprecated: settings belong in definePlugin({ settings }) in plugin.ts; the convention layout refuses them here.',
+	contributes:
+		'Deprecated: the legacy layout. Contributions come from the folders fields/, pages/, auth/ and routes/; the CLI fills this in the bundle.',
+	server:
+		'Deprecated: the legacy layout. Server code comes from field.ts, provider.ts and routes/; the CLI fills this in the bundle.'
+} as const;
+
+/**
  * The JSON Schema of `pouchbase-plugin.json` (draft 2020-12), served at `MANIFEST_SCHEMA_URL`
- * and printed by `pouchbase-plugin schema`. Fields that `package.json` can fill are optional, and
- * `categories` lists the known categories, which the CLI requires.
+ * and printed by `pouchbase-plugin schema`. Fields that `package.json` can fill are optional, so
+ * is `apiVersion` (the CLI writes `API_VERSION`), `categories` lists the known categories, which
+ * the CLI requires, and the `DEPRECATED_MANIFEST_KEYS` are marked `deprecated`.
  */
 export function manifestJsonSchema(): Record<string, unknown> {
 	const schema = z.toJSONSchema(manifestSchema, {
@@ -335,11 +509,17 @@ export function manifestJsonSchema(): Record<string, unknown> {
 		io: 'input',
 		unrepresentable: 'any'
 	}) as Record<string, unknown>;
-	const properties = schema.properties as Record<string, { items?: Record<string, unknown> }>;
-	const optional = new Set<string>(PACKAGE_DEFAULT_KEYS);
+	const properties = schema.properties as Record<string, Record<string, unknown>>;
+	const optional = new Set<string>([...PACKAGE_DEFAULT_KEYS, 'apiVersion']);
 
 	if (properties.categories?.items) {
 		properties.categories.items = { type: 'string', enum: [...PLUGIN_CATEGORIES] };
+	}
+
+	for (const [key, description] of Object.entries(DEPRECATED_MANIFEST_KEYS)) {
+		if (properties[key]) {
+			properties[key] = { ...properties[key], deprecated: true, description };
+		}
 	}
 
 	const required = Array.isArray(schema.required)

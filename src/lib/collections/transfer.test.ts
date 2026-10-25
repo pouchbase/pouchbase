@@ -101,7 +101,55 @@ describe('planImport', () => {
 		const file = exportCollections([posts, users], ['posts']);
 
 		expect(planImport(file, [], merge)).toEqual({
-			problems: [{ collection: 'posts', field: 'author', related: 'users' }]
+			problems: [{ kind: 'relation', collection: 'posts', field: 'author', related: 'users' }]
+		});
+	});
+
+	describe('plugin field types', () => {
+		const reviews = collection({
+			id: 'c-reviews',
+			name: 'reviews',
+			fields: [
+				field({
+					id: 'f-rating',
+					name: 'rating',
+					type: 'demo:rating',
+					options: { plugin: { label: 'Rating', column: 'INTEGER' } }
+				})
+			]
+		});
+		const file = exportCollections([reviews]);
+
+		it('reports types of plugins the instance does not have', () => {
+			expect(planImport(file, [], { ...merge, pluginFieldTypes: new Set() })).toEqual({
+				problems: [
+					{
+						kind: 'plugin',
+						collection: 'reviews',
+						field: 'rating',
+						type: 'demo:rating',
+						pluginId: 'demo'
+					}
+				]
+			});
+		});
+
+		it('imports them when the plugin is installed', () => {
+			const result = planImport(file, [], {
+				...merge,
+				pluginFieldTypes: new Set(['demo:rating'])
+			});
+
+			expect('plan' in result && result.plan.steps.map((step) => step.kind)).toEqual([
+				'collection.create',
+				'field.create'
+			]);
+		});
+
+		it('accepts fields the instance already has with that type', () => {
+			expect(planImport(file, [reviews], { ...merge, pluginFieldTypes: new Set() })).toEqual({
+				plan: { steps: [], warnings: [] }
+			});
 		});
 	});
 

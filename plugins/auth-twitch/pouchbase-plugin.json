@@ -3,23 +3,12 @@
 	"apiVersion": 1,
 	"id": "auth-twitch",
 	"name": "Twitch sign-in",
-	"icon": "ui/twitch.svg",
+	"icon": "auth/twitch/icon.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"
 	},
 	"permissions": {
 		"network": ["api.twitch.tv"]
-	},
-	"server": "server/index.ts",
-	"contributes": {
-		"authProviders": [
-			{
-				"id": "twitch",
-				"label": "Twitch",
-				"consoleUrl": "https://dev.twitch.tv/console/apps",
-				"icon": "ui/twitch.svg"
-			}
-		]
 	}
 }

@@ -26,6 +26,7 @@
 			"default": "./src/index.ts"
 		},
 		"./theme.css": "./src/theme.css",
+		"./tokens.css": "./src/tokens.css",
 		"./vite": {
 			"types": "./src/vite/iconify.ts",
 			"default": "./src/vite/iconify.ts"
@@ -46,6 +47,7 @@
 				"default": "./dist/index.js"
 			},
 			"./theme.css": "./dist/theme.css",
+			"./tokens.css": "./dist/tokens.css",
 			"./vite": {
 				"types": "./dist/vite/iconify.d.ts",
 				"default": "./dist/vite/iconify.js"

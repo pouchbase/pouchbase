@@ -10,6 +10,7 @@ import { CONTRIBUTION_KINDS, addContribution, isContributionKind } from './add.j
 import { startDevServer } from './dev-server.js';
 import { elapsed, kib } from './format.js';
 import { askTemplate, initProject, parseTemplate } from './init.js';
+import { printManifest } from './manifest-command.js';
 import { CliError, createLogger, type Logger } from './output.js';
 import { buildBundle, bundleFileName } from './project.js';
 import { TEMPLATES } from './templates.js';
@@ -18,8 +19,10 @@ const HELP = `Usage: pouchbase-plugin <command> [options]
 
 Commands:
   init <dir>             Create a plugin in a new directory; its name becomes the plugin id
-  add <kind> <id>        Add a field, page or auth-provider to the plugin, with its files
-  validate               Check pouchbase-plugin.json, the files it points to and the server code
+  add <kind> <id>        Add a field, page, auth-provider or route to the plugin (its files),
+                         or a setting to plugin.ts (add setting <key>)
+  validate               Check the plugin: its folders, pouchbase-plugin.json and the server code
+  manifest               Print the manifest the plugin builds into, as JSON
   build                  Build the bundle into dist/
   dev                    Rebuild on every change and serve the plugin from a local registry
   publish                Build and publish the bundle to the registry
@@ -27,6 +30,7 @@ Commands:
 
 Options:
   --template <name>  Template for init: ${TEMPLATES.join(', ')} (asks in a terminal; default field)
+  --type <type>      Type for add setting: text, secret, number, boolean or url (default text)
   --port <n>         Port of the dev registry (default 4510)
   --exact-version    Let dev serve the manifest's version instead of <version>-dev.<n>
   --registry <url>   Registry to publish to (default $POUCHBASE_REGISTRY_URL or ${DEFAULT_REGISTRY_URL})
@@ -172,15 +176,32 @@ async function main(log: Logger, positionals: string[], values: Values) {
 
 			log.step(`Adding ${target} ${name}`);
 
-			const { created, hints } = await addContribution(root, target, name);
+			const { created, changed, hints, manifestChanged, layout } = await addContribution(
+				root,
+				target,
+				name,
+				{ type: typeof values.type === 'string' ? values.type : undefined }
+			);
 
-			log.detail('Updated pouchbase-plugin.json');
+			if (manifestChanged) {
+				log.detail('Updated pouchbase-plugin.json');
+			}
+
+			for (const file of changed ?? []) {
+				log.detail(`Updated ${file}`);
+			}
 
 			for (const file of created) {
 				log.detail(`Created ${file}`);
 			}
 
 			log.success(`Added ${target} ${name}`);
+
+			if (layout === 'legacy') {
+				log.warn(
+					'This plugin uses the legacy layout ("contributes" in pouchbase-plugin.json), which is deprecated; see the README of @pouchbasejs/plugin-sdk for the convention layout.'
+				);
+			}
 
 			for (const hint of hints) {
 				log.next(hint);
@@ -238,6 +259,18 @@ async function main(log: Logger, positionals: string[], values: Values) {
 			});
 			break;
 
+		case 'manifest':
+			// Feedback goes to stderr, so stdout holds only the JSON.
+			await printManifest(root, {
+				log: createLogger({
+					quiet: values.quiet === true,
+					verbose: values.verbose === true,
+					stdout: process.stderr
+				}),
+				write: (text) => process.stdout.write(text)
+			});
+			break;
+
 		case 'schema':
 			console.log(JSON.stringify(manifestJsonSchema(), null, '\t'));
 			break;
@@ -257,6 +290,7 @@ try {
 		allowPositionals: true,
 		options: {
 			template: { type: 'string' },
+			type: { type: 'string' },
 			port: { type: 'string' },
 			'exact-version': { type: 'boolean' },
 			registry: { type: 'string' },

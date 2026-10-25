@@ -1,9 +1,11 @@
 <script lang="ts">
-	import type { FieldType } from '#lib/fields/field-types.js';
+	import { untrack } from 'svelte';
+	import type { FieldTypeId } from '#lib/fields/field-types.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import { FIELD_TYPE_IDS, FIELD_TYPES, isAutoType } from '#lib/fields/field-types.js';
+	import { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 	import { createFieldSchema } from '#lib/schemas/fields.js';
 	import { listCollections } from '../../collections.remote';
 	import ComputeOptions from './compute-options.svelte';
@@ -19,10 +21,14 @@
 
 	let { collection, fields = [], close }: Props = $props();
 
-	const form = $derived(createField.for(collection.id).preflight(createFieldSchema));
+	const form = $derived.by(() => {
+		const key = collection.id;
+
+		return untrack(() => createField.for(key).preflight(createFieldSchema));
+	});
 
 	// `value()` stays undefined until the control is changed, so fall back to the initial values.
-	const type = $derived((form.fields.type.value() as FieldType | undefined) ?? 'text');
+	const type = $derived((form.fields.type.value() as FieldTypeId | undefined) ?? 'text');
 	const multiple = $derived(!!form.fields.multiple.value());
 
 	// Not awaited, so it never holds back opening the dialog (the sidebar has usually loaded it).
@@ -34,17 +40,31 @@
 		}))
 	);
 
-	// A collection has at most one id field: its primary key.
-	const typeItems = $derived(
-		FIELD_TYPE_IDS.filter((id) => id !== 'id' || !fields.some((field) => field.type === 'id')).map(
-			(id) => ({
-				value: id,
-				label: FIELD_TYPES[id].label,
-				description: FIELD_TYPES[id].description,
-				icon: FIELD_TYPES[id].icon
-			})
-		)
-	);
+	// Not awaited either: the plugins' types join the list once they are in.
+	const pluginTypes = $derived(listPluginFieldTypes().current ?? []);
+
+	// A collection has at most one id field: its primary key. The types of plugins come last.
+	const typeItems = $derived([
+		...FIELD_TYPE_IDS.filter(
+			(id) => id !== 'id' || !fields.some((field) => field.type === 'id')
+		).map((id) => ({
+			value: id,
+			label: FIELD_TYPES[id].label,
+			description: FIELD_TYPES[id].description,
+			icon: FIELD_TYPES[id].icon
+		})),
+		...pluginTypes.map((pluginType) => ({
+			value: pluginType.id,
+			label: pluginType.label,
+			description: pluginType.description
+				? `${pluginType.pluginName} · ${pluginType.description}`
+				: pluginType.pluginName,
+			// The type's own icon, drawn like the built-in ones; never the plugin's logo.
+			icon: 'lucide:puzzle',
+			iconSrc: pluginType.iconUrl,
+			group: 'From plugins'
+		}))
+	]);
 </script>
 
 <Dialog.Content size={type === 'computed' ? 'lg' : 'md'}>

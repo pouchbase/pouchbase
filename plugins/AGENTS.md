@@ -23,25 +23,31 @@ Everything in this project is **English**: code, identifiers, comments, docs and
 
 ```
 plugins/
-├── testing.ts               # fakeContext(): a PluginContext with canned fetch responses, for tests
+├── testing.ts               # fakeContext(manifest, responses, settings?): a PluginContext with canned
+│                            # fetch responses and ctx.settings parsed like the host's, for tests
 └── auth-<provider>/
     ├── package.json         # @pouchbase-plugins/auth-<provider>: version, description, license, author, …
-    ├── pouchbase-plugin.json  # the manifest: a human `name`, no `version` (it comes from package.json)
-    ├── server/index.ts      # definePlugin({ authProviders: { <provider>: … } })
-    ├── ui/<provider>.svg    # the provider's logo, from @iconify-json/logos
-    ├── test/server.test.ts  # the profile mapping against fake API responses
+    ├── pouchbase-plugin.json  # id, a human `name`, icon, categories, engines, permissions; no `version`
+    │                          # (it comes from package.json), no `contributes` or `server`
+    ├── auth/<provider>/
+    │   ├── provider.ts      # export default defineAuthProvider({ label, consoleUrl, authorizeUrl, … })
+    │   └── icon.svg         # the provider's logo, from @iconify-json/logos; also the plugin's icon
+    ├── test/provider.test.ts  # the provider's settings and profile mapping against fake API responses
+    ├── plugin.ts            # only when the plugin has settings: definePlugin({ settings }) + Register
     ├── tsconfig.json, README.md, LICENSE
 ```
 
 ## Rules
 
+- The plugins use the convention layout of `@pouchbasejs/plugin-sdk` (see its README): the folder `auth/<provider>/` is the provider, so the manifest lists no contributions. The logo's bundle path is `ui/auth/<provider>/icon.svg`, served at `/api/plugins/<id>/assets/ui/auth/<provider>/icon.svg`.
+- Pouchbase builds them in: `vite/embedded-plugins.ts` reads every folder with `discoverProject()`, like `pouchbase-plugin build` does, and `src/lib/server/plugins/embedded.ts` runs them in process. A folder that can't be read is left out with an error in the server log, so run `pnpm plugins:validate` after a change.
 - A plugin is written like any third-party plugin, against the public contract in `packages/plugin-sdk` only: no imports from the app (`src/`, `#lib`) and nothing AGPL. Server code imports only `@pouchbasejs/plugin-sdk/server`.
 - Plugin ids are `auth-<provider>`, package names `@pouchbase-plugins/<id>`; every package is `private` (they are published to the plugin registry, not npm). The manifest sets `name` itself, because `withPackageDefaults` would otherwise use the scoped package name.
 - `version` lives only in `package.json` and is bumped by Changesets (`'@pouchbase-plugins/auth-github': patch`); a plugin change gets a changeset like any other package.
 - `permissions.network` lists exactly the hosts that `profile()` calls, nothing more. The host does the authorize redirect and the token exchange itself from `authorizeUrl`, `tokenUrl`, `scopes` and `pkce`.
-- Provider ids are global (`google`, not `auth-google.google`): they appear in sign-in URLs, the API and `_external_auths.provider`, so never rename one.
+- Provider ids come from the folder name (`auth/google/` is `google`) and are global (`google`, not `auth-google.google`): they appear in sign-in URLs, the API and `_external_auths.provider`, so never rename one.
 - Only set `emailVerified` when the provider guarantees the email belongs to the user; it links a sign-in to an existing user with that email.
-- Every plugin has tests for its `profile()` mapping, using `fakeContext` from `testing.ts`, which also fails a request to a host outside `permissions.network`.
+- Every plugin has tests for its `profile()` mapping, using `fakeContext` from `testing.ts`, which also fails a request to a host outside `permissions.network` (exact host names only). Third-party plugins use the public `fakeContext` of `@pouchbasejs/plugin-sdk/testing` instead (documented in the SDK README and on pouchbase.io/docs/plugins), which matches hosts exactly like the host, `*.example.com` wildcards included.
 
 ## Scripts
 

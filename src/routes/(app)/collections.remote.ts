@@ -147,13 +147,26 @@ export const importCollections = command(importSchema, async ({ file, ...options
 		const failure = result.error;
 
 		if (failure.code === 6015) {
-			const names = failure.data.problems.map(
-				(problem) => `${problem.collection}.${problem.field}`
+			const { problems } = failure.data;
+			const plugins = problems.flatMap((problem) =>
+				problem.kind === 'plugin'
+					? [`${problem.collection}.${problem.field} (${problem.pluginId})`]
+					: []
 			);
+			const relations = problems.flatMap((problem) =>
+				problem.kind === 'relation' ? [`${problem.collection}.${problem.field}`] : []
+			);
+
+			if (plugins.length) {
+				error(
+					422,
+					`Fields have a type of a plugin this instance doesn't have: ${plugins.join(', ')}. Install those plugins first.`
+				);
+			}
 
 			error(
 				422,
-				`Relation fields point at collections this instance doesn't have: ${names.join(', ')}. Import those collections too.`
+				`Relation fields point at collections this instance doesn't have: ${relations.join(', ')}. Import those collections too.`
 			);
 		}
 

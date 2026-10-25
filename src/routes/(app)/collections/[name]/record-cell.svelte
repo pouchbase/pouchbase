@@ -2,10 +2,21 @@
 	import * as Badge from '#lib/components/ui/badge/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Link from '#lib/components/ui/link/index.js';
+	import * as PluginComponent from '#lib/components/ui/plugin-component/index.js';
+	import * as Skeleton from '#lib/components/ui/skeleton/index.js';
 	import * as Thumbnail from '#lib/components/ui/thumbnail/index.js';
 	import { listSelection } from '#lib/fields/field-types.js';
 	import { FILES_COLLECTION, fileUrl, formatFileSize } from '#lib/files/files.js';
-	import { formatTimestamp, plainText, recordHref, type GridColumn, type GridValue } from './grid';
+	import {
+		formatTimestamp,
+		plainText,
+		pluginFieldInfo,
+		pluginRef,
+		rawValue,
+		recordHref,
+		type GridColumn,
+		type GridValue
+	} from './grid';
 
 	type Props = {
 		column: GridColumn;
@@ -19,6 +30,25 @@
 
 {#if value === null || value === undefined || (Array.isArray(value) && !value.length)}
 	<span class="text-xs text-zinc-400 italic">NULL</span>
+{:else if column.field && column.pluginType !== undefined}
+	<!-- A plugin's type: its preview, or the value as text without one (or the plugin). -->
+	{#if column.pluginType?.preview}
+		<PluginComponent.Root
+			plugin={pluginRef(column.pluginType)}
+			path={column.pluginType.preview}
+			props={{ field: pluginFieldInfo(column.field), value }}
+		>
+			{#snippet loading()}
+				<Skeleton.Root class="h-4 w-16" />
+			{/snippet}
+
+			{#snippet fallback()}
+				<span class="truncate">{rawValue(value)}</span>
+			{/snippet}
+		</PluginComponent.Root>
+	{:else}
+		<span class="truncate">{rawValue(value)}</span>
+	{/if}
 {:else if type === 'created' || type === 'updated' || type === 'date'}
 	<span class="font-mono text-xs">{formatTimestamp(value as number | string)}</span>
 {:else if column.fileSize && typeof value === 'number'}

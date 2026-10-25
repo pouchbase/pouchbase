@@ -7,15 +7,17 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import * as Sortable from '#lib/components/ui/sortable/index.js';
+	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 	import {
 		COMPUTED_TRANSFORMS,
-		FIELD_TYPES,
 		ID_GENERATORS,
 		idGenerator,
 		isAutoType,
+		isPluginFieldType,
 		RELATION_ON_DELETE,
 		relationOnDelete
 	} from '#lib/fields/field-types.js';
+	import { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 	import { updateFieldsSchema } from '#lib/schemas/fields.js';
 	import AddFieldDialog from './add-field-dialog.svelte';
 	import EditCollectionIndexes from './edit-collection-indexes.svelte';
@@ -36,6 +38,17 @@
 
 	const dialogs = Dialog.getDialogs();
 
+	// Not awaited: until the plugins' types are in, plugin fields show what they remember of theirs.
+	const pluginTypes = $derived(
+		fields.some((field) => isPluginFieldType(field.type))
+			? listPluginFieldTypes().current
+			: undefined
+	);
+
+	function typeOf(field: GridField) {
+		return fieldTypeInfo(field, pluginTypes);
+	}
+
 	function toRow(field: GridField) {
 		return {
 			id: field.id,
@@ -46,7 +59,11 @@
 		};
 	}
 
-	const form = $derived(updateFields.for(collection.id).preflight(updateFieldsSchema));
+	const form = $derived.by(() => {
+		const key = collection.id;
+
+		return untrack(() => updateFields.for(key).preflight(updateFieldsSchema));
+	});
 
 	// The form state is the source of truth while editing: inputs are bound to `fields[index]`, so
 	// reordering rewrites the array and the edits move along with their rows.
@@ -95,6 +112,7 @@
 	function hasSettings(field: GridField) {
 		return (
 			!field.system &&
+			!typeOf(field).orphaned &&
 			field.type !== 'computed' &&
 			field.type !== 'created' &&
 			field.type !== 'updated' &&
@@ -110,7 +128,18 @@
 
 	/** The type, plus what sets this field apart, e.g. `Computed · Slug of title`. */
 	function describe(field: GridField) {
-		const parts: string[] = [FIELD_TYPES[field.type].label];
+		const type = typeOf(field);
+
+		// The plugin isn't installed: the field keeps its data, but can't be edited.
+		if (type.orphaned) {
+			return type.description;
+		}
+
+		const parts: string[] = [type.label];
+
+		if (type.plugin) {
+			parts.push(`Plugin ${type.plugin.name ?? type.plugin.id}`);
+		}
 
 		if (field.type === 'computed' && field.options.transform) {
 			const transform = COMPUTED_TRANSFORMS[field.options.transform].label;
@@ -175,7 +204,7 @@
 					{@const field = byId.get(row.id)}
 
 					{#if field}
-						{@const type = FIELD_TYPES[field.type]}
+						{@const type = typeOf(field)}
 						{@const locked = field.system || row.remove}
 						{@const auto = isAutoType(field.type)}
 						{@const canRequire = field.type !== 'computed' && !auto}
@@ -190,7 +219,7 @@
 
 							<Sortable.Handle aria-label="Move {field.name}" />
 							<Sortable.Icon title={type.label}>
-								<Icon.Root icon={type.icon} />
+								<Icon.Root icon={type.icon} src={type.iconUrl} />
 							</Sortable.Icon>
 
 							<div class="flex min-w-0 flex-1 flex-col">

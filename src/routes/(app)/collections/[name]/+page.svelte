@@ -27,7 +27,8 @@
 	import { USERS_COLLECTION } from '#lib/auth/users.js';
 	import * as Thumbnail from '#lib/components/ui/thumbnail/index.js';
 	import * as Gallery from '#lib/components/ui/gallery/index.js';
-	import { isAutoType } from '#lib/fields/field-types.js';
+	import { isAutoType, isPluginFieldType } from '#lib/fields/field-types.js';
+	import { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 	import { FILES_COLLECTION, fileUrl, formatFileSize, isInlineImage } from '#lib/files/files.js';
 	import { previewThumbnail } from '#lib/files/thumbnails.js';
 	import { LiveCollection } from '#lib/realtime/live.svelte.js';
@@ -71,9 +72,13 @@
 	const isUsers = $derived(collection.system && collection.name === USERS_COLLECTION);
 	const isFiles = $derived(collection.system && collection.name === FILES_COLLECTION);
 	const relationTargets = $derived(data.relationTargets ?? {});
+	// Only collections with plugin fields need the plugins' types (for their components).
+	const pluginTypes = $derived(
+		fields.some((field) => isPluginFieldType(field.type)) ? await listPluginFieldTypes() : []
+	);
 	const fieldColumns = $derived(
 		fields.map((field) => ({
-			...fieldColumn(field),
+			...fieldColumn(field, pluginTypes),
 			relationTarget: relationTargets[field.name],
 			fileSize: isFiles && field.name === 'size'
 		}))
@@ -429,6 +434,7 @@
 	{fields}
 	record={editing}
 	{relationTargets}
+	{pluginTypes}
 	signInMethods={editing ? (signInMethods[editing._key] ?? openedSignInMethods) : undefined}
 	bind:open={() => sheetOpen && openedIn === params.name, setSheetOpen}
 	onDelete={(id) => void confirmDelete([id])}

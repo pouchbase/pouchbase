@@ -114,9 +114,9 @@ describe('feedback', () => {
 
 		expect(stdout.slice(0, 4)).toEqual([
 			'› Reading pouchbase-plugin.json',
-			expect.stringMatching(/^ {2}demo-page@0\.1\.0 \(API version \d+\), contributes 1 page$/),
-			'› Checking ui/',
-			expect.stringMatching(/^ {2}\d+ files?/)
+			'  demo-page, convention layout',
+			'› Looking for fields/, pages/, auth/, routes/',
+			'  1 page, 1 route file'
 		]);
 	});
 

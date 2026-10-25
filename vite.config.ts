@@ -8,6 +8,7 @@ import cloudflare from '@sveltejs/adapter-cloudflare';
 import node from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig, loadEnv } from 'vite';
+import { embeddedPlugins } from './vite/embedded-plugins.ts';
 import { platform } from './vite/platform.ts';
 import { realtime } from './vite/realtime.ts';
 
@@ -30,6 +31,7 @@ export default defineConfig(({ mode }) => {
 		plugins: [
 			platform(target),
 			realtime(),
+			embeddedPlugins(),
 			iconify({ sets: [lucide, logos] }),
 			tailwindcss(),
 			sveltekit({
@@ -45,7 +47,10 @@ export default defineConfig(({ mode }) => {
 					remoteFunctions: true
 				},
 				...(devDir && { outDir: `${devDir}/kit` }),
-				adapter: target === 'node' ? node() : cloudflare()
+				adapter:
+					target === 'node'
+						? node()
+						: cloudflare({ platformProxy: { configPath: 'wrangler.dev.jsonc' } })
 			})
 		]
 	};

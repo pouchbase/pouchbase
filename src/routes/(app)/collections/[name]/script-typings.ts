@@ -1,10 +1,21 @@
 import type { FieldType } from '#lib/fields/field-types.js';
 import type { GridField } from './grid';
 
-import { FIELD_TYPES, idGenerator } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
+import { idGenerator } from '#lib/fields/field-types.js';
 
 /** How each field type reaches a script: the value as it is stored in the column. */
 function valueType(field: GridField): { type: string; note?: string } | null {
+	const info = fieldTypeInfo(field);
+
+	// A plugin's type reaches the script as its plugin stored it.
+	if (info.plugin) {
+		return {
+			type: info.column === 'INTEGER' || info.column === 'REAL' ? 'number | null' : 'string | null',
+			note: `As the plugin ${info.plugin.id} stores it.`
+		};
+	}
+
 	const types: Record<FieldType, { type: string; note?: string } | null> = {
 		id:
 			idGenerator(field.options) === 'autoincrement'
@@ -47,7 +58,7 @@ function valueType(field: GridField): { type: string; note?: string } | null {
 		blob: null
 	};
 
-	return types[field.type] ?? { type: 'unknown' };
+	return types[field.type as FieldType] ?? { type: 'unknown' };
 }
 
 /**
@@ -63,7 +74,7 @@ export function scriptTypings(collection: string, fields: GridField[]) {
 			return [];
 		}
 
-		const doc = [`\`${field.name}\` · ${FIELD_TYPES[field.type].label}.`, value.note]
+		const doc = [`\`${field.name}\` · ${fieldTypeInfo(field).label}.`, value.note]
 			.filter(Boolean)
 			.join(' ');
 

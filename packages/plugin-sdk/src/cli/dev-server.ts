@@ -12,7 +12,7 @@ import { createServer, type ServerResponse } from 'node:http';
 
 import { computeIntegrity, serializeBundle } from '../bundle.js';
 import { effectiveCategories } from '../categories.js';
-import { REGISTRY_API_PREFIX } from '../registry.js';
+import { contributionSummary, REGISTRY_API_PREFIX } from '../registry.js';
 import { count, elapsed, kib } from './format.js';
 import { CliError, createLogger, type Logger } from './output.js';
 import { buildBundle } from './project.js';
@@ -26,7 +26,14 @@ import { buildBundle } from './project.js';
  * update of the one it installed; `exactVersion` serves the version from the manifest instead.
  */
 
-type Build = { bundle: PluginBundle; bytes: Uint8Array<ArrayBuffer>; integrity: string; at: Date };
+type Build = {
+	bundle: PluginBundle;
+	bytes: Uint8Array<ArrayBuffer>;
+	integrity: string;
+	at: Date;
+	/** Route keys of the server code, for the `contributes` summary. */
+	routes: string[];
+};
 
 const IGNORED = /(?:^|[\\/])(?:node_modules|dist|\.git)(?:[\\/]|$)/;
 
@@ -66,7 +73,13 @@ export async function startDevServer(
 			const { bundle, bytes } = exactVersion ? built : withDevVersion(built.bundle, builds + 1);
 
 			builds += 1;
-			current = { bundle, bytes, integrity: await computeIntegrity(bytes), at: new Date() };
+			current = {
+				bundle,
+				bytes,
+				integrity: await computeIntegrity(bytes),
+				at: new Date(),
+				routes: built.routes
+			};
 			log.success(
 				`Built ${bundle.manifest.id}@${bundle.manifest.version} in ${elapsed(start)} (${kib(bytes.byteLength)})`
 			);
@@ -95,6 +108,7 @@ export async function startDevServer(
 			bundleUrl: `${base}${REGISTRY_API_PREFIX}/plugins/${manifest.id}/versions/${manifest.version}/bundle`,
 			pouchbase: manifest.engines.pouchbase ?? null,
 			permissions: manifest.permissions,
+			contributes: contributionSummary(manifest, build.routes),
 			publishedAt: build.at.toISOString()
 		};
 	}

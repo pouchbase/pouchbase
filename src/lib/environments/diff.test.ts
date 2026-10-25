@@ -334,6 +334,73 @@ describe('diff', () => {
 		expect(plan.warnings).toEqual([{ kind: 'plugin.api', plugin: 'acme/next', apiVersion: 2 }]);
 	});
 
+	describe('plugin fields', () => {
+		const demo = {
+			id: 'demo',
+			name: 'Demo',
+			version: '1.0.0',
+			apiVersion: 1,
+			integrity: 'sha256-a',
+			registryUrl: 'https://registry.pouchbase.io'
+		};
+		const reviews = collection({
+			id: 'c-reviews',
+			name: 'reviews',
+			fields: [
+				field({
+					id: 'f-rating',
+					name: 'rating',
+					type: 'demo:rating',
+					options: { plugin: { label: 'Rating', column: 'INTEGER' } }
+				})
+			]
+		});
+
+		it('installs the plugin before the fields that use its types', () => {
+			const plan = diff(snapshot({ collections: [reviews], plugins: [demo] }), snapshot());
+
+			expect(plan.steps.map((step) => step.kind)).toEqual([
+				'plugin.install',
+				'collection.create',
+				'field.create'
+			]);
+			expect(plan.warnings).toEqual([]);
+		});
+
+		it('needs nothing when the target has the plugin', () => {
+			const plan = diff(
+				snapshot({ collections: [reviews], plugins: [demo] }),
+				snapshot({ plugins: [demo] })
+			);
+
+			expect(plan.warnings).toEqual([]);
+		});
+
+		it('warns when the target will not have the plugin', () => {
+			const plan = diff(
+				snapshot({ collections: [reviews], plugins: [{ ...demo, apiVersion: 2 }] }),
+				snapshot()
+			);
+
+			expect(plan.warnings).toEqual([
+				{ kind: 'plugin.api', plugin: 'demo', apiVersion: 2 },
+				{
+					kind: 'field.plugin',
+					collection: 'reviews',
+					field: 'rating',
+					type: 'demo:rating',
+					pluginId: 'demo'
+				}
+			]);
+		});
+
+		it("doesn't warn about plugins the source snapshot doesn't list (built-in ones)", () => {
+			const plan = diff(snapshot({ collections: [reviews] }), snapshot());
+
+			expect(plan.warnings).toEqual([]);
+		});
+	});
+
 	it('copies settings and OAuth client ids, but warns about secrets', () => {
 		const plan = diff(
 			snapshot({

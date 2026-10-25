@@ -1,0 +1,10 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	// The Worker that `vite dev` emulates (adapter-cloudflare's platform proxy, see vite.config.ts).
+	// No `durable_objects`: the dev server doesn't export `RealtimeHub` (realtime runs on the Node
+	// hub there, vite/realtime.ts), and Miniflare warns about a binding to a class it can't find.
+	// Keep `compatibility_date` and `compatibility_flags` in sync with wrangler.jsonc.
+	"name": "pouchbase",
+	"compatibility_date": "2026-10-20",
+	"compatibility_flags": ["nodejs_als", "global_fetch_strictly_public"]
+}

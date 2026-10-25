@@ -9,10 +9,10 @@
 		COMPUTED_SOURCE_TYPES,
 		COMPUTED_TRANSFORM_IDS,
 		COMPUTED_TRANSFORMS,
-		FIELD_TYPES,
 		hasComputedSource,
 		SCRIPT_TEMPLATE
 	} from '#lib/fields/field-types.js';
+	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 	import { previewComputed } from './fields.remote';
 	import type { GridField } from './grid';
 	import { scriptTypings } from './script-typings';
@@ -56,8 +56,8 @@
 			.map((field) => ({
 				value: field.name,
 				label: field.name,
-				description: FIELD_TYPES[field.type].label,
-				icon: FIELD_TYPES[field.type].icon
+				description: fieldTypeInfo(field).label,
+				icon: fieldTypeInfo(field).icon
 			}))
 	);
 

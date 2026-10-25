@@ -5,14 +5,11 @@
 	import type { AnyRemoteFormField } from '#lib/components/ui/form/form-context.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
-	import {
-		COMPUTED_TRANSFORMS,
-		FIELD_TYPES,
-		listSelection,
-		NOW_DEFAULT
-	} from '#lib/fields/field-types.js';
+	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
+	import { COMPUTED_TRANSFORMS, listSelection, NOW_DEFAULT } from '#lib/fields/field-types.js';
 	import { listRelationOptions } from './records.remote';
-	import { recordHref, type GridField, type GridValue } from './grid';
+	import { rawValue, recordHref, type GridField, type GridValue, type PluginType } from './grid';
+	import RecordPluginControl from './record-plugin-control.svelte';
 
 	type Props = {
 		field: GridField;
@@ -22,9 +19,16 @@
 		value: GridValue | undefined;
 		/** Name of the collection a relation field points to, for links to the related records. */
 		relationTarget?: string;
+		/**
+		 * For a field with a plugin's type: the installed type, `null` when it isn't installed (the
+		 * field is read-only then); `undefined` for built-in types.
+		 */
+		pluginType?: PluginType | null;
 	};
 
-	let { field, formField, value, relationTarget }: Props = $props();
+	let { field, formField, value, relationTarget, pluginType }: Props = $props();
+
+	const typeInfo = $derived(fieldTypeInfo(field, pluginType ? [pluginType] : []));
 
 	const relationRefs = $derived(Array.isArray(value) ? value : []);
 	// A new record starts with the field's default; a saved record with its own selection.
@@ -98,7 +102,19 @@
 			{/if}
 		</Form.Label>
 
-		{#if field.type === 'computed'}
+		{#if pluginType}
+			<!-- A new record starts with the default value, as the plugin stored it. -->
+			<RecordPluginControl
+				{field}
+				{pluginType}
+				value={value === undefined ? (field.options.plugin?.default ?? null) : value}
+			/>
+		{:else if pluginType === null}
+			<!-- Not rendered as a control, so saving keeps the stored value. -->
+			<p class="text-sm break-words text-zinc-500">
+				{value === null || value === undefined ? 'No value.' : rawValue(value)}
+			</p>
+		{:else if field.type === 'computed'}
 			<!-- Disabled, so it isn't submitted: the server calculates the value on save. -->
 			<Form.Input defaultValue={text} placeholder="Calculated on save" disabled />
 		{:else if field.type === 'rich_text'}
@@ -185,8 +201,10 @@
 			{:else if field.type === 'computed' && field.options.transform}
 				{COMPUTED_TRANSFORMS[field.options.transform].label} of
 				<span class="font-mono">{field.options.source}</span>, updated when you save
+			{:else if typeInfo.orphaned}
+				{typeInfo.description}; can't be edited until it is installed again
 			{:else}
-				{FIELD_TYPES[field.type].label}{field.type === 'date' ? ' (UTC)' : ''}{field.defaultValue
+				{typeInfo.label}{field.type === 'date' ? ' (UTC)' : ''}{field.defaultValue
 					? ` · defaults to ${field.defaultValue === NOW_DEFAULT ? 'the time it is created' : (options.find((option) => option.value === field.defaultValue)?.label ?? field.defaultValue)}`
 					: ''}
 			{/if}

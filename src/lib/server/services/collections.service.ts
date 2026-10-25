@@ -11,6 +11,7 @@ import type {
 } from '#lib/schemas/collections.js';
 import type { SnapshotCollection } from '#lib/schemas/environments.js';
 import type { CreateFieldInput, Field, FieldsService } from './fields.service';
+import type { PluginsService } from './plugins.service';
 import type { ResultAsync } from 'neverthrow';
 
 import { and, asc, eq, inArray, ne, sql } from 'drizzle-orm';
@@ -54,11 +55,14 @@ type SchemasError = ErrorOf<ReturnType<EnvironmentsService['collections']>>;
 /** Relation fields of the file point at collections this instance doesn't have. */
 type InvalidImport = ServiceError<6015, 'INVALID_IMPORT'> & { data: { problems: ImportProblem[] } };
 
+type PluginTypesError = ErrorOf<ReturnType<PluginsService['fieldTypes']>>;
+
 /** The plan deletes collections, fields or their data, and that wasn't confirmed. */
 type NotConfirmed = ServiceError<6016, 'DESTRUCTIVE_NOT_CONFIRMED'> & { data: { plan: Plan } };
 
 type ImportError =
 	| SchemasError
+	| PluginTypesError
 	| InvalidImport
 	| NotConfirmed
 	| ErrorOf<ReturnType<EnvironmentsService['runSteps']>>;
@@ -487,31 +491,41 @@ export class CollectionsService extends Service {
 	 * that deletes collections, fields or data only runs with `force`.
 	 */
 	import(file: CollectionExport, options: ImportOptions): ResultAsync<ImportResult, ImportError> {
-		return this.schemas().andThen((target): ResultAsync<ImportResult, ImportError> => {
-			const planned = planImport(file, target, options);
+		return this.schemas()
+			.andThen((target) =>
+				this.services
+					.plugins()
+					.fieldTypes()
+					.map((types) => ({
+						target,
+						pluginFieldTypes: new Set<string>(types.map((type) => type.id))
+					}))
+			)
+			.andThen(({ target, pluginFieldTypes }): ResultAsync<ImportResult, ImportError> => {
+				const planned = planImport(file, target, { ...options, pluginFieldTypes });
 
-			if ('problems' in planned) {
-				return errAsync({
-					...this.error(6015, 'INVALID_IMPORT'),
-					data: { problems: planned.problems }
-				});
-			}
+				if ('problems' in planned) {
+					return errAsync({
+						...this.error(6015, 'INVALID_IMPORT'),
+						data: { problems: planned.problems }
+					});
+				}
 
-			const { plan } = planned;
+				const { plan } = planned;
 
-			if (options.dryRun || !plan.steps.length) {
-				return okAsync({ plan, applied: false });
-			}
+				if (options.dryRun || !plan.steps.length) {
+					return okAsync({ plan, applied: false });
+				}
 
-			if (planSeverity(plan) === 'destructive' && !options.force) {
-				return errAsync({ ...this.error(6016, 'DESTRUCTIVE_NOT_CONFIRMED'), data: { plan } });
-			}
+				if (planSeverity(plan) === 'destructive' && !options.force) {
+					return errAsync({ ...this.error(6016, 'DESTRUCTIVE_NOT_CONFIRMED'), data: { plan } });
+				}
 
-			return this.services
-				.environments()
-				.runSteps(plan.steps)
-				.map(() => ({ plan, applied: true }));
-		});
+				return this.services
+					.environments()
+					.runSteps(plan.steps)
+					.map(() => ({ plan, applied: true }));
+			});
 	}
 
 	/** Creates a collection with its fields, indexes and API rules (`POST /api/schema`). */

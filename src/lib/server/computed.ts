@@ -1,4 +1,4 @@
-import type { ComputedTransform, FieldOptions, FieldType } from '#lib/fields/field-types.js';
+import type { ComputedTransform, FieldOptions, FieldTypeId } from '#lib/fields/field-types.js';
 
 import { computeValue, hasComputedSource } from '#lib/fields/field-types.js';
 
@@ -11,14 +11,14 @@ import { ScriptError, ScriptSandbox } from './scripts';
  */
 
 /** The parts of a field that computing needs. */
-type FieldLike = { name: string; type: FieldType; options: FieldOptions };
+type FieldLike = { name: string; type: FieldTypeId; options: FieldOptions };
 
 /** A computed field and what it is calculated from. */
 export type ComputedSpec = {
 	name: string;
 	transform: ComputedTransform;
 	/** For the built-in transforms. */
-	source?: { name: string; type: FieldType };
+	source?: { name: string; type: FieldTypeId };
 	/** For `script`. */
 	script?: string;
 };

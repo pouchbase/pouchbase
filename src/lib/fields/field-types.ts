@@ -1,3 +1,5 @@
+import { PLUGIN_FIELD_TYPE_PATTERN } from '@pouchbasejs/plugin-sdk';
+
 /**
  * Field types of a collection. Each type maps onto one of D1's (SQLite's) storage classes and adds
  * its own meaning and validation on top.
@@ -144,6 +146,20 @@ export type FieldType = keyof typeof FIELD_TYPES;
 export const FIELD_TYPE_IDS = Object.keys(FIELD_TYPES) as [FieldType, ...FieldType[]];
 
 /**
+ * A field type that a plugin contributes, stored as `<plugin>:<type>` (e.g. `demo:rating`; see
+ * `PLUGIN_FIELD_TYPE_PATTERN` of the plugin SDK). Built-in types never contain a `:`.
+ */
+export type PluginFieldTypeId = `${string}:${string}`;
+
+/** The type of a field: a built-in one, or one from a plugin. */
+export type FieldTypeId = FieldType | PluginFieldTypeId;
+
+/** Whether `type` is a plugin's field type id (`<plugin>:<type>`) rather than a built-in type. */
+export function isPluginFieldType(type: string): type is PluginFieldTypeId {
+	return PLUGIN_FIELD_TYPE_PATTERN.test(type);
+}
+
+/**
  * Field types whose value is filled in by Pouchbase when a record is saved: the record's key and
  * its timestamps (milliseconds since the epoch). They have no required, unique or default setting.
  * A collection has at most one `id` field; without one, records are identified by SQLite's `rowid`
@@ -151,8 +167,8 @@ export const FIELD_TYPE_IDS = Object.keys(FIELD_TYPES) as [FieldType, ...FieldTy
  */
 export const AUTO_FIELD_TYPES = new Set<FieldType>(['id', 'created', 'updated']);
 
-export function isAutoType(type: FieldType) {
-	return AUTO_FIELD_TYPES.has(type);
+export function isAutoType(type: FieldTypeId) {
+	return AUTO_FIELD_TYPES.has(type as FieldType);
 }
 
 /** How an `id` field generates the key of a new record. */
@@ -233,6 +249,13 @@ export const RICH_TEXT_FORMATS = ['html', 'markdown'] as const;
 
 export type RichTextFormat = (typeof RICH_TEXT_FORMATS)[number];
 
+/** What a plugin field remembers of its type (see `FieldOptions.plugin`). */
+export type PluginFieldSnapshot = {
+	label: string;
+	column: ColumnType;
+	default?: string | number;
+};
+
 export type FieldOptions = {
 	/** Only for `id`: how the key of a new record is generated. */
 	generator?: IdGenerator;
@@ -273,13 +296,20 @@ export type FieldOptions = {
 	 * `./sql-expression.ts`), e.g. `datetime('now', '+7 days')`.
 	 */
 	defaultSql?: boolean;
+	/**
+	 * Only for plugin field types: what the type was when the field was created, so the field stays
+	 * describable when the plugin is removed. The column type is fixed for the field's lifetime.
+	 * `default` is the default value as the plugin serialized it (the column's DEFAULT); the field's
+	 * `defaultValue` keeps what was entered.
+	 */
+	plugin?: PluginFieldSnapshot;
 };
 
 /**
  * Field types whose value is the id of a record in another collection: relations, and file fields,
  * which are relations to the built-in `files` collection.
  */
-export function isRelationType(type: FieldType) {
+export function isRelationType(type: FieldTypeId) {
 	return type === 'relation' || type === 'file';
 }
 
@@ -368,7 +398,7 @@ export const COMPUTED_TRANSFORM_IDS = Object.keys(COMPUTED_TRANSFORMS) as [
 ];
 
 /** Field types a computed field can be calculated from. */
-export const COMPUTED_SOURCE_TYPES = new Set<FieldType>([
+export const COMPUTED_SOURCE_TYPES = new Set<FieldTypeId>([
 	'text',
 	'rich_text',
 	'email',
@@ -397,7 +427,7 @@ export function slugify(value: string) {
  */
 export function computeValue(
 	transform: ComputedTransform,
-	sourceType: FieldType,
+	sourceType: FieldTypeId,
 	value: unknown
 ): string | null {
 	if (value === null || value === undefined || value === '') {
@@ -448,7 +478,12 @@ export function isReservedFieldName(name: string) {
  *
  * @returns An error message, or `null` when the value is valid.
  */
-export function validateDefaultValue(type: FieldType, value: string): string | null {
+export function validateDefaultValue(type: FieldTypeId, value: string): string | null {
+	// A plugin checks the default values of its types itself, when the field is saved.
+	if (isPluginFieldType(type)) {
+		return null;
+	}
+
 	switch (type) {
 		case 'id':
 		case 'created':

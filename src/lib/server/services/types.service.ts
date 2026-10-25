@@ -1,16 +1,20 @@
-import type { ServiceError } from './base.service';
+import type { ErrorOf, ServiceError } from './base.service';
 import type { Collection } from './collections.service';
 import type { Field } from './fields.service';
+import type { PluginFieldType, PluginsService } from './plugins.service';
 import type { ResultAsync } from 'neverthrow';
 
-import { asc } from 'drizzle-orm';
+import { splitPluginFieldType } from '@pouchbasejs/plugin-sdk';
+import { asc, inArray } from 'drizzle-orm';
 import { fromPromise, okAsync } from 'neverthrow';
 
-import { FIELD_TYPES, isAutoType, isRelationType } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
+import { isAutoType, isRelationType } from '#lib/fields/field-types.js';
 import { fieldValueType } from '#lib/fields/value-types.js';
 
 import { generateToken, hashToken } from '../crypto';
-import { collections, fields } from '../db';
+import { collections, fields, plugins } from '../db';
+import { hasPluginFields } from '../plugin-fields';
 import { Service } from './base.service';
 
 /** `blog_posts` → `BlogPosts`. */
@@ -30,12 +34,18 @@ function isMultiple(field: Field) {
 	);
 }
 
+/** What the declarations need to know of the plugin field types. */
+type PluginTypes = {
+	/** The installed plugin field types, for their labels. */
+	installed: readonly PluginFieldType[];
+	/** Ids of the installed types whose plugin deserializes the stored values (or may). */
+	deserializes: ReadonlySet<string>;
+};
+
 /** A JSDoc comment for a field. */
-function fieldDoc(field: Field, note: string | undefined) {
-	const doc = [
-		`\`${field.name}\` · ${FIELD_TYPES[field.type].label}${field.required ? ', required' : ''}.`,
-		note
-	]
+function fieldDoc(field: Field, note: string | undefined, pluginTypes: PluginTypes) {
+	const label = fieldTypeInfo(field, pluginTypes.installed).label;
+	const doc = [`\`${field.name}\` · ${label}${field.required ? ', required' : ''}.`, note]
 		.filter(Boolean)
 		.join(' ');
 
@@ -52,7 +62,7 @@ function fieldDoc(field: Field, note: string | undefined) {
  * - `Schema`: both per collection, for the SDK: `createClient<Schema>(url)`.
  * - `Collections`: the record type per collection.
  */
-function declarations(list: Collection[], all: Field[]) {
+function declarations(list: Collection[], all: Field[], pluginTypes: PluginTypes) {
 	const collectionNames = new Map(list.map((collection) => [collection.id, collection.name]));
 	const used = new Set<string>();
 	const names = list.map((collection) => {
@@ -77,12 +87,14 @@ function declarations(list: Collection[], all: Field[]) {
 			field.options.collectionId ? collectionNames.get(field.options.collectionId) : undefined;
 
 		const record = own.flatMap((field) => {
-			const value = fieldValueType(field, target(field));
+			const value = fieldValueType(field, target(field), {
+				deserializes: pluginTypes.deserializes.has(field.type)
+			});
 			const filled = field.type === 'id' || field.type === 'created' || field.type === 'updated';
 			const nullable = !filled && !field.required && !isMultiple(field);
 
 			return [
-				fieldDoc(field, value.note),
+				fieldDoc(field, value.note, pluginTypes),
 				`\t${field.name}: ${value.type}${nullable ? ' | null' : ''};`
 			];
 		});
@@ -90,13 +102,15 @@ function declarations(list: Collection[], all: Field[]) {
 		const create = own
 			.filter((field) => !isAutoType(field.type) && field.type !== 'computed')
 			.flatMap((field) => {
-				const value = fieldValueType(field, target(field));
+				const value = fieldValueType(field, target(field), {
+					deserializes: pluginTypes.deserializes.has(field.type)
+				});
 				const optional = !field.required || !!field.defaultValue;
 				// Dates may also be sent as a `Date`; it is sent as ISO 8601 text.
 				const type = field.type === 'date' ? `${value.type} | Date` : value.type;
 
 				return [
-					fieldDoc(field, value.note),
+					fieldDoc(field, value.note, pluginTypes),
 					`\t${field.name}${optional ? '?' : ''}: ${type}${optional ? ' | null' : ''};`
 				];
 			});
@@ -185,6 +199,7 @@ export class TypesService extends Service {
 		| ServiceError<5000, 'GET_SETTING_FAILED'>
 		| ServiceError<17000, 'LIST_COLLECTIONS_FAILED'>
 		| ServiceError<17001, 'LIST_FIELDS_FAILED'>
+		| ErrorOf<ReturnType<PluginsService['fieldTypes']>>
 	> {
 		return fromPromise(this.db.select().from(collections).orderBy(asc(collections.name)), (error) =>
 			this.error(17000, 'LIST_COLLECTIONS_FAILED', error)
@@ -193,8 +208,57 @@ export class TypesService extends Service {
 			fromPromise(
 				this.db.select().from(fields).orderBy(asc(fields.position), asc(fields.createdAt)),
 				(error) => this.error(17001, 'LIST_FIELDS_FAILED', error)
-			).map((all) => declarations(list, all))
+			).andThen((all) =>
+				this.pluginTypes(all).map((pluginTypes) => declarations(list, all, pluginTypes))
+			)
 		);
+	}
+
+	/**
+	 * The installed plugin field types, and which of them the API returns deserialized: a type
+	 * whose handler has `deserialize`, as the plugin described itself when it was installed. A
+	 * built-in plugin, or one that didn't describe its handlers, may deserialize.
+	 */
+	private pluginTypes(
+		all: Field[]
+	): ResultAsync<
+		PluginTypes,
+		ErrorOf<ReturnType<PluginsService['fieldTypes']>> | ServiceError<17001, 'LIST_FIELDS_FAILED'>
+	> {
+		if (!hasPluginFields(all)) {
+			return okAsync({ installed: [], deserializes: new Set() });
+		}
+
+		return this.services
+			.plugins()
+			.fieldTypes()
+			.andThen((installed) => {
+				const ids = [...new Set(installed.map((type) => type.pluginId))];
+
+				return fromPromise(
+					ids.length
+						? this.db
+								.select({ id: plugins.id, capabilities: plugins.capabilities })
+								.from(plugins)
+								.where(inArray(plugins.id, ids))
+						: Promise.resolve([]),
+					(error) => this.error(17001, 'LIST_FIELDS_FAILED', error)
+				).map((rows) => {
+					const capabilities = new Map(rows.map((row) => [row.id, row.capabilities]));
+					const deserializes = new Set(
+						installed
+							.filter((type) => {
+								const handlers = capabilities.get(type.pluginId)?.fieldHandlers;
+								const own = splitPluginFieldType(type.id)?.type ?? type.type;
+
+								return !handlers || (Object.hasOwn(handlers, own) && handlers[own].deserialize);
+							})
+							.map((type) => type.id)
+					);
+
+					return { installed, deserializes };
+				});
+			});
 	}
 
 	/** The secret that `GET /api/types` asks for; created the first time it is needed. */

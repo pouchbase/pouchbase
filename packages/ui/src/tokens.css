@@ -1,0 +1,48 @@
+/*
+ * Design tokens of the Pouchbase dashboard: the `@theme` that `theme.css` imports, without its
+ * base styles or sources. `pouchbase-plugin build` compiles a plugin's Tailwind classes with it, so
+ * plugins use the same `h-control`, `h-row`, chart colours and animations as the dashboard.
+ */
+
+@theme {
+	/* Series colours of charts and meters. */
+	--color-chart-1: #2a78d6;
+	--color-chart-2: #eb6834;
+	--color-chart-3: #1baf7a;
+	/* Shared height for all form controls (buttons, inputs, selects, ...) so they line up. */
+	--spacing-control: --spacing(8);
+	/* Height of list and table rows (data grid, sidebar links); roomier than a control. */
+	--spacing-row: --spacing(10);
+	/* Shared height for the sidebar header and the top header, so their borders line up. */
+	--spacing-header: --spacing(14);
+
+	/* Sheets slide in from (and back out to) the right edge; overlays fade. */
+	--animate-sheet-in: sheet-in 200ms cubic-bezier(0.32, 0.72, 0, 1);
+	--animate-sheet-out: sheet-out 150ms ease-in forwards;
+	--animate-fade-in: fade-in 200ms ease-out;
+	--animate-fade-out: fade-out 150ms ease-in forwards;
+
+	@keyframes sheet-in {
+		from {
+			transform: translateX(100%);
+		}
+	}
+
+	@keyframes sheet-out {
+		to {
+			transform: translateX(100%);
+		}
+	}
+
+	@keyframes fade-in {
+		from {
+			opacity: 0;
+		}
+	}
+
+	@keyframes fade-out {
+		to {
+			opacity: 0;
+		}
+	}
+}

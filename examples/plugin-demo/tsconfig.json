@@ -11,5 +11,5 @@
 		"noEmit": true,
 		"resolveJsonModule": true
 	},
-	"include": ["server", "ui/**/*.ts", "ui/**/*.svelte", "test"]
+	"include": ["plugin.ts", "fields", "lib", "pages", "routes", "test", "components"]
 }

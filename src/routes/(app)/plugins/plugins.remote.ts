@@ -1,9 +1,11 @@
 import { error, invalid } from '@sveltejs/kit';
+import { formatCompileIssue } from '@pouchbasejs/plugin-sdk';
 import { z } from 'zod';
 
 import { form, getRequestEvent, query } from '$app/server';
 
-import { pluginIdSchema, searchPluginsSchema } from '#lib/schemas/plugins.js';
+import { pluginIdSchema, pluginSettingsSchema, searchPluginsSchema } from '#lib/schemas/plugins.js';
+import { listPluginFieldTypes, listPluginPages } from '#lib/remote/plugins.remote.js';
 import { fail } from '#lib/server/errors.js';
 
 function requireUser() {
@@ -106,6 +108,17 @@ export const installPlugin = form(pluginIdSchema, async ({ id }) => {
 			invalid(`The plugin's server code did not answer as expected: ${failure.data.reason}`);
 		}
 
+		if (failure.code === 19014) {
+			// The first problems, as `path:line:column: message`, so the author knows where to look.
+			const issues = failure.data.issues.slice(0, 3).map(formatCompileIssue);
+			const more =
+				failure.data.issues.length > issues.length
+					? ` (and ${failure.data.issues.length - issues.length} more)`
+					: '';
+
+			invalid(`The plugin's components could not be compiled: ${issues.join('; ')}${more}`);
+		}
+
 		if (failure.code === 19011) {
 			invalid(
 				'The Cloudflare account has no workers.dev subdomain yet. Open Workers & Pages in the Cloudflare dashboard once to choose one, then try again.'
@@ -116,6 +129,8 @@ export const installPlugin = form(pluginIdSchema, async ({ id }) => {
 	}
 
 	void getInstalledPlugins().refresh();
+	void listPluginPages().refresh();
+	void listPluginFieldTypes().refresh();
 
 	return { name: result.value.name, version: result.value.version };
 });
@@ -138,6 +153,106 @@ export const uninstallPlugin = form(pluginIdSchema, async ({ id }) => {
 	}
 
 	void getInstalledPlugins().refresh();
+	void listPluginPages().refresh();
+	void listPluginFieldTypes().refresh();
 
 	return { removed: true };
+});
+
+/** What the uninstall dialog warns about: the fields that have one of the plugin's types. */
+export const getPluginFieldUsage = query(z.string(), async (id) => {
+	const { services } = requireUser();
+
+	const result = await services.plugins().fieldUsage(id);
+
+	if (result.isErr()) {
+		fail(result.error);
+	}
+
+	return result.value;
+});
+
+/** The settings of a plugin with their values; secrets only say whether they are set. */
+export const getPluginSettings = query(z.string(), async (id) => {
+	const { services } = requireUser();
+
+	const result = await services.plugins().settings(id);
+
+	if (result.isErr()) {
+		fail(result.error);
+	}
+
+	if (!result.value) {
+		error(404, 'Plugin not installed');
+	}
+
+	return result.value;
+});
+
+export const savePluginSettings = form(pluginSettingsSchema, async (data, issue) => {
+	const { services } = requireUser();
+	const plugins = services.plugins();
+
+	const current = await plugins.settings(data.id);
+
+	if (current.isErr()) {
+		fail(current.error);
+	}
+
+	if (!current.value) {
+		error(404, 'Plugin not installed');
+	}
+
+	// One value per setting of the plugin, from the part of the form its type is in.
+	const values: Record<string, string | null | undefined> = {};
+
+	for (const setting of current.value.definition) {
+		const { key } = setting;
+
+		if (setting.type === 'secret') {
+			// Left empty: keep the saved secret.
+			values[key] = data._secrets[key] || undefined;
+		} else if (setting.type === 'boolean') {
+			values[key] = data.flags[key] ? 'true' : 'false';
+		} else if (setting.type === 'number') {
+			const number = data.numbers[key];
+
+			values[key] = number === undefined ? null : String(number);
+		} else {
+			values[key] = data.values[key] || null;
+		}
+	}
+
+	const result = await plugins.saveSettings(data.id, values);
+
+	if (result.isErr()) {
+		if (result.error.code === 19018) {
+			const types = new Map(current.value.definition.map((setting) => [setting.key, setting.type]));
+			const issues = Object.entries(result.error.data.issues).map(([key, message]) => {
+				switch (types.get(key)) {
+					case 'secret':
+						return issue._secrets[key]!(message);
+					case 'boolean':
+						return issue.flags[key]!(message);
+					case 'number':
+						return issue.numbers[key]!(message);
+					default:
+						return issue.values[key]!(message);
+				}
+			});
+
+			invalid(...issues);
+		}
+
+		fail(result.error);
+	}
+
+	if (!result.value) {
+		error(404, 'Plugin not installed');
+	}
+
+	void getPluginSettings(data.id).refresh();
+	void getInstalledPlugins().refresh();
+
+	return { saved: true };
 });

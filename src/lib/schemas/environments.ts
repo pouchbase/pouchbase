@@ -9,7 +9,6 @@ import {
 } from '#lib/environments/snapshot.js';
 import {
 	COMPUTED_TRANSFORM_IDS,
-	FIELD_TYPE_IDS,
 	ID_GENERATOR_IDS,
 	RELATION_ON_DELETE_IDS,
 	RICH_TEXT_FORMATS
@@ -17,6 +16,8 @@ import {
 import { upgradeSettings } from '#lib/collections/upgrade.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 import { FUNCTION_LANGUAGES, MAX_CODE_SIZE } from '#lib/functions/functions.js';
+
+import { fieldTypeIdSchema } from './fields';
 
 /**
  * A snapshot of the schema and configuration of an instance, as one instance sends it to another
@@ -40,14 +41,22 @@ export const fieldOptionsSchema = z
 		source: z.string().optional(),
 		transform: z.enum(COMPUTED_TRANSFORM_IDS).optional(),
 		script: z.string().optional(),
-		defaultSql: z.boolean().optional()
+		defaultSql: z.boolean().optional(),
+		plugin: z
+			.object({
+				label: z.string().max(200),
+				column: z.enum(['TEXT', 'INTEGER', 'REAL', 'BLOB']),
+				default: z.union([z.string(), z.number()]).optional()
+			})
+			.strict()
+			.optional()
 	})
 	.strict();
 
 export const snapshotFieldSchema = z.object({
 	id,
 	name,
-	type: z.enum(FIELD_TYPE_IDS),
+	type: fieldTypeIdSchema(),
 	required: z.boolean(),
 	unique: z.boolean(),
 	defaultValue: z.string().nullable(),

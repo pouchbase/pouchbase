@@ -19,7 +19,9 @@ export type FieldType =
 	| 'relation'
 	| 'file'
 	| 'computed'
-	| 'blob';
+	| 'blob'
+	/** A plugin's field type, `<plugin>:<type>` (e.g. `demo:rating`). */
+	| `${string}:${string}`;
 
 /** Settings of a field; each one only applies to some field types. */
 export type FieldOptions = {
@@ -50,6 +52,11 @@ export type FieldOptions = {
 	script?: string;
 	/** The default value is an SQL expression. */
 	defaultSql?: boolean;
+	/**
+	 * A plugin's field type: what the field keeps of it (set by Pouchbase), so it stays described
+	 * when the plugin is removed. `default` is the default value as the plugin stored it.
+	 */
+	plugin?: { label: string; column: 'TEXT' | 'INTEGER' | 'REAL' | 'BLOB'; default?: string | number };
 };
 
 /** A field of a collection, as the schema API returns it. */

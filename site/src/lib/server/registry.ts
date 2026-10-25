@@ -1,4 +1,5 @@
 import type {
+	ContributionSummary,
 	ManifestIssue,
 	PluginDetails,
 	PluginList,
@@ -10,10 +11,12 @@ import type { Where } from '@pouchbasejs/js-sdk';
 import { isPouchbaseError } from '@pouchbasejs/js-sdk';
 import {
 	computeIntegrity,
+	contributionSummary,
 	effectiveCategories,
 	isSupportedApiVersion,
 	parseBundle,
 	REGISTRY_API_PREFIX,
+	SERVER_FILE,
 	serializeBundle,
 	unknownCategoryIssues
 } from '@pouchbasejs/plugin-sdk';
@@ -93,7 +96,42 @@ function toSummary(plugin: PluginRecord): PluginSummary {
 	};
 }
 
-function toVersion(origin: string, slug: string, row: VersionRow): PluginVersion {
+/**
+ * The route keys in bundled server code: the literal keys of its `routes` object, such as
+ * `"GET /stats":`, which `pouchbase-plugin build` writes for every route. The registry can't run
+ * the code, so this is a best effort; a hand-built `routes` object may hide some.
+ */
+const ROUTE_KEY_LITERAL = /["'`]((?:GET|POST|PUT|PATCH|DELETE) \/[^"'`\s]*)["'`]\s*:/g;
+
+export function routeKeysInServerCode(code: string | undefined): string[] {
+	return [...new Set([...(code ?? '').matchAll(ROUTE_KEY_LITERAL)].map((match) => match[1]!))];
+}
+
+/**
+ * What a stored bundle contributes, for `PluginVersion.contributes`: from its manifest and the
+ * route keys in its server code. `undefined` when the bundle can't be read.
+ */
+export function bundleContributes(bundle: string): ContributionSummary | undefined {
+	try {
+		const { manifest, files } = JSON.parse(bundle) as {
+			manifest: Parameters<typeof contributionSummary>[0];
+			files: Record<string, string>;
+		};
+
+		return contributionSummary(manifest, routeKeysInServerCode(files[SERVER_FILE]));
+	} catch (error) {
+		console.error('Plugin registry: reading the contributions of a bundle failed', error);
+
+		return undefined;
+	}
+}
+
+function toVersion(
+	origin: string,
+	slug: string,
+	row: VersionRow,
+	contributes?: ContributionSummary
+): PluginVersion {
 	return {
 		version: row.version,
 		apiVersion: row.api_version,
@@ -102,8 +140,18 @@ function toVersion(origin: string, slug: string, row: VersionRow): PluginVersion
 		bundleUrl: bundleUrl(origin, slug, row.version),
 		pouchbase: row.pouchbase || null,
 		permissions: { network: row.permissions?.network ?? [] },
+		...(contributes ? { contributes } : {}),
 		publishedAt: iso(row.created_at)
 	};
+}
+
+/** The `contributes` summary of a stored version; `undefined` when its bundle can't be read. */
+async function versionContributes(row: VersionRow): Promise<ContributionSummary | undefined> {
+	const stored = await service()
+		.db.plugin_versions.findFirst({ where: { id: row.id }, select: ['bundle'] })
+		.catch(backendFailure);
+
+	return stored ? bundleContributes(stored.bundle) : undefined;
 }
 
 /** API versions as `plugins.api_versions` stores them: `,1,2,`. */
@@ -195,7 +243,11 @@ export async function searchPlugins(input: SearchInput): Promise<PluginList> {
 	};
 }
 
-/** A plugin with every version, newest first; `null` when there is none. */
+/**
+ * A plugin with every version, newest first; `null` when there is none. Only the newest version
+ * (the one the dashboard's install dialog shows) has `contributes`, so the list doesn't read every
+ * bundle.
+ */
 export async function getPlugin(origin: string, slug: string): Promise<PluginDetails | null> {
 	const plugin = await findPlugin(slug);
 
@@ -204,6 +256,8 @@ export async function getPlugin(origin: string, slug: string): Promise<PluginDet
 	}
 
 	const versions = await listVersions(plugin.id);
+	const newest = versions.find((row) => row.version === plugin.version) ?? versions[0];
+	const contributes = newest ? await versionContributes(newest) : undefined;
 
 	return {
 		...toSummary(plugin),
@@ -211,7 +265,9 @@ export async function getPlugin(origin: string, slug: string): Promise<PluginDet
 		homepage: plugin.homepage || null,
 		repository: plugin.repository || null,
 		readme: plugin.readme || null,
-		versions: versions.map((row) => toVersion(origin, slug, row))
+		versions: versions.map((row) =>
+			toVersion(origin, slug, row, row === newest ? contributes : undefined)
+		)
 	};
 }
 
@@ -237,7 +293,7 @@ export async function getVersion(
 	const row =
 		version === 'latest' ? versions[0] : versions.find((item) => item.version === version);
 
-	return row ? toVersion(origin, slug, row) : null;
+	return row ? toVersion(origin, slug, row, await versionContributes(row)) : null;
 }
 
 /** The bundle of a version, as published; counts a download. `null` when there is none. */
@@ -436,7 +492,7 @@ export async function publishVersion(
 			{ select: [...VERSION_FIELDS] }
 		);
 
-		return toVersion(origin, slug, row);
+		return toVersion(origin, slug, row, bundleContributes(bundle));
 	} catch (error) {
 		// Unique indexes on `plugins.slug` and `plugin_versions (plugin, version)` catch a publish
 		// that raced this one.

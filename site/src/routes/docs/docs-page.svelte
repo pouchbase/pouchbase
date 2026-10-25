@@ -44,7 +44,10 @@
 
 	{#if sections.length > 0}
 		<aside class="hidden w-48 shrink-0 xl:block">
-			<SideNav.Root aria-label="On this page" class="sticky top-24">
+			<SideNav.Root
+				aria-label="On this page"
+				class="sticky top-24 max-h-[calc(100vh-7rem)] overflow-y-auto"
+			>
 				<SideNav.Group>
 					<SideNav.Title>On this page</SideNav.Title>
 

@@ -1,12 +1,38 @@
-import type { FieldOptions, FieldType } from '../../fields/field-types';
+import type { FieldOptions, FieldTypeId } from '../../fields/field-types';
 import type { PlanStep, PlanWarning } from '../../environments/diff';
 import type { CollectionSettings } from '../../files/thumbnails';
 import type { MailStyle } from '../../mail/layout';
+import type { DescribeResult } from '../plugins/runtime';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 
-import { customType, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import {
+	customType,
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+	uniqueIndex
+} from 'drizzle-orm/sqlite-core';
+
+import { parseManifest } from '@pouchbasejs/plugin-sdk';
 
 import { upgradeSettings } from '../../collections/upgrade';
+
+/**
+ * The manifest of an installed plugin, with the defaults of the current SDK filled in when read:
+ * a plugin installed with an older SDK has no `settings`, for example. A manifest the current
+ * rules reject is returned as stored.
+ */
+const pluginManifest = customType<{ data: PluginManifest; driverData: string }>({
+	dataType: () => 'text',
+	toDriver: (value) => JSON.stringify(value),
+	fromDriver: (value) => {
+		const stored = JSON.parse(value) as PluginManifest;
+		const result = parseManifest(stored);
+
+		return result.success ? result.manifest : stored;
+	}
+});
 
 /** JSON settings of a collection, upgraded to the current syntax when read (see `upgradeSettings`). */
 const collectionSettings = customType<{ data: CollectionSettings; driverData: string }>({
@@ -68,7 +94,8 @@ export const fields = sqliteTable(
 			.references(() => collections.id, { onDelete: 'cascade' }),
 		/** Also the column name in the collection's table. */
 		name: text('name').notNull(),
-		type: text('type').$type<FieldType>().notNull(),
+		/** A built-in type, or a plugin's type stored as `<plugin>:<type>` (`FieldTypeId`). */
+		type: text('type').$type<FieldTypeId>().notNull(),
 		required: integer('required', { mode: 'boolean' }).notNull().default(false),
 		unique: integer('unique', { mode: 'boolean' }).notNull().default(false),
 		/** Default value as entered in the form; the column DEFAULT is derived from it. */
@@ -287,7 +314,7 @@ export const plugins = sqliteTable('plugins', {
 	name: text('name').notNull(),
 	version: text('version').notNull(),
 	apiVersion: integer('api_version').notNull(),
-	manifest: text('manifest', { mode: 'json' }).$type<PluginManifest>().notNull(),
+	manifest: pluginManifest('manifest').notNull(),
 	/** The bundle as downloaded (JSON, at most `MAX_BUNDLE_SIZE`); checked against `integrity`. */
 	bundle: text('bundle').notNull(),
 	integrity: text('integrity').notNull(),
@@ -300,6 +327,8 @@ export const plugins = sqliteTable('plugins', {
 	workerUrl: text('worker_url'),
 	/** Shared with the plugin's Worker, which only answers requests that carry it. */
 	workerSecret: text('worker_secret'),
+	/** What the server code implements (its `describe` answer); `null` without server code. */
+	capabilities: text('capabilities', { mode: 'json' }).$type<DescribeResult>(),
 	installedAt: integer('installed_at', { mode: 'timestamp_ms' })
 		.notNull()
 		.$defaultFn(() => new Date()),
@@ -307,6 +336,45 @@ export const plugins = sqliteTable('plugins', {
 		.notNull()
 		.$defaultFn(() => new Date())
 });
+
+/**
+ * The compiled UI modules of an installed plugin: one row per `ui/` file, as an ES module for
+ * the dashboard, with the specifiers it imports. Written with the plugin on install and update.
+ */
+export const pluginModules = sqliteTable(
+	'plugin_modules',
+	{
+		pluginId: text('plugin_id').notNull(),
+		/** Path in the plugin, e.g. `ui/rating-input.svelte`. */
+		path: text('path').notNull(),
+		/** The plugin version the module was compiled from. */
+		version: text('version').notNull(),
+		code: text('code').notNull(),
+		imports: text('imports', { mode: 'json' }).$type<string[]>().notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [primaryKey({ columns: [table.pluginId, table.path] })]
+);
+
+/**
+ * Values of the settings a plugin declares in its manifest, as entered on the Plugins page; plain
+ * strings, like the other credentials (e.g. `oauth_providers.client_secret`). Values of `secret`
+ * settings are never sent back to the dashboard.
+ */
+export const pluginSettings = sqliteTable(
+	'plugin_settings',
+	{
+		pluginId: text('plugin_id').notNull(),
+		key: text('key').notNull(),
+		value: text('value').notNull(),
+		updatedAt: integer('updated_at', { mode: 'timestamp_ms' })
+			.notNull()
+			.$defaultFn(() => new Date())
+	},
+	(table) => [primaryKey({ columns: [table.pluginId, table.key] })]
+);
 
 /**
  * Sign-in providers that plugins contribute (installed and built-in ones), with what the host

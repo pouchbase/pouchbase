@@ -1,45 +1,28 @@
-import type { PluginContext } from '@pouchbasejs/plugin-sdk/server';
+import type { PluginSettingDefinition } from '@pouchbasejs/plugin-sdk/server';
+import type { FakeResponse } from '@pouchbasejs/plugin-sdk/testing';
+
+import { fakeContext as sdkFakeContext } from '@pouchbasejs/plugin-sdk/testing';
 
 /**
- * Test helpers for the plugins in this directory: a `PluginContext` whose `fetch` answers from
- * canned responses and, like the host, only reaches the hosts in `permissions.network`.
+ * Test helpers for the plugins in this directory, on `fakeContext` of
+ * `@pouchbasejs/plugin-sdk/testing`: a `PluginContext` whose `fetch` answers from canned responses
+ * and, like the host, only reaches the hosts in `permissions.network`. Its `ctx.settings` is built
+ * like the host's: `settings` holds the saved values as strings, parsed by the plugin's setting
+ * definitions (`definePlugin({ settings })` in its `plugin.ts`, if any).
  */
 
-export type FakeRequest = { url: string; headers: Headers };
-
-/** A canned answer: a JSON body (status 200) or a full `Response`. */
-export type FakeResponse = unknown;
+export type { FakeRequest, FakeResponse } from '@pouchbasejs/plugin-sdk/testing';
 
 export function fakeContext(
-	manifest: { id: string; permissions: { network: string[] } },
-	responses: Record<string, FakeResponse>
+	manifest: {
+		id: string;
+		permissions: { network: string[] };
+		settings?: readonly PluginSettingDefinition[];
+	},
+	responses: Record<string, FakeResponse>,
+	settings: Record<string, string> = {}
 ) {
-	const requests: FakeRequest[] = [];
-	const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-		const url = new URL(input instanceof Request ? input.url : input);
-
-		if (!manifest.permissions.network.includes(url.hostname)) {
-			throw new Error(`${url.hostname} is not in permissions.network`);
-		}
-
-		requests.push({ url: url.href, headers: new Headers(init?.headers) });
-
-		const response = responses[url.href];
-
-		if (response === undefined) {
-			return new Response('Not found', { status: 404 });
-		}
-
-		return response instanceof Response ? response : Response.json(response);
-	}) as typeof globalThis.fetch;
-	const ctx: PluginContext = {
-		plugin: { id: manifest.id, version: '1.0.0' },
-		fetch,
-		settings: { get: async () => null },
-		log: { info() {}, warn() {}, error() {} }
-	};
-
-	return { ctx, requests };
+	return sdkFakeContext({ manifest: { version: '1.0.0', ...manifest }, responses, settings });
 }
 
 /** The headers every profile request sends, as `fetchJson` sets them. */

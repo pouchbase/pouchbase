@@ -4,8 +4,9 @@
 
 import type { FieldProperty, PlanStep, PlanWarning } from './diff';
 import type { SnapshotSettingKey } from './snapshot';
+import type { FieldOptions } from '#lib/fields/field-types.js';
 
-import { FIELD_TYPES } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 
 const SETTING_LABELS: Record<SnapshotSettingKey, string> = {
 	auth_password_enabled: 'password sign-in',
@@ -31,8 +32,11 @@ function provider(item: { provider: string; label?: string }) {
 	return item.label ?? item.provider;
 }
 
-function fieldType(type: string) {
-	return FIELD_TYPES[type as keyof typeof FIELD_TYPES]?.label.toLowerCase() ?? type;
+/** `text`, or for a plugin's type its label and plugin: `Rating, plugin demo`. */
+function fieldType(field: { type: string; options?: FieldOptions }) {
+	const info = fieldTypeInfo(field);
+
+	return info.plugin ? `${info.label}, plugin ${info.plugin.id}` : info.label.toLowerCase();
 }
 
 function value(text: string | null) {
@@ -47,7 +51,7 @@ function fieldUpdate(step: PlanStep & { kind: 'field.update' }) {
 	}
 
 	if (step.changes.includes('type')) {
-		parts.push(`change the type to ${fieldType(step.field.type)} (its data is lost)`);
+		parts.push(`change the type to ${fieldType(step.field)} (its data is lost)`);
 	}
 
 	const others = step.changes.flatMap((change) =>
@@ -76,7 +80,7 @@ export function describeStep(step: PlanStep): string {
 		case 'field.update':
 			return fieldUpdate(step);
 		case 'field.create':
-			return `Add field ${step.collection}.${step.field.name} (${fieldType(step.field.type)})`;
+			return `Add field ${step.collection}.${step.field.name} (${fieldType(step.field)})`;
 		case 'collection.order':
 			return `Reorder the fields of ${step.collection}`;
 		case 'index.create':
@@ -120,5 +124,7 @@ export function describeWarning(warning: PlanWarning): string {
 			return `Plugin ${warning.plugin} needs plugin API ${warning.apiVersion}, which the target doesn't support; it is left out.`;
 		case 'collection.system':
 			return `The built-in collection ${warning.collection} is missing on the target; update the target first.`;
+		case 'field.plugin':
+			return `Field ${warning.collection}.${warning.field} has the type ${warning.type} of the plugin ${warning.pluginId}, which the target doesn't have; install the plugin there first.`;
 	}
 }

@@ -1,10 +1,10 @@
 import { z } from 'zod';
 
-import { FIELD_TYPE_IDS } from '#lib/fields/field-types.js';
 import { FilterError, MAX_FILTER_LENGTH, parseFilter } from '#lib/filter/filter.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 
 import { fieldOptionsSchema, snapshotCollectionSchema } from './environments';
+import { fieldTypeIdSchema } from './fields';
 
 /**
  * Collection names are used as table names in the app database, so they are restricted to a safe
@@ -90,7 +90,7 @@ const ruleSchema = z
 export const apiFieldSchema = z.object({
 	id: z.string().min(1).max(64).optional(),
 	name: z.string().min(1).max(63),
-	type: z.enum(FIELD_TYPE_IDS),
+	type: fieldTypeIdSchema(),
 	required: z.boolean().default(false),
 	unique: z.boolean().default(false),
 	defaultValue: z.string().nullable().default(null),

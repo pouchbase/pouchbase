@@ -93,6 +93,7 @@
 		"@cf-wasm/quickjs": "0.3.0",
 		"aws4fetch": "1.0.20",
 		"drizzle-orm": "^0.45.4",
+		"es-module-lexer": "^2.3.2",
 		"jose": "^6.2.13",
 		"monaco-editor": "0.57.0",
 		"neverthrow": "8.2.0",

@@ -1,14 +1,18 @@
 /**
- * The server side of a plugin: `export default definePlugin({ ... })` in the file that the
- * manifest's `server` points to. The host runs it in its own Worker on your Cloudflare account
+ * The server side of a plugin: `defineField(...)` in `fields/<type>/field.ts`,
+ * `defineAuthProvider(...)` in `auth/<id>/provider.ts` and `export const GET` (and the other
+ * methods) in `routes/<path>.ts`, and the settings of `definePlugin({ settings })` in `plugin.ts`,
+ * which `pouchbase-plugin build` combines into one
+ * `definePlugin({ ... })` (in the legacy layout, the file the manifest's `server` points to
+ * default-exports it). The host runs it in its own Worker on your Cloudflare account
  * (built-in plugins, which ship with Pouchbase, run inside Pouchbase), so the only way out is
  * through `PluginContext`: `ctx.fetch` reaches the HTTPS hosts from `permissions.network`, and
  * nothing else. The Worker has no bindings, and its global `fetch` has the same limits.
  *
- * Every key of `fields` and `authProviders` must match a contribution in the manifest.
+ * Every key of `fields` and `authProviders` matches a contribution in the manifest.
  *
- * This module has no imports and uses only `fetch`-style Web APIs, so it bundles into the
- * sandboxed server code as is.
+ * This module imports only `./ui.js` (for `definePage`) and uses only `fetch`-style Web APIs, so it
+ * bundles into the sandboxed server code as is.
  */
 
 export type PluginLogger = {
@@ -17,9 +21,164 @@ export type PluginLogger = {
 	error(message: string, data?: unknown): void;
 };
 
-/** Settings an admin entered for this plugin on the Plugins page; plain strings. */
-export type PluginSettings = {
-	get(key: string): Promise<string | null>;
+/** How a setting is entered and checked; see `PluginSettingDefinition.type`. */
+export type PluginSettingKind = 'text' | 'secret' | 'number' | 'boolean' | 'url';
+
+/**
+ * A setting of the plugin, in `definePlugin({ settings: [...] })` of `plugin.ts`: the dashboard
+ * builds an input for it on the Plugins page, and the server code reads the value with
+ * `ctx.settings.get(key)`.
+ */
+export type PluginSettingDefinition = {
+	/** `api_key`, `region`: lowercase letters, numbers and underscores; unique. */
+	key: string;
+	label: string;
+	/** One sentence below the input. */
+	description?: string;
+	/**
+	 * `text` (default) and `url` (an absolute URL) are strings, `number` and `boolean` are typed in
+	 * the form and come back as a number or a boolean, `secret` is a string that is never shown
+	 * again once saved.
+	 */
+	type?: PluginSettingKind;
+	/**
+	 * The plugin can't work without it; an admin is asked to fill it in. Until one does,
+	 * `ctx.settings.get` returns `null` (unless it has a `default`), and so does its type.
+	 */
+	required?: boolean;
+	/** Used while no value is saved; of the setting's type, not for `secret`. */
+	default?: string | number | boolean;
+};
+
+/**
+ * Register your plugin to type `ctx.settings`: in `plugin.ts`,
+ *
+ * ```ts
+ * declare module '@pouchbasejs/plugin-sdk/server' {
+ * 	interface Register {
+ * 		plugin: typeof plugin;
+ * 	}
+ * }
+ * ```
+ *
+ * Without it, `ctx.settings.get` takes any key and returns `string | number | boolean | null`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface Register {}
+
+/** The `settings` of the registered plugin, or `never` without a registration. */
+export type RegisteredSettings = Register extends {
+	plugin: { settings: infer S extends readonly PluginSettingDefinition[] };
+}
+	? S
+	: Register extends { plugin: unknown }
+		? readonly []
+		: never;
+
+/**
+ * What `ctx.settings.get` returns for a setting: a number for `number`, a boolean for `boolean`,
+ * else a string; `null` while it has no value, unless it has a `default`. A `required` setting
+ * without a `default` is `null` too until an admin saves it.
+ */
+export type PluginSettingValue<D extends PluginSettingDefinition> =
+	| (D extends { type: 'number' } ? number : D extends { type: 'boolean' } ? boolean : string)
+	| (D extends { default: string | number | boolean } ? never : null);
+
+/** The value of every setting of `S`, by key, e.g. `{ greeting: string; limit: number | null }`. */
+export type SettingValues<S extends readonly PluginSettingDefinition[]> = {
+	[D in S[number] as D['key']]: PluginSettingValue<D>;
+};
+
+/** Every setting's value by key: typed from the registered plugin, else any key. */
+export type PluginSettingValues = [RegisteredSettings] extends [never]
+	? Record<string, string | number | boolean | null>
+	: SettingValues<RegisteredSettings>;
+
+/** A key of `PluginSettingValues`: the registered plugin's keys, else any string. */
+export type PluginSettingKey = keyof PluginSettingValues & string;
+
+/**
+ * The plugin's settings as an admin entered them on the Plugins page, parsed by their `type`
+ * (`'42'` is `42` for a `number` setting, `'true'` is `true` for a `boolean`). `V` is the values
+ * by key; it defaults to those of the registered plugin (see `Register`).
+ */
+export type PluginSettings<V extends object = PluginSettingValues> = {
+	/** The saved value, else the setting's `default`, else `null`. */
+	get<K extends keyof V & string>(key: K): Promise<V[K]>;
+	/** Every setting's value, the way `get` returns it. */
+	getAll(): Promise<V>;
+};
+
+/**
+ * A saved value (always a string, as `plugin_settings` stores it) as `ctx.settings.get` returns it:
+ * a number for `number`, a boolean for `boolean`, the string for the other types. Without a value
+ * (`raw` `null` or `undefined`) the setting's `default`, else `null`; so is a value that doesn't
+ * parse (a `number` that isn't one).
+ */
+export function parseSettingValue(
+	setting: Pick<PluginSettingDefinition, 'type' | 'default'>,
+	raw: string | null | undefined
+): string | number | boolean | null {
+	if (raw === null || raw === undefined) {
+		return setting.default ?? null;
+	}
+
+	switch (setting.type) {
+		case 'number': {
+			const number = raw.trim() ? Number(raw) : Number.NaN;
+
+			return Number.isFinite(number) ? number : (setting.default ?? null);
+		}
+		case 'boolean':
+			return raw === 'true';
+		default:
+			return raw;
+	}
+}
+
+/**
+ * `ctx.settings` for the setting definitions and their values (`key` → string): the host builds
+ * the plugin context with it, and so can tests. Keys without a definition read as `null`.
+ */
+export function createPluginSettings(
+	definitions: readonly Pick<PluginSettingDefinition, 'key' | 'type' | 'default'>[] | undefined,
+	values: Readonly<Record<string, string>> = {}
+): PluginSettings {
+	const all = () =>
+		Object.fromEntries(
+			(definitions ?? []).map((setting) => [
+				setting.key,
+				parseSettingValue(
+					setting,
+					Object.hasOwn(values, setting.key) ? values[setting.key] : undefined
+				)
+			])
+		);
+
+	return {
+		get: async (key: string) => {
+			const current = all();
+
+			return Object.hasOwn(current, key) ? current[key] : null;
+		},
+		getAll: async () => all()
+	} as PluginSettings;
+}
+
+/**
+ * The app user a route request is made for: the user of the request's
+ * `Authorization: Bearer <token>`. Passwords and tokens are never part of it.
+ */
+export type PluginUser = {
+	id: string;
+	email: string | null;
+	name: string | null;
+	/** Whether the user verified their email address. */
+	verified: boolean;
+	/** Id of the avatar in the `files` collection. */
+	avatar: string | null;
+	/** The other fields of the `users` collection, by name; binary values are left out. */
+	fields: Record<string, string | number | boolean | null>;
 };
 
 export type PluginContext = {
@@ -28,6 +187,17 @@ export type PluginContext = {
 	fetch: typeof fetch;
 	settings: PluginSettings;
 	log: PluginLogger;
+	/**
+	 * Whether the request comes from an admin signed in to the dashboard (a valid admin session on
+	 * a same-origin request). `false` for every other request to a route, such as from the API, an
+	 * app or another site, and outside routes.
+	 */
+	admin: boolean;
+	/**
+	 * In a route: the app user of the request's bearer token, or `null` for a request without one.
+	 * Always `null` outside routes.
+	 */
+	user: PluginUser | null;
 };
 
 /** A value read from or written to the field's column. */
@@ -35,7 +205,23 @@ export type FieldValue = string | number | Uint8Array | null;
 
 export type FieldValidation = { valid: true } | { valid: false; message: string };
 
+/** SQLite storage class of the column that holds a field's value. */
+export type FieldColumn = 'TEXT' | 'INTEGER' | 'REAL' | 'BLOB';
+
 export type FieldTypeHandler = {
+	/** Name of the field type in the dashboard, e.g. `Rating`. */
+	label?: string;
+	/** One sentence about the field type, shown when an admin picks a type. */
+	description?: string;
+	/** Storage class of the column; fixed for the lifetime of each field of this type. */
+	column?: FieldColumn;
+	/**
+	 * The type's icon in the dashboard, drawn in one color like the built-in types' icons: an
+	 * Iconify name such as `lucide:palette`, which the CLI turns into an SVG in the bundle, or the
+	 * path of an `.svg` file relative to `field.ts`. Missing uses `icon.svg` next to `field.ts`, else
+	 * a puzzle piece.
+	 */
+	icon?: string;
 	/**
 	 * Checks a value from the record form or the API before it is saved. `options` are the field's
 	 * settings. Missing accepts every value.
@@ -62,6 +248,10 @@ export type OAuthProfile = {
 };
 
 export type AuthProviderHandler = {
+	/** Name on the sign-in button, e.g. `GitLab`. */
+	label?: string;
+	/** Where an admin registers the OAuth app, shown next to the client id and secret. */
+	consoleUrl?: string;
 	authorizeUrl: string;
 	tokenUrl: string;
 	scopes: string[];
@@ -82,17 +272,42 @@ export type AuthProviderHandler = {
  */
 export type RouteHandler = (
 	request: Request,
-	ctx: PluginContext & { params: Record<string, string> }
+	ctx: PluginContext & {
+		/** The `:param` segments of the route key, e.g. `{ id: '42' }` for `GET /items/:id`. */
+		params: Record<string, string>;
+	}
 ) => Response | Promise<Response>;
 
+/** The HTTP methods a route can answer. */
+export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+
+/** A file of routes for one path: a handler per method it answers, e.g. `export const GET`. */
+export type RouteModule = Partial<Record<RouteMethod, RouteHandler>>;
+
 export type PluginDefinition = {
+	/**
+	 * What an admin can set for the plugin on the Plugins page (`plugin.ts` in the convention
+	 * layout); the build puts them into the manifest.
+	 */
+	settings?: readonly PluginSettingDefinition[];
 	fields?: Record<string, FieldTypeHandler>;
 	authProviders?: Record<string, AuthProviderHandler>;
-	routes?: Record<`${'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'} /${string}`, RouteHandler>;
+	routes?: Record<`${RouteMethod} /${string}`, RouteHandler>;
 };
 
-/** Marks the default export of the server entry; returns the definition unchanged. */
-export function definePlugin<T extends PluginDefinition>(definition: T): T {
+/**
+ * A page's metadata and its helper, defined in `@pouchbasejs/plugin-sdk/ui` (which a page can
+ * import) and re-exported here for tests and tools.
+ */
+export { definePage, type PageMeta } from './ui.js';
+
+/**
+ * The plugin's own definition, default-exported from `plugin.ts`: `definePlugin({ settings: [...] })`
+ * (in the legacy layout, the server entry's default export with `fields`, `authProviders` and
+ * `routes`). Returns it unchanged, with literal keys and types, so `typeof plugin` can type
+ * `ctx.settings` (see `Register`).
+ */
+export function definePlugin<const T extends PluginDefinition>(definition: T): T {
 	return definition;
 }
 

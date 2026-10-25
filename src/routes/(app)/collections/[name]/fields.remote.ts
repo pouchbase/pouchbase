@@ -2,6 +2,7 @@ import { error, invalid } from '@sveltejs/kit';
 
 import { command, form, getRequestEvent } from '$app/server';
 
+import { isPluginFieldType } from '#lib/fields/field-types.js';
 import {
 	computeOptions,
 	createFieldSchema,
@@ -25,6 +26,18 @@ function requireUser() {
 
 	return locals;
 }
+
+/** Why a default value was refused; a plugin says why for its own types. */
+function defaultValueMessage(failure: { data?: unknown }) {
+	const message = (failure.data as { message?: unknown } | undefined)?.message;
+
+	return typeof message === 'string' && message
+		? message
+		: 'This default value is not valid for the type';
+}
+
+/** The plugin field type isn't installed (any more). */
+const PLUGIN_NOT_INSTALLED = 'This field type comes from a plugin that is not installed';
 
 /** Relation fields store the `id` of the records they link to, so that field must stay. */
 function idInUseMessage(relations: string[]) {
@@ -65,13 +78,21 @@ export const createField = form(createFieldSchema, async (data, issue) => {
 				invalid(issue.name('A field with this name already exists'));
 				break;
 			case 7003:
-				invalid(issue.defaultValue('This default value is not valid for the type'));
+				invalid(issue.defaultValue(defaultValueMessage(result.error)));
+				break;
+			case 19016:
+			case 19017:
+				invalid(issue.defaultValue('The plugin could not check the default value'));
 				break;
 			case 7009:
 				invalid(issue.relationCollection('Choose an existing collection that has an id field'));
 				break;
 			case 7019:
-				invalid(issue.idGenerator('Choose a generator'));
+				invalid(
+					isPluginFieldType(data.type)
+						? issue.type(PLUGIN_NOT_INSTALLED)
+						: issue.idGenerator('Choose a generator')
+				);
 				break;
 			case 7022:
 				invalid(issue.type('This collection already has an id field'));
@@ -129,7 +150,11 @@ export const updateField = form(updateFieldSchema, async (data, issue) => {
 				error(404, 'Field not found');
 				break;
 			case 7003:
-				invalid(issue.defaultValue('This default value is not valid for the type'));
+				invalid(issue.defaultValue(defaultValueMessage(result.error)));
+				break;
+			case 19016:
+			case 19017:
+				invalid(issue.defaultValue('The plugin could not check the default value'));
 				break;
 			case 7010:
 				error(403, "Built-in fields can't be changed");
@@ -143,7 +168,9 @@ export const updateField = form(updateFieldSchema, async (data, issue) => {
 						? issue.idGenerator(
 								"Auto-increment ids can't change to text ids, or the other way round"
 							)
-						: 'This field has no settings to change here'
+						: isPluginFieldType(data.type)
+							? PLUGIN_NOT_INSTALLED
+							: 'This field has no settings to change here'
 				);
 				break;
 			case 7023:

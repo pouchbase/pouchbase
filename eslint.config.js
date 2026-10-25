@@ -36,6 +36,14 @@ export default defineConfig(
 		}
 	},
 	{
+		// Plugin components run in the dashboard without SvelteKit's `$app` modules, so their links
+		// can't go through `resolve()`.
+		files: ['plugins/**/*.svelte', 'examples/**/*.svelte'],
+		rules: {
+			'svelte/no-navigation-without-resolve': 'off'
+		}
+	},
+	{
 		rules: {
 			// Always use braces for if/else, and keep a blank line around if statements.
 			curly: ['error', 'all'],

@@ -1,4 +1,4 @@
-import type { FieldType } from './field-types';
+import type { FieldTypeId } from './field-types';
 
 /**
  * Default values written as a SQLite expression, e.g. `datetime('now', '+7 days')`. They are
@@ -11,7 +11,7 @@ import type { FieldType } from './field-types';
  */
 
 /** Field types whose default value can be a SQL expression. */
-export const SQL_DEFAULT_TYPES = new Set<FieldType>([
+export const SQL_DEFAULT_TYPES = new Set<FieldTypeId>([
 	'text',
 	'rich_text',
 	'number',
@@ -294,6 +294,6 @@ export function checkSqlExpression(expression: string): string | null {
  * UTC, so their expression is read as a SQLite time value (e.g. `datetime('now')` or
  * `date('now', '+1 day')`) and formatted that way.
  */
-export function sqlDefaultSelect(type: FieldType, expression: string) {
+export function sqlDefaultSelect(type: FieldTypeId, expression: string) {
 	return type === 'date' ? `strftime('%Y-%m-%dT%H:%M:%fZ', (${expression}))` : `(${expression})`;
 }

@@ -62,13 +62,17 @@ export function errorResponse(error: ServiceError<number, string>, fallback: str
 
 			return json(
 				{
-					message: 'Relation fields point at collections this instance does not have',
+					message: problems.some((problem) => problem.kind === 'plugin')
+						? 'Fields have types of plugins or point at collections this instance does not have'
+						: 'Relation fields point at collections this instance does not have',
 					issues: Object.fromEntries(
 						problems.map((problem) => [
 							`${problem.collection}.${problem.field}`,
-							problem.related
-								? `The collection ${problem.related} does not exist`
-								: 'The related collection does not exist'
+							problem.kind === 'plugin'
+								? `The plugin ${problem.pluginId} is not installed`
+								: problem.related
+									? `The collection ${problem.related} does not exist`
+									: 'The related collection does not exist'
 						])
 					)
 				},

@@ -1,8 +1,9 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
-	import { FIELD_TYPES } from '#lib/fields/field-types.js';
+	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 	import { updateFieldSchema } from '#lib/schemas/fields.js';
 	import FieldSettings from './field-settings.svelte';
 	import { updateField } from './fields.remote';
@@ -16,7 +17,11 @@
 
 	let { collection, field, close }: Props = $props();
 
-	const form = $derived(updateField.for(field.id).preflight(updateFieldSchema));
+	const form = $derived.by(() => {
+		const key = field.id;
+
+		return untrack(() => updateField.for(key).preflight(updateFieldSchema));
+	});
 </script>
 
 <Dialog.Content>
@@ -24,7 +29,7 @@
 		<Dialog.Title>Edit field</Dialog.Title>
 		<Dialog.Description>
 			Changes the settings of <span class="font-mono">{field.name}</span>
-			({FIELD_TYPES[field.type].label}). Saved right away; records keep their values.
+			({fieldTypeInfo(field).label}). Saved right away; records keep their values.
 		</Dialog.Description>
 	</Dialog.Header>
 

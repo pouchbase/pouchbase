@@ -1,43 +1,80 @@
 import type { ServiceError } from './base.service';
-import type { PluginRuntime, ProviderConfig } from '../plugins/runtime';
+import type { CompiledUi, CompileIssue } from '../plugins/compile';
+import type { PluginSettingsState } from '../plugins/settings';
+import type {
+	DescribeResult,
+	FieldReadItem,
+	FieldWriteItem,
+	FieldWriteResult,
+	PluginCallContext,
+	PluginRuntime,
+	ProviderConfig
+} from '../plugins/runtime';
 import type {
 	AuthProviderContribution,
+	ContributionSummary,
 	ManifestIssue,
 	PluginDetails,
 	PluginList,
 	PluginManifest,
 	PluginPermissions
 } from '@pouchbasejs/plugin-sdk';
+import type { FieldColumn, PluginUser } from '@pouchbasejs/plugin-sdk/server';
 import type { BatchItem } from 'drizzle-orm/batch';
 import type { ResultAsync } from 'neverthrow';
+import type { PluginFieldTypeId } from '#lib/fields/field-types.js';
 
 import {
 	DEFAULT_REGISTRY_URL,
 	RegistryError,
 	SERVER_FILE,
 	SUPPORTED_API_VERSIONS,
+	UI_DIR,
 	checkCompatibility,
+	contributionSummary,
 	createRegistryClient,
-	parseBundle
+	parseBundle,
+	pluginFieldTypeId,
+	previewOf,
+	resolveSettings,
+	splitPluginFieldType
 } from '@pouchbasejs/plugin-sdk';
-import { asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, eq, inArray, like } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
+import { dev } from '$app/env';
 import { PLUGIN_REGISTRY_URL, POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
 import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 
 import { version as POUCHBASE_VERSION } from '../../../../package.json';
 import { generateToken } from '../crypto';
-import { pluginAuthProviders, plugins } from '../db';
+import {
+	collections,
+	fields,
+	pluginAuthProviders,
+	pluginModules,
+	pluginSettings,
+	plugins
+} from '../db';
 import { functions as driver, PlatformError } from '../platform';
 import { background } from '../platform/runtime';
+import { compileUi, formatCompileIssue } from '../plugins/compile';
 import {
 	describeEmbedded,
 	embeddedPlugin,
 	embeddedPlugins,
 	InProcessRuntime
 } from '../plugins/embedded';
-import { describePlugin, PluginCallError } from '../plugins/runtime';
+import { hasHooks, passThroughWrite, readInChunks } from '../plugins/field-values';
+import { matchPage } from '../plugins/requests';
+import {
+	describePlugin,
+	PluginCallError,
+	readFieldValues,
+	withCallContext,
+	writeFieldValues
+} from '../plugins/runtime';
+import { applySettings, missingSettings, settingsState } from '../plugins/settings';
 import { ENTRY_MODULE, pluginScriptName, WorkerRuntime, workerModules } from '../plugins/worker';
 import { Service } from './base.service';
 
@@ -47,11 +84,17 @@ import { Service } from './base.service';
  * registry API, the manifest and the bundle format come from `@pouchbasejs/plugin-sdk`.
  *
  * Installing downloads the bundle, checks it against its integrity hash and the manifest rules,
- * deploys its server code to a Worker of its own (`../plugins/worker.ts`) and registers the
- * sign-in providers it contributes in `plugin_auth_providers`, with the URLs and scopes the plugin
- * reports. Built-in plugins run inside Pouchbase and register their providers through
- * `ensureEmbedded()`; installing a plugin with the same id from the registry shadows the built-in
- * one. Field types and pages are stored but don't run yet.
+ * compiles its UI for the dashboard (`../plugins/compile.ts`, stored in `plugin_modules`), deploys
+ * its server code to a Worker of its own (`../plugins/worker.ts`), stores what `describe` reports
+ * (`plugins.capabilities`) and registers the sign-in providers it contributes in
+ * `plugin_auth_providers`, with the URLs and scopes the plugin reports. Built-in plugins run inside
+ * Pouchbase and register their providers through `ensureEmbedded()`; their UI is compiled by Vite
+ * with the dashboard. Installing a plugin with the same id from the registry shadows the built-in
+ * one.
+ *
+ * A plugin's routes answer at `/api/plugins/<id>/<path>` (`route()`), its pages open at
+ * `/plugins/<id>/<path>` (`page()`), its field types run through `writeFieldValues()` and
+ * `readFieldValues()`, and its settings (`plugin_settings`) reach every call as `ctx.settings`.
  */
 
 /** Results per page when searching the registry. */
@@ -59,6 +102,19 @@ const PER_PAGE = 24;
 
 /** How often `describe` is tried right after a deploy, while workers.dev picks up the Worker. */
 const DESCRIBE_ATTEMPTS = 5;
+
+/** Rows of `plugin_modules` per insert; D1 binds at most 100 values per statement. */
+const MODULE_ROWS_PER_INSERT = 15;
+
+/** A page of a plugin in the dashboard, at `/plugins/<plugin>/<path>`. */
+export type PluginPage = {
+	path: string;
+	title: string;
+	/** Whether the sidebar links to it. */
+	navigation: boolean;
+	/** The page's own icon (`icon` of the contribution), served by Pouchbase; `null` without one. */
+	iconUrl: string | null;
+};
 
 /** An installed plugin as the Plugins page shows it; without the bundle. */
 export type InstalledPlugin = {
@@ -70,7 +126,13 @@ export type InstalledPlugin = {
 	/** The plugin's icon (`manifest.icon`), served by Pouchbase; `null` when it has none. */
 	iconUrl: string | null;
 	permissions: PluginPermissions;
-	contributes: PluginManifest['contributes'];
+	/** What the plugin adds, with the routes its server code reported. */
+	contributes: ContributionSummary;
+	pages: PluginPage[];
+	/** Whether the plugin has settings an admin can fill in. */
+	hasSettings: boolean;
+	/** Keys of required settings without a value; the plugin may not work until they are set. */
+	missingSettings: string[];
 	/** Built in: ships with Pouchbase, runs inside it and can't be removed. */
 	embedded: boolean;
 	/** Installed from the registry in place of the built-in plugin with this id. */
@@ -80,6 +142,55 @@ export type InstalledPlugin = {
 	installedAt: Date | null;
 	updatedAt: Date | null;
 };
+
+/** A field type a plugin contributes, as the field settings and the record form use it. */
+export type PluginFieldType = {
+	/** `<plugin>:<type>`, as stored in `fields.type`. */
+	id: PluginFieldTypeId;
+	pluginId: string;
+	pluginName: string;
+	/** The version of the plugin, for loading its components (`loadPluginComponent`). */
+	pluginVersion: string;
+	/** Whether the plugin is built in (its components come with the dashboard). */
+	embedded: boolean;
+	/** The plugin's own id of the type, e.g. `rating`. */
+	type: string;
+	label: string;
+	description: string | null;
+	column: FieldColumn;
+	/** Bundle path of the input component, e.g. `ui/rating-input.svelte`. */
+	input: string;
+	/**
+	 * Bundle path of the preview component, which shows the value, read-only, in the records grid;
+	 * `null` shows the value as text.
+	 */
+	preview: string | null;
+	/**
+	 * The type's own icon (`icon` of the contribution), drawn in one color like the built-in types'
+	 * icons; `null` without one (never the plugin's logo).
+	 */
+	iconUrl: string | null;
+};
+
+/** The page `/plugins/<plugin>/<path>` opens. */
+export type PluginPageMatch = {
+	plugin: InstalledPlugin;
+	page: PluginPage & { component: string };
+	/** The rest of the path below the page, e.g. `2026/10`; empty for the page itself. */
+	params: string;
+};
+
+/** The compiled UI of an installed plugin, for the dashboard's module loader. */
+export type PluginModules = {
+	version: string;
+	/** Bundle path → ES module and the specifiers it imports (host modules and bundle paths). */
+	modules: Record<string, { code: string; imports: string[] }>;
+	/** Contents of the plugin's `.css` files, by path. */
+	css: string[];
+};
+
+/** A field of a collection that has a plugin's field type. */
+export type PluginFieldUsage = { collection: string; field: string; type: string };
 
 /** A file of a plugin served to browsers, e.g. a sign-in provider's logo. */
 export type PluginAsset = { content: string; contentType: string };
@@ -112,9 +223,34 @@ type NoSubdomain = ServiceError<19011, 'NO_WORKERS_SUBDOMAIN'>;
 
 type SyncFailed = ServiceError<19012, 'SYNC_BUILT_IN_PLUGINS_FAILED'>;
 
+type RouteFailed = ServiceError<19013, 'PLUGIN_ROUTE_FAILED'> & { data: { reason: string } };
+
+type UiCompileFailed = ServiceError<19014, 'UI_COMPILE_FAILED'> & {
+	data: { issues: CompileIssue[] };
+};
+
+type LoadModulesFailed = ServiceError<19015, 'LOAD_MODULES_FAILED'>;
+
+type FieldTypeNotInstalled = ServiceError<19016, 'FIELD_TYPE_NOT_INSTALLED'> & {
+	data: { pluginId: string; type: string | null };
+};
+
+type FieldCallFailed = ServiceError<19017, 'FIELD_CALL_FAILED'> & { data: { reason: string } };
+
+type InvalidSettings = ServiceError<19018, 'INVALID_PLUGIN_SETTINGS'> & {
+	data: { issues: Record<string, string> };
+};
+
+type SaveSettingsFailed = ServiceError<19019, 'SAVE_PLUGIN_SETTINGS_FAILED'>;
+
 type PluginRow = typeof plugins.$inferSelect;
 
 type ProviderRow = typeof pluginAuthProviders.$inferInsert;
+
+type ModuleRow = typeof pluginModules.$inferInsert;
+
+/** Saved settings by plugin id. */
+type SavedSettings = Map<string, Record<string, string>>;
 
 function registryUrl() {
 	// `PLUGIN_REGISTRY_URL` is the name the variable had up to 0.8.
@@ -123,6 +259,19 @@ function registryUrl() {
 
 const HOST = { version: POUCHBASE_VERSION, apiVersions: SUPPORTED_API_VERSIONS };
 
+/**
+ * Why this Pouchbase can't install a plugin, or `null`. In development the app runs unreleased
+ * code, which plugins written for the coming release target with `engines.pouchbase`, so only the
+ * plugin API version is checked there.
+ */
+function incompatibility(manifest: Pick<PluginManifest, 'apiVersion' | 'engines'>) {
+	return checkCompatibility(
+		dev ? { apiVersion: manifest.apiVersion, engines: {} } : manifest,
+		HOST
+	);
+}
+
+/** Every column of `plugins` but the bundle, which can be a megabyte. */
 const INSTALLED_COLUMNS = {
 	id: plugins.id,
 	name: plugins.name,
@@ -130,49 +279,113 @@ const INSTALLED_COLUMNS = {
 	apiVersion: plugins.apiVersion,
 	manifest: plugins.manifest,
 	registryUrl: plugins.registryUrl,
+	workerUrl: plugins.workerUrl,
+	workerSecret: plugins.workerSecret,
+	capabilities: plugins.capabilities,
 	installedAt: plugins.installedAt,
 	updatedAt: plugins.updatedAt
 };
 
-function toInstalled(row: {
-	id: string;
-	name: string;
-	version: string;
-	apiVersion: number;
-	manifest: PluginManifest;
-	registryUrl: string;
-	installedAt: Date;
-	updatedAt: Date;
-}): InstalledPlugin {
-	const { manifest, ...rest } = row;
+type InstalledRow = Omit<PluginRow, 'bundle' | 'integrity'>;
+
+/**
+ * A plugin that is there: installed from the registry (`row`), or built in and not shadowed by an
+ * installed one (`row` is `null`).
+ */
+type PluginSource = { manifest: PluginManifest; row: InstalledRow | null };
+
+/** The URL of an image of the plugin (its icon, or that of a contribution); `null` without. */
+function imageUrl(manifest: PluginManifest, path: string | undefined) {
+	return path ? pluginImagePath(manifest.id, path, manifest.version) : null;
+}
+
+function iconUrl(manifest: PluginManifest) {
+	return imageUrl(manifest, manifest.icon);
+}
+
+function pagesOf(manifest: PluginManifest): PluginPage[] {
+	return manifest.contributes.pages.map(({ path, title, navigation, icon }) => ({
+		path,
+		title,
+		navigation,
+		iconUrl: imageUrl(manifest, icon)
+	}));
+}
+
+function toInstalled(
+	source: PluginSource,
+	saved: Readonly<Record<string, string>>,
+	routes: readonly string[]
+): InstalledPlugin {
+	const { manifest, row } = source;
 
 	return {
-		...rest,
+		id: manifest.id,
+		name: row?.name ?? manifest.name,
+		version: row?.version ?? manifest.version,
+		apiVersion: row?.apiVersion ?? manifest.apiVersion,
 		description: manifest.description,
-		iconUrl: manifest.icon ? pluginImagePath(row.id, manifest.icon, row.version) : null,
+		iconUrl: iconUrl(manifest),
 		permissions: manifest.permissions,
-		contributes: manifest.contributes,
-		embedded: false,
-		replacesBuiltIn: embeddedPlugin(row.id) !== null
+		contributes: contributionSummary(manifest, routes),
+		pages: pagesOf(manifest),
+		hasSettings: manifest.settings.length > 0,
+		missingSettings: missingSettings(manifest.settings, saved),
+		embedded: row === null,
+		replacesBuiltIn: row !== null && embeddedPlugin(manifest.id) !== null,
+		registryUrl: row?.registryUrl ?? null,
+		installedAt: row?.installedAt ?? null,
+		updatedAt: row?.updatedAt ?? null
 	};
 }
 
-function embeddedToInstalled(manifest: PluginManifest): InstalledPlugin {
-	return {
-		id: manifest.id,
-		name: manifest.name,
-		version: manifest.version,
-		apiVersion: manifest.apiVersion,
-		description: manifest.description,
-		iconUrl: manifest.icon ? pluginImagePath(manifest.id, manifest.icon, manifest.version) : null,
-		permissions: manifest.permissions,
-		contributes: manifest.contributes,
-		embedded: true,
-		replacesBuiltIn: false,
-		registryUrl: null,
-		installedAt: null,
-		updatedAt: null
-	};
+function toFieldTypes(manifest: PluginManifest, embedded: boolean): PluginFieldType[] {
+	return manifest.contributes.fields.map((field) => ({
+		id: pluginFieldTypeId(manifest.id, field.type),
+		pluginId: manifest.id,
+		pluginName: manifest.name,
+		pluginVersion: manifest.version,
+		embedded,
+		type: field.type,
+		label: field.label,
+		description: field.description || null,
+		column: field.column,
+		input: field.input,
+		preview: previewOf(field) ?? null,
+		iconUrl: imageUrl(manifest, field.icon)
+	}));
+}
+
+/** The rows of `plugin_modules` for a compiled UI. */
+function moduleRows(manifest: PluginManifest, ui: CompiledUi, updatedAt: Date): ModuleRow[] {
+	return [
+		...Object.entries(ui.modules).map(([path, module]) => ({
+			pluginId: manifest.id,
+			path,
+			version: manifest.version,
+			code: module.code,
+			imports: module.imports,
+			updatedAt
+		})),
+		...Object.entries(ui.css).map(([path, code]) => ({
+			pluginId: manifest.id,
+			path,
+			version: manifest.version,
+			code,
+			imports: [],
+			updatedAt
+		}))
+	];
+}
+
+function chunks<T>(items: readonly T[], size: number): T[][] {
+	const result: T[][] = [];
+
+	for (let start = 0; start < items.length; start += size) {
+		result.push(items.slice(start, start + size));
+	}
+
+	return result;
 }
 
 /** The API's messages, e.g. the syntax error a deploy failed with. */
@@ -237,8 +450,33 @@ function providerConfigs(
 	return { configs };
 }
 
+/** Saved settings rows grouped by plugin. */
+function groupSettings(rows: { pluginId: string; key: string; value: string }[]): SavedSettings {
+	const saved: SavedSettings = new Map();
+
+	for (const row of rows) {
+		const values = saved.get(row.pluginId) ?? {};
+
+		values[row.key] = row.value;
+		saved.set(row.pluginId, values);
+	}
+
+	return saved;
+}
+
+/** The context of a call into a plugin: its settings with their defaults. */
+function callContext(
+	manifest: PluginManifest,
+	saved: Readonly<Record<string, string>>
+): PluginCallContext {
+	return { settings: resolveSettings(manifest.settings, saved) };
+}
+
 /** Logos and other images in `ui/`; the only plugin files served to browsers. */
 const ASSET_PATH = /^ui\/(?:[\w-]+\/)*[\w.-]+\.svg$/;
+
+/** Files of a bundle that `compileUi` turns into `plugin_modules`. */
+const UI_MODULE_FILE = /\.(?:svelte|js|css)$/;
 
 export class PluginsService extends Service {
 	private readonly registry = createRegistryClient({ url: registryUrl() });
@@ -255,6 +493,10 @@ export class PluginsService extends Service {
 
 	private callFailed(error: unknown): CallFailed {
 		return { ...this.error(19009, 'PLUGIN_CALL_FAILED', error), data: { reason: reason(error) } };
+	}
+
+	private listFailed(error: unknown): ListFailed {
+		return this.error(19001, 'LIST_PLUGINS_FAILED', error);
 	}
 
 	/** Plugins in the registry that this Pouchbase can run, matching `query` (and `category`). */
@@ -284,27 +526,30 @@ export class PluginsService extends Service {
 
 				return okAsync(undefined);
 			})
-			.andThen(() =>
-				fromPromise(
-					this.db.select(INSTALLED_COLUMNS).from(plugins).orderBy(asc(plugins.name)),
-					(error) => this.error(19001, 'LIST_PLUGINS_FAILED', error)
+			.andThen(() => this.sources())
+			.andThen((sources) =>
+				this.savedSettings(sources.map((source) => source.manifest.id)).andThen((saved) =>
+					fromPromise(
+						Promise.all(
+							sources.map(async (source) =>
+								toInstalled(
+									source,
+									saved.get(source.manifest.id) ?? {},
+									(await this.capabilities(source, saved))?.routes ?? []
+								)
+							)
+						),
+						(error) => this.listFailed(error)
+					)
 				)
 			)
-			.map((rows) => {
-				const ids = new Set(rows.map((row) => row.id));
-
-				return [
-					...rows.map(toInstalled),
-					...embeddedPlugins()
-						.filter((plugin) => !ids.has(plugin.manifest.id))
-						.map((plugin) => embeddedToInstalled(plugin.manifest))
-				].sort((a, b) => a.name.localeCompare(b.name));
-			});
+			.map((list) => list.sort((a, b) => a.name.localeCompare(b.name)));
 	}
 
 	/**
 	 * Installs the newest version of a plugin that this Pouchbase can run (or the `requested` one), or
-	 * updates an installed plugin to it.
+	 * updates an installed plugin to it. The UI is compiled before the Worker is deployed, so a
+	 * plugin whose components don't compile changes nothing.
 	 */
 	install(
 		id: string,
@@ -322,6 +567,7 @@ export class PluginsService extends Service {
 		| ProviderTaken
 		| CallFailed
 		| NoSubdomain
+		| UiCompileFailed
 	> {
 		return fromPromise(this.registry.getVersion(id, requested, SUPPORTED_API_VERSIONS), (error) =>
 			this.registryError(error)
@@ -331,13 +577,10 @@ export class PluginsService extends Service {
 					return errAsync(this.error(19002, 'PLUGIN_NOT_FOUND'));
 				}
 
-				const reason = checkCompatibility(
-					{
-						apiVersion: version.apiVersion,
-						engines: { pouchbase: version.pouchbase ?? undefined }
-					},
-					HOST
-				);
+				const reason = incompatibility({
+					apiVersion: version.apiVersion,
+					engines: { pouchbase: version.pouchbase ?? undefined }
+				});
 
 				if (reason) {
 					return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
@@ -374,59 +617,86 @@ export class PluginsService extends Service {
 				}
 
 				// Checked again on the manifest itself, which may differ from what the registry listed.
-				const reason = checkCompatibility(manifest, HOST);
+				const reason = incompatibility(manifest);
 
 				if (reason) {
 					return errAsync({ ...this.error(19003, 'PLUGIN_INCOMPATIBLE'), data: { reason } });
 				}
 
-				return okAsync({ version, bytes, manifest, server: bundle.files[SERVER_FILE] ?? null });
+				return okAsync({
+					version,
+					bytes,
+					manifest,
+					files: bundle.files,
+					server: bundle.files[SERVER_FILE] ?? null
+				});
 			})
 			.andThen((input) =>
 				this.checkProviderIds(input.manifest)
 					.andThen(() => this.findRow(input.manifest.id))
 					.map((existing) => ({ ...input, existing }))
 			)
-			.andThen(({ version, bytes, manifest, server, existing }) =>
-				this.runServer(manifest, server, existing).andThen(({ worker, configs }) => {
-					const now = new Date();
-					const values = {
-						name: manifest.name,
-						version: manifest.version,
-						apiVersion: manifest.apiVersion,
-						manifest,
-						bundle: new TextDecoder().decode(bytes),
-						integrity: version.integrity,
-						registryUrl: registryUrl(),
-						workerUrl: worker?.url ?? null,
-						workerSecret: worker?.secret ?? null,
-						updatedAt: now
-					};
-					const providers = manifest.contributes.authProviders.map((contribution) =>
-						providerRow(manifest.id, contribution, configs.get(contribution.id)!, now)
-					);
+			.andThen((input) => this.compile(input.files).map((ui) => ({ ...input, ui })))
+			.andThen((input) =>
+				this.savedSettings([id]).map((saved) => ({
+					...input,
+					context: callContext(input.manifest, saved.get(id) ?? {}),
+					saved: saved.get(id) ?? {}
+				}))
+			)
+			.andThen(({ version, bytes, manifest, server, existing, ui, context, saved }) =>
+				this.runServer(manifest, server, existing, context).andThen(
+					({ worker, configs, description }) => {
+						const now = new Date();
+						const values = {
+							name: manifest.name,
+							version: manifest.version,
+							apiVersion: manifest.apiVersion,
+							manifest,
+							bundle: new TextDecoder().decode(bytes),
+							integrity: version.integrity,
+							registryUrl: registryUrl(),
+							workerUrl: worker?.url ?? null,
+							workerSecret: worker?.secret ?? null,
+							capabilities: description,
+							updatedAt: now
+						};
+						const providers = manifest.contributes.authProviders.map((contribution) =>
+							providerRow(manifest.id, contribution, configs.get(contribution.id)!, now)
+						);
+						const modules = moduleRows(manifest, ui, now);
 
-					return fromPromise(
-						this.db.batch([
-							this.db
-								.insert(plugins)
-								.values({ id, ...values, installedAt: now })
-								.onConflictDoUpdate({ target: plugins.id, set: values })
-								.returning(INSTALLED_COLUMNS),
-							// Replaces the providers of the previous version, or of the built-in plugin.
-							this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
-							...(providers.length ? [this.db.insert(pluginAuthProviders).values(providers)] : [])
-						]),
-						(error) => this.error(19005, 'INSTALL_FAILED', error)
-					).map(([[row]]) => toInstalled(row!));
-				})
+						return fromPromise(
+							this.db.batch([
+								this.db
+									.insert(plugins)
+									.values({ id, ...values, installedAt: now })
+									.onConflictDoUpdate({ target: plugins.id, set: values })
+									.returning(INSTALLED_COLUMNS),
+								// Replaces the providers of the previous version, or of the built-in plugin.
+								this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
+								...(providers.length
+									? [this.db.insert(pluginAuthProviders).values(providers)]
+									: []),
+								// Replaces the modules of the previous version.
+								this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
+								...chunks(modules, MODULE_ROWS_PER_INSERT).map((rows) =>
+									this.db.insert(pluginModules).values(rows)
+								)
+							]),
+							(error) => this.error(19005, 'INSTALL_FAILED', error)
+						).map(([[row]]) =>
+							toInstalled({ manifest, row: row! }, saved, description?.routes ?? [])
+						);
+					}
+				)
 			);
 	}
 
 	/**
-	 * Removes an installed plugin with its Worker and sign-in providers; `null` when it isn't
-	 * installed. A built-in plugin can't be removed; removing a plugin that shadowed one brings the
-	 * built-in plugin back.
+	 * Removes an installed plugin with its Worker, sign-in providers, compiled UI and settings;
+	 * `null` when it isn't installed. A built-in plugin can't be removed; removing a plugin that
+	 * shadowed one brings the built-in plugin back. Fields with the plugin's types keep their data.
 	 */
 	uninstall(
 		id: string
@@ -444,7 +714,9 @@ export class PluginsService extends Service {
 
 					await this.db.batch([
 						this.db.delete(plugins).where(eq(plugins.id, id)),
-						this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id))
+						this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
+						this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
+						this.db.delete(pluginSettings).where(eq(pluginSettings.pluginId, id))
 					]);
 
 					return { id };
@@ -473,18 +745,23 @@ export class PluginsService extends Service {
 	ensureEmbedded(): ResultAsync<void, SyncFailed> {
 		return fromPromise(
 			(async () => {
-				const [installedRows, rows] = await this.db.batch([
+				const [installedRows, rows, settingRows] = await this.db.batch([
 					this.db.select({ id: plugins.id }).from(plugins),
-					this.db.select().from(pluginAuthProviders)
+					this.db.select().from(pluginAuthProviders),
+					this.db.select().from(pluginSettings)
 				]);
 				const installed = new Set(installedRows.map((row) => row.id));
+				const saved = groupSettings(settingRows);
 				const active = embeddedPlugins().filter((plugin) => !installed.has(plugin.manifest.id));
 				const activeIds = new Set(active.map((plugin) => plugin.manifest.id));
 				const now = new Date();
 				const desired: ProviderRow[] = [];
 
 				for (const plugin of active) {
-					const description = await describeEmbedded(plugin);
+					const description = await describeEmbedded(
+						plugin,
+						callContext(plugin.manifest, saved.get(plugin.manifest.id) ?? {})
+					);
 
 					for (const contribution of plugin.manifest.contributes.authProviders) {
 						const config = description.authProviders[contribution.id];
@@ -552,19 +829,276 @@ export class PluginsService extends Service {
 
 	/**
 	 * What runs the plugin's server code: its Worker when installed, Pouchbase itself when built in.
-	 * `null` when the plugin isn't there or has no server code.
+	 * Calls that don't pass a context of their own get the plugin's settings. `null` when the plugin
+	 * isn't there or has no server code.
 	 */
 	runtimeFor(pluginId: string): ResultAsync<PluginRuntime | null, ListFailed> {
-		return this.findRow(pluginId).map((row) => {
-			if (row) {
-				return row.workerUrl && row.workerSecret
-					? new WorkerRuntime(row.workerUrl, row.workerSecret)
-					: null;
+		return this.source(pluginId).andThen((source) => {
+			const runtime = source ? this.runtimeOf(source) : null;
+
+			if (!source || !runtime) {
+				return okAsync(null);
 			}
 
-			const plugin = embeddedPlugin(pluginId);
+			return this.savedSettings([pluginId]).map((saved) =>
+				withCallContext(runtime, callContext(source.manifest, saved.get(pluginId) ?? {}))
+			);
+		});
+	}
 
-			return plugin?.manifest.server ? new InProcessRuntime(plugin) : null;
+	/**
+	 * Runs the plugin's route for `request`: `path` is the path below `/api/plugins/<id>` as the
+	 * client sent it (still URL-encoded, e.g. `/items/42`), `caller` who the plugin sees as
+	 * `ctx.admin` and `ctx.user`. The response is the plugin's own, or 404/405 JSON when no route
+	 * matches; `null` when the plugin isn't there or has no server code.
+	 */
+	route(
+		pluginId: string,
+		request: Request,
+		path: string,
+		caller: { admin: boolean; user: PluginUser | null }
+	): ResultAsync<Response | null, ListFailed | RouteFailed> {
+		return this.source(pluginId).andThen((source) => {
+			const runtime = source ? this.runtimeOf(source) : null;
+
+			if (!source || !runtime) {
+				return okAsync(null);
+			}
+
+			return this.savedSettings([pluginId]).andThen((saved) =>
+				fromPromise(
+					runtime.route(
+						request,
+						{ path: path.startsWith('/') ? path : `/${path}`, search: new URL(request.url).search },
+						{
+							...callContext(source.manifest, saved.get(pluginId) ?? {}),
+							admin: caller.admin,
+							user: caller.user
+						}
+					),
+					(error): RouteFailed => ({
+						...this.error(19013, 'PLUGIN_ROUTE_FAILED', error),
+						data: { reason: reason(error) }
+					})
+				)
+			);
+		});
+	}
+
+	/**
+	 * The compiled UI of an installed plugin; `null` when it isn't installed or is built in (the
+	 * dashboard has the components of built-in plugins already). A plugin installed before its UI
+	 * was compiled on install is compiled now, from its stored bundle.
+	 */
+	modules(pluginId: string): ResultAsync<PluginModules | null, ListFailed | LoadModulesFailed> {
+		return fromPromise(
+			this.db.select(INSTALLED_COLUMNS).from(plugins).where(eq(plugins.id, pluginId)),
+			(error) => this.listFailed(error)
+		).andThen(([row]) => {
+			if (!row) {
+				return okAsync(null);
+			}
+
+			return fromPromise(
+				(async () => {
+					let rows = await this.db
+						.select({
+							path: pluginModules.path,
+							code: pluginModules.code,
+							imports: pluginModules.imports
+						})
+						.from(pluginModules)
+						.where(
+							and(eq(pluginModules.pluginId, pluginId), eq(pluginModules.version, row.version))
+						);
+
+					if (!rows.length) {
+						rows = await this.compileStored(row.manifest);
+					}
+
+					const result: PluginModules = { version: row.version, modules: {}, css: [] };
+
+					for (const module of rows.sort((a, b) => a.path.localeCompare(b.path))) {
+						if (module.path.endsWith('.css')) {
+							result.css.push(module.code);
+						} else {
+							result.modules[module.path] = { code: module.code, imports: module.imports };
+						}
+					}
+
+					return result;
+				})(),
+				(error) => this.error(19015, 'LOAD_MODULES_FAILED', error)
+			);
+		});
+	}
+
+	/**
+	 * The page that `/plugins/<pluginId>/<path>` opens: the plugin's page with the longest path that
+	 * `path` starts with, and the rest of `path` as `params`. `null` when there is none.
+	 */
+	page(pluginId: string, path: string): ResultAsync<PluginPageMatch | null, ListFailed> {
+		return this.source(pluginId).andThen((source) => {
+			const match = source ? matchPage(source.manifest.contributes.pages, path) : null;
+
+			if (!source || !match) {
+				return okAsync(null);
+			}
+
+			return this.savedSettings([pluginId]).andThen((saved) =>
+				fromPromise(this.capabilities(source, saved), (error) => this.listFailed(error)).map(
+					(capabilities): PluginPageMatch => ({
+						plugin: toInstalled(source, saved.get(pluginId) ?? {}, capabilities?.routes ?? []),
+						page: {
+							path: match.page.path,
+							title: match.page.title,
+							component: match.page.component,
+							navigation: match.page.navigation,
+							iconUrl: imageUrl(source.manifest, match.page.icon)
+						},
+						params: match.params
+					})
+				)
+			);
+		});
+	}
+
+	/** The field types of the installed and built-in plugins, by plugin and then in manifest order. */
+	fieldTypes(): ResultAsync<PluginFieldType[], ListFailed> {
+		return this.sources().map((sources) =>
+			sources
+				.sort((a, b) => a.manifest.name.localeCompare(b.manifest.name))
+				.flatMap((source) => toFieldTypes(source.manifest, source.row === null))
+		);
+	}
+
+	/** A plugin's field type by its id (`<plugin>:<type>`); `null` when no plugin there has it. */
+	fieldType(id: string): ResultAsync<PluginFieldType | null, ListFailed> {
+		const parts = splitPluginFieldType(id);
+
+		if (!parts) {
+			return okAsync(null);
+		}
+
+		return this.source(parts.pluginId).map(
+			(source) =>
+				(source &&
+					toFieldTypes(source.manifest, source.row === null).find((type) => type.id === id)) ??
+				null
+		);
+	}
+
+	/**
+	 * Validates, then serializes values of the plugin's field types before they are saved; one
+	 * result per item. Types without `validate` and `serialize` don't call the plugin.
+	 */
+	writeFieldValues(
+		pluginId: string,
+		items: FieldWriteItem[]
+	): ResultAsync<FieldWriteResult[], ListFailed | FieldTypeNotInstalled | FieldCallFailed> {
+		return this.fieldRuntime(pluginId, items, ['validate', 'serialize']).andThen((target) => {
+			if (!target) {
+				return okAsync(passThroughWrite(items));
+			}
+
+			return fromPromise(writeFieldValues(target.runtime, items, target.context), (error) =>
+				this.fieldCallFailed(error)
+			);
+		});
+	}
+
+	/**
+	 * Turns stored values of the plugin's field types into what the API returns; one array per item,
+	 * in the same order. Types without `deserialize` don't call the plugin.
+	 */
+	readFieldValues(
+		pluginId: string,
+		items: FieldReadItem[]
+	): ResultAsync<unknown[][], ListFailed | FieldTypeNotInstalled | FieldCallFailed> {
+		return this.fieldRuntime(pluginId, items, ['deserialize']).andThen((target) => {
+			if (!target) {
+				return okAsync(items.map((item) => [...item.values] as unknown[]));
+			}
+
+			return fromPromise(
+				readInChunks(items, (chunk) => readFieldValues(target.runtime, chunk, target.context)),
+				(error) => this.fieldCallFailed(error)
+			);
+		});
+	}
+
+	/** The fields of collections that have one of the plugin's types, e.g. before removing it. */
+	fieldUsage(pluginId: string): ResultAsync<PluginFieldUsage[], ListFailed> {
+		return fromPromise(
+			this.db
+				.select({ collection: collections.name, field: fields.name, type: fields.type })
+				.from(fields)
+				.innerJoin(collections, eq(fields.collectionId, collections.id))
+				.where(like(fields.type, `${pluginId}:%`))
+				.orderBy(asc(collections.name), asc(fields.position), asc(fields.createdAt)),
+			(error) => this.listFailed(error)
+		).map((rows) =>
+			rows
+				.filter((row) => splitPluginFieldType(row.type)?.pluginId === pluginId)
+				.map((row) => ({ collection: row.collection, field: row.field, type: String(row.type) }))
+		);
+	}
+
+	/**
+	 * The plugin's settings with their values (secrets masked); `null` when the plugin isn't
+	 * there.
+	 */
+	settings(pluginId: string): ResultAsync<PluginSettingsState | null, ListFailed> {
+		return this.source(pluginId).andThen((source) =>
+			source
+				? this.savedSettings([pluginId]).map((saved) =>
+						settingsState(source.manifest.settings, saved.get(pluginId) ?? {})
+					)
+				: okAsync(null)
+		);
+	}
+
+	/**
+	 * Saves the plugin's settings: `undefined` keeps a value (an untouched secret), `null` or `''`
+	 * clears it. Answers like `settings()`; `null` when the plugin isn't there.
+	 */
+	saveSettings(
+		pluginId: string,
+		values: Record<string, string | null | undefined>
+	): ResultAsync<PluginSettingsState | null, ListFailed | InvalidSettings | SaveSettingsFailed> {
+		return this.source(pluginId).andThen((source) => {
+			if (!source) {
+				return okAsync(null);
+			}
+
+			const definition = source.manifest.settings;
+
+			return this.savedSettings([pluginId]).andThen((saved) => {
+				const result = applySettings(definition, saved.get(pluginId) ?? {}, values);
+
+				if (Object.keys(result.issues).length) {
+					return errAsync({
+						...this.error(19018, 'INVALID_PLUGIN_SETTINGS'),
+						data: { issues: result.issues }
+					});
+				}
+
+				const now = new Date();
+				const rows = Object.entries(result.values).map(([key, value]) => ({
+					pluginId,
+					key,
+					value,
+					updatedAt: now
+				}));
+
+				return fromPromise(
+					this.db.batch([
+						this.db.delete(pluginSettings).where(eq(pluginSettings.pluginId, pluginId)),
+						...chunks(rows, 20).map((chunk) => this.db.insert(pluginSettings).values(chunk))
+					]),
+					(error) => this.error(19019, 'SAVE_PLUGIN_SETTINGS_FAILED', error)
+				).map(() => settingsState(definition, result.values));
+			});
 		});
 	}
 
@@ -597,14 +1131,220 @@ export class PluginsService extends Service {
 
 				return plugin && Object.hasOwn(plugin.assets, path) ? asset(plugin.assets[path]) : null;
 			})(),
-			(error) => this.error(19001, 'LIST_PLUGINS_FAILED', error)
+			(error) => this.listFailed(error)
 		);
 	}
 
 	private findRow(id: string): ResultAsync<PluginRow | null, ListFailed> {
 		return fromPromise(this.db.select().from(plugins).where(eq(plugins.id, id)), (error) =>
-			this.error(19001, 'LIST_PLUGINS_FAILED', error)
+			this.listFailed(error)
 		).map(([row]) => row ?? null);
+	}
+
+	/** The plugin with this id: installed, or built in; `null` when neither. */
+	private source(id: string): ResultAsync<PluginSource | null, ListFailed> {
+		return fromPromise(
+			this.db.select(INSTALLED_COLUMNS).from(plugins).where(eq(plugins.id, id)),
+			(error) => this.listFailed(error)
+		).map(([row]) => {
+			if (row) {
+				return { manifest: row.manifest, row };
+			}
+
+			const plugin = embeddedPlugin(id);
+
+			return plugin ? { manifest: plugin.manifest, row: null } : null;
+		});
+	}
+
+	/** Every installed plugin and the built-in ones they don't shadow. */
+	private sources(): ResultAsync<PluginSource[], ListFailed> {
+		return fromPromise(
+			this.db.select(INSTALLED_COLUMNS).from(plugins).orderBy(asc(plugins.name)),
+			(error) => this.listFailed(error)
+		).map((rows) => {
+			const ids = new Set(rows.map((row) => row.id));
+
+			return [
+				...rows.map((row) => ({ manifest: row.manifest, row })),
+				...embeddedPlugins()
+					.filter((plugin) => !ids.has(plugin.manifest.id))
+					.map((plugin) => ({ manifest: plugin.manifest, row: null }))
+			];
+		});
+	}
+
+	/** Saved settings of the plugins with these ids. */
+	private savedSettings(ids: string[]): ResultAsync<SavedSettings, ListFailed> {
+		if (!ids.length) {
+			return okAsync(new Map());
+		}
+
+		return fromPromise(
+			this.db
+				.select({
+					pluginId: pluginSettings.pluginId,
+					key: pluginSettings.key,
+					value: pluginSettings.value
+				})
+				.from(pluginSettings)
+				.where(inArray(pluginSettings.pluginId, ids)),
+			(error) => this.listFailed(error)
+		).map(groupSettings);
+	}
+
+	/** The runtime of a plugin, without settings bound; `null` without server code. */
+	private runtimeOf(source: PluginSource): PluginRuntime | null {
+		if (source.row) {
+			return source.row.workerUrl && source.row.workerSecret
+				? new WorkerRuntime(source.row.workerUrl, source.row.workerSecret)
+				: null;
+		}
+
+		const plugin = embeddedPlugin(source.manifest.id);
+
+		return plugin?.manifest.server ? new InProcessRuntime(plugin) : null;
+	}
+
+	/**
+	 * What the plugin's server code implements: stored on install, or asked of a built-in plugin
+	 * (kept per build). `null` without server code, or for a plugin installed before it was stored.
+	 * A built-in plugin that can't describe itself counts as one without capabilities.
+	 */
+	private async capabilities(
+		source: PluginSource,
+		saved: SavedSettings
+	): Promise<DescribeResult | null> {
+		if (source.row) {
+			return source.row.capabilities ?? null;
+		}
+
+		const plugin = embeddedPlugin(source.manifest.id);
+
+		if (!plugin?.manifest.server) {
+			return null;
+		}
+
+		try {
+			return await describeEmbedded(
+				plugin,
+				callContext(plugin.manifest, saved.get(plugin.manifest.id) ?? {})
+			);
+		} catch (error) {
+			console.error(
+				`[plugins] The built-in ${plugin.manifest.id} could not describe itself`,
+				error
+			);
+
+			return null;
+		}
+	}
+
+	private fieldCallFailed(error: unknown): FieldCallFailed {
+		return { ...this.error(19017, 'FIELD_CALL_FAILED', error), data: { reason: reason(error) } };
+	}
+
+	/**
+	 * What runs the field hooks of `items`, with the plugin's settings; `null` when none of their
+	 * types has one of `hooks` (or the plugin has no server code), so the values pass as they are.
+	 * Fails with `FIELD_TYPE_NOT_INSTALLED` when the plugin or one of the types isn't there.
+	 */
+	private fieldRuntime(
+		pluginId: string,
+		items: readonly { type: string }[],
+		hooks: ('validate' | 'serialize' | 'deserialize')[]
+	): ResultAsync<
+		{ runtime: PluginRuntime; context: PluginCallContext } | null,
+		ListFailed | FieldTypeNotInstalled
+	> {
+		const notInstalled = (type: string | null): FieldTypeNotInstalled => ({
+			...this.error(19016, 'FIELD_TYPE_NOT_INSTALLED'),
+			data: { pluginId, type }
+		});
+
+		return this.source(pluginId).andThen((source) => {
+			if (!source) {
+				return errAsync(notInstalled(items[0]?.type ?? null));
+			}
+
+			const known = new Set(source.manifest.contributes.fields.map((field) => field.type));
+			const unknown = items.find((item) => !known.has(item.type));
+
+			if (unknown) {
+				return errAsync(notInstalled(unknown.type));
+			}
+
+			const runtime = this.runtimeOf(source);
+
+			if (!items.length || !runtime) {
+				return okAsync(null);
+			}
+
+			return this.savedSettings([pluginId]).andThen((saved) =>
+				fromPromise(this.capabilities(source, saved), (error) => this.listFailed(error)).map(
+					(capabilities) =>
+						hasHooks(
+							capabilities?.fieldHandlers,
+							items.map((item) => item.type),
+							hooks
+						)
+							? { runtime, context: callContext(source.manifest, saved.get(pluginId) ?? {}) }
+							: null
+				)
+			);
+		});
+	}
+
+	/** Compiles the UI files of a bundle; fails with the issues when one doesn't compile. */
+	private compile(files: Record<string, string>): ResultAsync<CompiledUi, UiCompileFailed> {
+		const failed = (issues: CompileIssue[], error?: unknown): UiCompileFailed => ({
+			...this.error(19014, 'UI_COMPILE_FAILED', error ?? issues.map(formatCompileIssue).join('\n')),
+			data: { issues }
+		});
+
+		return fromPromise(compileUi(files), (error) =>
+			failed([{ path: UI_DIR, message: reason(error) }], error)
+		).andThen((ui) => (ui.issues.length ? errAsync(failed(ui.issues)) : okAsync(ui)));
+	}
+
+	/**
+	 * Compiles the UI of an installed plugin from its stored bundle and stores the modules; for
+	 * plugins installed before the UI was compiled on install. Throws when it doesn't compile.
+	 */
+	private async compileStored(
+		manifest: PluginManifest
+	): Promise<{ path: string; code: string; imports: string[] }[]> {
+		const [stored] = await this.db
+			.select({ bundle: plugins.bundle })
+			.from(plugins)
+			.where(eq(plugins.id, manifest.id));
+		const files =
+			(JSON.parse(stored?.bundle ?? '{}') as { files?: Record<string, string> }).files ?? {};
+
+		if (
+			!Object.keys(files).some((path) => path.startsWith(`${UI_DIR}/`) && UI_MODULE_FILE.test(path))
+		) {
+			return [];
+		}
+
+		const ui = await compileUi(files);
+
+		if (ui.issues.length) {
+			throw new Error(ui.issues.map(formatCompileIssue).join('\n'));
+		}
+
+		const rows = moduleRows(manifest, ui, new Date());
+
+		if (rows.length) {
+			await this.db.batch([
+				this.db.delete(pluginModules).where(eq(pluginModules.pluginId, manifest.id)),
+				...chunks(rows, MODULE_ROWS_PER_INSERT).map((chunk) =>
+					this.db.insert(pluginModules).values(chunk)
+				)
+			]);
+		}
+
+		return rows.map((row) => ({ path: row.path, code: row.code, imports: row.imports }));
 	}
 
 	/**
@@ -631,7 +1371,7 @@ export class PluginsService extends Service {
 					.from(pluginAuthProviders)
 					.where(inArray(pluginAuthProviders.provider, ids))
 			]),
-			(error) => this.error(19001, 'LIST_PLUGINS_FAILED', error)
+			(error) => this.listFailed(error)
 		).andThen(([installedRows, rows]) => {
 			const installed = new Set(installedRows.map((row) => row.id));
 			const holders = [
@@ -656,15 +1396,21 @@ export class PluginsService extends Service {
 	}
 
 	/**
-	 * Deploys the server code to the plugin's Worker and asks it what it implements. A plugin
-	 * without server code gets no Worker (and loses the one of a previous version).
+	 * Deploys the server code to the plugin's Worker and asks it what it implements, with the
+	 * plugin's settings. A plugin without server code gets no Worker (and loses the one of a
+	 * previous version).
 	 */
 	private runServer(
 		manifest: PluginManifest,
 		server: string | null,
-		existing: PluginRow | null
+		existing: PluginRow | null,
+		context: PluginCallContext
 	): ResultAsync<
-		{ worker: { url: string; secret: string } | null; configs: Map<string, ProviderConfig> },
+		{
+			worker: { url: string; secret: string } | null;
+			configs: Map<string, ProviderConfig>;
+			description: DescribeResult | null;
+		},
 		DeployFailed | NoSubdomain | CallFailed
 	> {
 		const script = pluginScriptName(POUCHBASE_INSTANCE, manifest.id);
@@ -678,7 +1424,7 @@ export class PluginsService extends Service {
 				this.deleteWorkerLater(script, manifest.id);
 			}
 
-			return okAsync({ worker: null, configs: new Map() });
+			return okAsync({ worker: null, configs: new Map(), description: null });
 		}
 
 		const secret = existing?.workerSecret ?? generateToken();
@@ -707,8 +1453,9 @@ export class PluginsService extends Service {
 				)
 			)
 			.andThen((worker) =>
-				fromPromise(this.describeWorker(new WorkerRuntime(worker.url, worker.secret)), (error) =>
-					this.callFailed(error)
+				fromPromise(
+					this.describeWorker(new WorkerRuntime(worker.url, worker.secret), context),
+					(error) => this.callFailed(error)
 				)
 					.andThen((description) => {
 						const result = providerConfigs(manifest, description.authProviders);
@@ -721,7 +1468,7 @@ export class PluginsService extends Service {
 							);
 						}
 
-						return okAsync({ worker, configs: result.configs });
+						return okAsync({ worker, configs: result.configs, description });
 					})
 					.orElse((failure) => {
 						// A new Worker that doesn't work is of no use; an updated one keeps its row.
@@ -743,10 +1490,10 @@ export class PluginsService extends Service {
 	}
 
 	/** `describe`, tried again while workers.dev doesn't serve a new Worker yet. */
-	private async describeWorker(runtime: WorkerRuntime) {
+	private async describeWorker(runtime: WorkerRuntime, context: PluginCallContext) {
 		for (let attempt = 1; ; attempt++) {
 			try {
-				return await describePlugin(runtime);
+				return await describePlugin(runtime, context);
 			} catch (error) {
 				if (
 					!(error instanceof PluginCallError) ||

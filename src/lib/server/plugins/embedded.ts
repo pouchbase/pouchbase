@@ -1,24 +1,36 @@
-import type { PackageJson, PluginManifest } from '@pouchbasejs/plugin-sdk';
+import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 import type { PluginDefinition } from '@pouchbasejs/plugin-sdk/server';
-import type { DescribeResult, PluginCall, PluginCallContext, PluginRuntime } from './runtime';
+import type {
+	DescribeResult,
+	PluginCall,
+	PluginCallContext,
+	PluginRouteContext,
+	PluginRouteInfo,
+	PluginRuntime
+} from './runtime';
 
-import { MANIFEST_FILE, parseManifest, withPackageDefaults } from '@pouchbasejs/plugin-sdk';
+import { parseManifest } from '@pouchbasejs/plugin-sdk';
+import * as discovered from 'virtual:pouchbase/embedded-plugins';
 
 import { restrictedFetch } from './network';
 import {
 	CALL_TIMEOUT,
 	describePlugin,
 	dispatch,
+	dispatchRoute,
 	EMPTY_CALL_CONTEXT,
 	pluginContext,
+	routeRequestHeaders,
 	withTimeout
 } from './runtime';
 
 /**
  * Built-in plugins: the first-party plugins in `plugins/*` of this repository, bundled into
- * Pouchbase at build time with `import.meta.glob` (paths are from the repository root, which is
- * the Vite root). They ship with the app, so their `engines` range is not checked, and they can't
- * be removed. Their server code runs inside Pouchbase (`InProcessRuntime`), with the same
+ * Pouchbase at build time. `vite/embedded-plugins.ts` reads every folder like
+ * `pouchbase-plugin build` does and hands over the manifests (with `contributes` and the fields
+ * from `package.json`), their `.svg` files and their generated server entries, which Vite compiles
+ * from the plugins' sources. They ship with the app, so their `engines` range is not checked, and
+ * they can't be removed. Their server code runs inside Pouchbase (`InProcessRuntime`), with the same
  * `ctx.fetch` allowlist as an installed plugin. Installing the same plugin id from the registry
  * shadows the built-in one.
  */
@@ -26,18 +38,27 @@ import {
 /** A module whose default export is `definePlugin(...)`. */
 type ServerModule = { default?: PluginDefinition };
 
-/** What the globs below find, keyed by path from the repository root. */
-export type EmbeddedSources = {
-	manifests: Record<string, unknown>;
-	packages: Record<string, PackageJson>;
-	servers: Record<string, () => Promise<ServerModule>>;
-	/** `ui/*.svg` files, as text. */
+/** One folder of `plugins/`, as `virtual:pouchbase/embedded-plugins` has it. */
+export type EmbeddedSource = {
+	/** The folder from the repository root, e.g. `/plugins/auth-google`. */
+	dir: string;
+	/** The manifest as a bundle has it; validated again here. */
+	manifest: unknown;
+	/** Bundle path (`ui/auth/google/icon.svg`) → contents. */
 	assets: Record<string, string>;
+	/** Imports the generated server entry; `null` without server code. */
+	server: (() => Promise<ServerModule>) | null;
+};
+
+/** What the Vite plugin found: the plugins, and the folders it couldn't read. */
+export type EmbeddedSources = {
+	plugins: readonly EmbeddedSource[];
+	issues: readonly EmbeddedIssue[];
 };
 
 export type EmbeddedPlugin = {
 	manifest: PluginManifest;
-	/** Path in the plugin (`ui/google.svg`) → contents. */
+	/** Bundle path (`ui/auth/google/icon.svg`) → contents. */
 	assets: Record<string, string>;
 	/** Imports the server code; `undefined` without one. */
 	load(): Promise<PluginDefinition | undefined>;
@@ -45,42 +66,18 @@ export type EmbeddedPlugin = {
 
 export type EmbeddedIssue = { dir: string; message: string };
 
-const GLOBS: EmbeddedSources = {
-	manifests: import.meta.glob('/plugins/*/pouchbase-plugin.json', {
-		eager: true,
-		import: 'default'
-	}),
-	packages: import.meta.glob<PackageJson>('/plugins/*/package.json', {
-		eager: true,
-		import: 'default'
-	}),
-	servers: import.meta.glob<ServerModule>('/plugins/*/server/**/*.{ts,js,mjs}'),
-	assets: import.meta.glob<string>('/plugins/*/ui/**/*.svg', {
-		query: '?raw',
-		import: 'default',
-		eager: true
-	})
-};
-
-/** Reads the built-in plugins from what the globs found; invalid ones are left out as issues. */
+/** Reads the built-in plugins from what the Vite plugin found; invalid ones are left out as issues. */
 export function loadEmbeddedPlugins(sources: EmbeddedSources): {
 	plugins: EmbeddedPlugin[];
 	issues: EmbeddedIssue[];
 } {
 	const plugins: EmbeddedPlugin[] = [];
-	const issues: EmbeddedIssue[] = [];
+	const issues: EmbeddedIssue[] = [...sources.issues];
 
-	for (const [path, raw] of Object.entries(sources.manifests).sort(([a], [b]) =>
-		a.localeCompare(b)
-	)) {
-		const dir = path.slice(0, -`/${MANIFEST_FILE}`.length);
-		const pkg = sources.packages[`${dir}/package.json`] ?? {};
-		const result = parseManifest(
-			withPackageDefaults(
-				typeof raw === 'object' && raw ? (raw as Record<string, unknown>) : {},
-				pkg
-			)
-		);
+	for (const source of [...sources.plugins].sort((a, b) => a.dir.localeCompare(b.dir))) {
+		const { dir } = source;
+		const raw = source.manifest;
+		const result = parseManifest(typeof raw === 'object' && raw ? raw : {});
 
 		if (!result.success) {
 			const issue = result.issues[0];
@@ -99,22 +96,20 @@ export function loadEmbeddedPlugins(sources: EmbeddedSources): {
 			continue;
 		}
 
-		const loader = manifest.server ? sources.servers[`${dir}/${manifest.server}`] : undefined;
+		const loader = manifest.server ? source.server : null;
 
 		if (manifest.server && !loader) {
 			issues.push({ dir, message: `Missing server code: ${manifest.server}` });
 			continue;
 		}
 
-		const assets = Object.fromEntries(
-			Object.entries(sources.assets)
-				.filter(([key]) => key.startsWith(`${dir}/`))
-				.map(([key, content]) => [key.slice(dir.length + 1), content])
-		);
+		const assets = { ...source.assets };
 		const missing = [
 			...(manifest.icon ? [manifest.icon] : []),
-			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? [])
-		].filter((icon) => !(icon in assets));
+			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? []),
+			...manifest.contributes.fields.flatMap((field) => field.icon ?? []),
+			...manifest.contributes.pages.flatMap((page) => page.icon ?? [])
+		].filter((icon) => !Object.hasOwn(assets, icon));
 
 		if (missing.length) {
 			issues.push({ dir, message: `Missing file: ${missing[0]}` });
@@ -153,7 +148,7 @@ let cached: EmbeddedPlugin[] | undefined;
 /** The built-in plugins of this build. */
 export function embeddedPlugins(): EmbeddedPlugin[] {
 	if (!cached) {
-		const { plugins, issues } = loadEmbeddedPlugins(GLOBS);
+		const { plugins, issues } = loadEmbeddedPlugins(discovered);
 
 		for (const issue of issues) {
 			console.error(`[plugins] Skipping the built-in plugin in ${issue.dir}: ${issue.message}`);
@@ -190,19 +185,49 @@ export class InProcessRuntime implements PluginRuntime {
 			this.options.timeout ?? CALL_TIMEOUT
 		);
 	}
+
+	/**
+	 * Runs the route for `request` directly, like the Worker does: the handler gets the request
+	 * with its original URL, without the cookie and the host's own headers.
+	 */
+	async route(
+		request: Request,
+		info: PluginRouteInfo,
+		context: PluginRouteContext
+	): Promise<Response> {
+		const { manifest } = this.plugin;
+		const ctx = pluginContext(
+			manifest,
+			context,
+			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
+			{ admin: context.admin, user: context.user }
+		);
+		const forwarded = new Request(request, { headers: routeRequestHeaders(request.headers) });
+
+		return withTimeout(
+			this.plugin.load().then((definition) => dispatchRoute(definition, forwarded, info.path, ctx)),
+			this.options.timeout ?? CALL_TIMEOUT
+		);
+	}
 }
 
 const descriptions = new Map<string, Promise<DescribeResult>>();
 
-/** `describe` of a built-in plugin; it can't change within a build, so it is kept. */
-export function describeEmbedded(plugin: EmbeddedPlugin): Promise<DescribeResult> {
-	const { id } = plugin.manifest;
-	let description = descriptions.get(id);
+/**
+ * `describe` of a built-in plugin, with its settings. Its code can't change within a build, so
+ * the answer is kept per plugin and settings.
+ */
+export function describeEmbedded(
+	plugin: EmbeddedPlugin,
+	context: PluginCallContext = EMPTY_CALL_CONTEXT
+): Promise<DescribeResult> {
+	const key = `${plugin.manifest.id}\n${JSON.stringify(context.settings)}`;
+	let description = descriptions.get(key);
 
 	if (!description) {
-		description = describePlugin(new InProcessRuntime(plugin));
-		description.catch(() => descriptions.delete(id));
-		descriptions.set(id, description);
+		description = describePlugin(new InProcessRuntime(plugin), context);
+		description.catch(() => descriptions.delete(key));
+		descriptions.set(key, description);
 	}
 
 	return description;

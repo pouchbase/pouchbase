@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
@@ -18,7 +19,14 @@
 		MAX_FILE_SIZE
 	} from '#lib/files/files.js';
 	import { isAutoType } from '#lib/fields/field-types.js';
-	import { formatTimestamp, lastUpdated, type GridField, type GridRecord } from './grid';
+	import {
+		formatTimestamp,
+		lastUpdated,
+		pluginTypeOf,
+		type GridField,
+		type GridRecord,
+		type PluginType
+	} from './grid';
 	import RecordFieldInput from './record-field-input.svelte';
 	import RecordFileField from './record-file-field.svelte';
 	import { saveRecord } from './records.remote';
@@ -32,6 +40,8 @@
 		relationTargets?: Record<string, string>;
 		/** Only for the built-in `users` collection: how this user can sign in. */
 		signInMethods?: SignInMethod[];
+		/** The installed plugin field types, for fields with a plugin's type. */
+		pluginTypes?: PluginType[];
 		open?: boolean;
 		onDelete: (id: string) => void;
 		/** Only for images in the built-in `files` collection. */
@@ -44,13 +54,18 @@
 		record,
 		relationTargets = {},
 		signInMethods = [],
+		pluginTypes = [],
 		open = $bindable(false),
 		onDelete,
 		onEditImage
 	}: Props = $props();
 
 	// A separate form instance per record, so values and issues don't leak between records.
-	const form = $derived(saveRecord.for(record?._key ?? 'new'));
+	const form = $derived.by(() => {
+		const key = record?._key ?? 'new';
+
+		return untrack(() => saveRecord.for(key));
+	});
 
 	const isFiles = $derived(collection.name === FILES_COLLECTION);
 	// The id and timestamps are filled in automatically. In `files`, the type, size and storage key
@@ -178,6 +193,7 @@
 								formField={form.fields.values[field.name]}
 								value={record?.[field.name]}
 								relationTarget={relationTargets[field.name]}
+								pluginType={pluginTypeOf(field, pluginTypes)}
 							/>
 						{/if}
 					{:else}

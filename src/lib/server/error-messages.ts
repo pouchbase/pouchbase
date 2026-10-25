@@ -240,6 +240,13 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	19010: [403, "Built-in plugins can't be uninstalled"],
 	19011: 'The Cloudflare account has no workers.dev subdomain yet',
 	19012: 'Could not install the built-in plugins',
+	19013: 'The plugin route failed',
+	19014: [400, "The plugin's UI components could not be compiled"],
+	19015: "Could not load the plugin's components",
+	19016: [409, 'The field type comes from a plugin that is not installed'],
+	19017: 'The plugin could not process the field values',
+	19018: [400, 'The plugin settings are invalid'],
+	19019: 'Could not save the plugin settings',
 
 	// Environments
 	20000: 'Could not read the schema of this environment',

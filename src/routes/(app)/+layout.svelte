@@ -17,6 +17,12 @@
 
 	onMount(() => {
 		mounted.hydrated = true;
+
+		// Lends the dashboard's Svelte runtime and UI components to plugin components (browser only;
+		// the module loader also does this when it needs them, so this only warms it up).
+		void import('#lib/plugins/host-modules.js').then(({ registerHostModules }) =>
+			registerHostModules()
+		);
 	});
 
 	// Breadcrumb shown by the skeleton of each regular page; keep in sync with the page's Topbar.
@@ -26,7 +32,10 @@
 		'/(app)/auth': 'Authentication',
 		'/(app)/environments': 'Environments',
 		'/(app)/functions': 'Functions',
-		'/(app)/mail': 'Mail'
+		'/(app)/mail': 'Mail',
+		'/(app)/plugins': 'Plugins',
+		// The page's title is only known once its plugin is in.
+		'/(app)/plugins/[id]/[...path]': 'Plugins'
 	};
 </script>
 

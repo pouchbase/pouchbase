@@ -20,7 +20,7 @@
 {#if column.virtual}
 	<!-- Not a field: nothing to sort, rename or delete. -->
 	<span class="flex items-center gap-2 text-xs font-medium text-zinc-600">
-		<Icon.Root icon={column.icon} class="size-3.5 text-zinc-400" />
+		<Icon.Root icon={column.icon} src={column.iconUrl} class="size-3.5 text-zinc-400" />
 		<span class="text-zinc-900">{column.label}</span>
 	</span>
 {:else}
@@ -30,7 +30,7 @@
 			class="-mx-3 h-row w-[calc(100%+1.5rem)] justify-start gap-2 rounded-none border-0 px-3 text-xs font-medium text-zinc-600"
 			aria-label="{column.name} column options"
 		>
-			<Icon.Root icon={column.icon} class="size-3.5 text-zinc-400" />
+			<Icon.Root icon={column.icon} src={column.iconUrl} class="size-3.5 text-zinc-400" />
 			<span class="font-mono text-zinc-900">{column.name}</span>
 
 			{#if column.field?.system}

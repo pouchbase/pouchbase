@@ -1,14 +1,18 @@
-import type { FieldOptions, FieldType } from '#lib/fields/field-types.js';
+import type { FieldOptions, FieldTypeId } from '#lib/fields/field-types.js';
+import type { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 
 import { resolve } from '$app/paths';
 
-import { FIELD_TYPES } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
+
+/** A field type of an installed plugin, as `listPluginFieldTypes` returns it. */
+export type PluginType = Awaited<ReturnType<typeof listPluginFieldTypes>>[number];
 
 /** A field as returned by `listRecords`. */
 export type GridField = {
 	id: string;
 	name: string;
-	type: FieldType;
+	type: FieldTypeId;
 	required: boolean;
 	unique: boolean;
 	defaultValue: string | null;
@@ -34,6 +38,8 @@ export type GridColumn = {
 	name: string;
 	label: string;
 	icon: string;
+	/** A plugin type's own icon, drawn instead of `icon` (`Icon.Root src`); `null` for none. */
+	iconUrl?: string | null;
 	/** Undefined for virtual columns. */
 	field?: GridField;
 	sortable: boolean;
@@ -43,6 +49,8 @@ export type GridColumn = {
 	relationTarget?: string;
 	/** Show the value as a file size (`size` of the built-in `files` collection). */
 	fileSize?: boolean;
+	/** For a field with a plugin's type: the installed type (`null` when it isn't installed). */
+	pluginType?: PluginType | null;
 };
 
 /**
@@ -66,16 +74,58 @@ export const PREVIEW_COLUMN: GridColumn = {
 	virtual: 'preview'
 };
 
-export function fieldColumn(field: GridField): GridColumn {
-	const type = FIELD_TYPES[field.type];
+/** The plugin field type of `field` among the installed ones; `undefined` for built-in types. */
+export function pluginTypeOf(field: Pick<GridField, 'type'>, pluginTypes: readonly PluginType[]) {
+	return fieldTypeInfo(field.type).plugin
+		? (pluginTypes.find((type) => type.id === field.type) ?? null)
+		: undefined;
+}
+
+/** The plugin a component of a plugin field type belongs to, for `PluginComponent.Root`. */
+export function pluginRef(type: PluginType) {
+	return {
+		id: type.pluginId,
+		version: type.pluginVersion,
+		embedded: type.embedded,
+		name: type.pluginName
+	};
+}
+
+/** What a plugin's input and preview components get as `field` (`FieldInfo`). */
+export function pluginFieldInfo(field: GridField) {
+	// The snapshot of the type is Pouchbase's, not one of the field's own options.
+	const options = Object.fromEntries(
+		Object.entries(field.options).filter(([key]) => key !== 'plugin')
+	);
+
+	return { name: field.name, type: field.type, required: field.required, options };
+}
+
+export function fieldColumn(field: GridField, pluginTypes: readonly PluginType[] = []): GridColumn {
+	const type = fieldTypeInfo(field, pluginTypes);
 
 	return {
 		name: field.name,
 		label: type.label,
 		icon: type.icon,
+		iconUrl: type.iconUrl,
 		field,
-		sortable: field.type !== 'blob'
+		sortable: field.type !== 'blob',
+		pluginType: pluginTypeOf(field, pluginTypes)
 	};
+}
+
+/** A value as text, for values the grid has no other way to show (e.g. of a plugin field). */
+export function rawValue(value: unknown) {
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+		return String(value);
+	}
+
+	try {
+		return JSON.stringify(value) ?? String(value);
+	} catch {
+		return String(value);
+	}
 }
 
 /** Link that opens a record in its collection's record sheet. */

@@ -1,6 +1,7 @@
 import type { ErrorOf, ServiceError } from './base.service';
 import type { Collection } from './collections.service';
 import type { Field } from './fields.service';
+import type { PluginsService } from './plugins.service';
 import type { SignInMethod } from '#lib/auth/sign-in-methods.js';
 import type { FieldOptions, RelationOnDelete } from '#lib/fields/field-types.js';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
@@ -13,6 +14,7 @@ import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
 import {
 	idGenerator,
 	isAutoType,
+	isPluginFieldType,
 	isRelationType,
 	NOW_DEFAULT,
 	relationOnDelete
@@ -26,6 +28,13 @@ import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
 import { ALWAYS, both, compileFilter, compileOrder, compileRule } from '../filter';
 import { generateId } from '../crypto';
+import {
+	applyPluginReads,
+	applyPluginWrites,
+	hasPluginFields,
+	planPluginReads,
+	planPluginWrites
+} from '../plugin-fields';
 import { USERS_COLLECTION } from './auth.service';
 import { FILES_COLLECTION } from '#lib/files/files.js';
 import { parseThumbnailList, storageKeys } from './files.service';
@@ -33,6 +42,10 @@ import { inBackground } from './realtime.service';
 import { collections, fields } from '../db';
 import { Service } from './base.service';
 
+/**
+ * A value as the grid and the record form get it. Fields with a plugin's type hold what the
+ * plugin's `deserialize` returned, which can be any value that devalue can send.
+ */
 export type RecordValue = string | number | null | RelationRef[];
 
 /** A related record as shown in the grid: its id and a human readable label. */
@@ -647,7 +660,8 @@ export class RecordsService extends Service {
 								databaseId,
 								items.map((item) => item._key)
 							)
-						: undefined
+						: undefined,
+					this.deserialize(collectionFields, items)
 				]);
 
 				return {
@@ -715,7 +729,8 @@ export class RecordsService extends Service {
 					this.resolveRelations(databaseId, collectionFields, [item], targets),
 					collection.system && collection.name === USERS_COLLECTION
 						? this.signInMethods(databaseId, [item._key])
-						: undefined
+						: undefined,
+					this.deserialize(collectionFields, [item])
 				]);
 
 				return { item, signInMethods: signInMethods?.[item._key] };
@@ -791,6 +806,7 @@ export class RecordsService extends Service {
 										offset: options.offset
 									} satisfies ApiRecordList;
 								})
+								.andThen((list) => this.deserialize(collectionFields, list.items).map(() => list))
 								.andThen((list) =>
 									this.include(collectionFields, list.items, tree, access).map(() => list)
 								);
@@ -954,7 +970,9 @@ export class RecordsService extends Service {
 			return this.guard(context, 'create', options.access, input).andThen((condition) =>
 				this.requireFields(collectionFields, this.error(8012, 'NO_FIELDS'))
 					.andThen(() =>
-						this.validate(databaseId, collectionFields, input, 8004, 'CREATE_RECORD_FAILED')
+						this.validate(databaseId, collectionFields, input, 8004, 'CREATE_RECORD_FAILED', {
+							creating: true
+						})
 					)
 					.andThen((values) => this.sqlDefaults(databaseId, collectionFields, values))
 					.andThen((values) => {
@@ -1075,7 +1093,8 @@ export class RecordsService extends Service {
 								: collectionFields,
 							input,
 							8005,
-							'UPDATE_RECORD_FAILED'
+							'UPDATE_RECORD_FAILED',
+							{ creating: false }
 						)
 					)
 					.andThen((values) => {
@@ -1843,7 +1862,9 @@ export class RecordsService extends Service {
 
 								const record = toApiRecord(selected, row);
 
-								return this.include(collectionFields, [record], tree, access).map(() => record);
+								return this.deserialize(collectionFields, [record])
+									.andThen(() => this.include(collectionFields, [record], tree, access))
+									.map(() => record);
 							})
 						)
 				);
@@ -1954,9 +1975,9 @@ export class RecordsService extends Service {
 				).andThen((results) => {
 					const found = results.flat().map((row) => toApiRecord(readable, row));
 
-					return this.include(collectionFields, found, subtree, access).map(
-						() => new Map(found.map((record) => [String(record[idColumn]), record]))
-					);
+					return this.deserialize(collectionFields, found)
+						.andThen(() => this.include(collectionFields, found, subtree, access))
+						.map(() => new Map(found.map((record) => [String(record[idColumn]), record])));
 				});
 			});
 	}
@@ -2101,7 +2122,8 @@ export class RecordsService extends Service {
 		collectionFields: Field[],
 		input: RecordInput,
 		failureCode: Code,
-		failureMessage: Message
+		failureMessage: Message,
+		{ creating }: { creating: boolean }
 	): ResultAsync<
 		Record<string, string | number | null>,
 		InvalidRecordError | ServiceError<Code, Message>
@@ -2111,6 +2133,11 @@ export class RecordsService extends Service {
 
 		for (const field of collectionFields) {
 			if (field.type === 'blob' || field.type === 'computed' || isAutoType(field.type)) {
+				continue;
+			}
+
+			// Their plugin checks them, below.
+			if (isPluginFieldType(field.type)) {
 				continue;
 			}
 
@@ -2155,15 +2182,92 @@ export class RecordsService extends Service {
 				}
 			})(),
 			(error) => this.error(failureCode, failureMessage, error)
-		).andThen(() =>
-			Object.keys(issues).length
-				? errAsync<never, InvalidRecordError>({
-						code: 8001,
-						message: 'INVALID_RECORD',
-						data: { issues }
-					})
-				: okAsync(values)
-		);
+		)
+			.andThen(() =>
+				this.pluginValues(collectionFields, input, creating).mapErr((error) =>
+					this.error(failureCode, failureMessage, error)
+				)
+			)
+			.andThen((plugin) => {
+				Object.assign(values, plugin.values);
+				Object.assign(issues, plugin.issues);
+
+				return Object.keys(issues).length
+					? errAsync<never, InvalidRecordError>({
+							code: 8001,
+							message: 'INVALID_RECORD',
+							data: { issues }
+						})
+					: okAsync(values);
+			});
+	}
+
+	/**
+	 * The values to store for the fields with a plugin's type, checked and serialized by their
+	 * plugins (one call per plugin), and the validation messages (see `planPluginWrites`).
+	 */
+	private pluginValues(
+		collectionFields: Field[],
+		input: RecordInput,
+		creating: boolean
+	): ResultAsync<
+		{ values: Record<string, string | number | null>; issues: RecordIssues },
+		| ErrorOf<ReturnType<PluginsService['fieldTypes']>>
+		| ErrorOf<ReturnType<PluginsService['writeFieldValues']>>
+	> {
+		if (!hasPluginFields(collectionFields)) {
+			return okAsync({ values: {}, issues: {} });
+		}
+
+		const plugins = this.services.plugins();
+
+		return plugins.fieldTypes().andThen((types) => {
+			const plan = planPluginWrites(
+				collectionFields,
+				input,
+				new Set(types.map((type) => type.id)),
+				{ creating }
+			);
+
+			return ResultAsync.combine(
+				plan.batches.map((batch) => plugins.writeFieldValues(batch.pluginId, batch.items))
+			).map((results) => applyPluginWrites(plan, results));
+		});
+	}
+
+	/**
+	 * Turns the stored values of the fields with a plugin's type in `records` into what their
+	 * plugins return (`deserialize`), in place; one call per plugin. Fields whose plugin isn't
+	 * installed keep their stored values. Never fails: when a plugin can't be reached, the stored
+	 * values are returned and the failure is logged.
+	 */
+	private deserialize(
+		collectionFields: Field[],
+		records: Record<string, unknown>[]
+	): ResultAsync<void, never> {
+		if (!records.length || !hasPluginFields(collectionFields)) {
+			return okAsync(undefined);
+		}
+
+		const plugins = this.services.plugins();
+
+		return plugins
+			.fieldTypes()
+			.andThen((types) => {
+				const batches = planPluginReads(
+					collectionFields,
+					records,
+					new Set(types.map((type) => type.id))
+				);
+
+				return ResultAsync.combine(
+					batches.map((batch) => plugins.readFieldValues(batch.pluginId, batch.items))
+				).map((answers) => applyPluginReads(batches, answers, records));
+			})
+			.orElse((failure) => {
+				console.error('[plugins] could not read the values of plugin fields', failure);
+				return okAsync(undefined);
+			});
 	}
 
 	private writeError<Code extends number, Message extends string>(

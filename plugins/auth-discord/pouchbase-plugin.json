@@ -3,23 +3,12 @@
 	"apiVersion": 1,
 	"id": "auth-discord",
 	"name": "Discord sign-in",
-	"icon": "ui/discord.svg",
+	"icon": "auth/discord/icon.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"
 	},
 	"permissions": {
 		"network": ["discord.com"]
-	},
-	"server": "server/index.ts",
-	"contributes": {
-		"authProviders": [
-			{
-				"id": "discord",
-				"label": "Discord",
-				"consoleUrl": "https://discord.com/developers/applications",
-				"icon": "ui/discord.svg"
-			}
-		]
 	}
 }

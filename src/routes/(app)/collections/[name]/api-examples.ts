@@ -2,6 +2,7 @@ import type { GridField } from './grid';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
 
 import { isAutoType } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 import { fieldValueType } from '#lib/fields/value-types.js';
 import { apiActions, protectedApiFields } from '#lib/filter/rules.js';
 
@@ -32,6 +33,12 @@ const EXAMPLE_TIME = Date.UTC(2026, 0, 15, 9, 30);
 /** An example of a field's value as the API returns it, and as it is sent. */
 function exampleValue(field: GridField): unknown {
 	const items = field.options.values ?? [];
+	const info = fieldTypeInfo(field);
+
+	// A plugin's type: what fits its column; the plugin decides what is valid.
+	if (info.plugin) {
+		return info.column === 'INTEGER' || info.column === 'REAL' ? 3 : 'value';
+	}
 
 	switch (field.type) {
 		case 'id':

@@ -1,5 +1,11 @@
-import type { ServiceError } from './base.service';
-import type { FieldOptions, FieldType } from '#lib/fields/field-types.js';
+import type { ErrorOf, ServiceError } from './base.service';
+import type { PluginsService } from './plugins.service';
+import type {
+	FieldOptions,
+	FieldTypeId,
+	PluginFieldSnapshot,
+	PluginFieldTypeId
+} from '#lib/fields/field-types.js';
 import type { Result, ResultAsync } from 'neverthrow';
 
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
@@ -17,12 +23,14 @@ import {
 	ID_GENERATORS,
 	idGenerator,
 	isAutoType,
+	isPluginFieldType,
 	isReservedFieldName,
 	NOW_DEFAULT,
 	RELATION_ON_DELETE,
 	relationOnDelete,
 	validateDefaultValue
 } from '#lib/fields/field-types.js';
+import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 import {
 	checkSqlExpression,
 	SQL_DEFAULT_TYPES,
@@ -47,7 +55,7 @@ export type Field = typeof fields.$inferSelect;
 
 export type CreateFieldInput = {
 	name: string;
-	type: FieldType;
+	type: FieldTypeId;
 	required: boolean;
 	unique: boolean;
 	/** Empty or missing means no default. */
@@ -84,7 +92,7 @@ function listOptions(options: FieldOptions): FieldOptions | null {
 }
 
 /** Whether the field stores a JSON array: a relation or list that allows multiple values. */
-function isMultiple(field: { type: FieldType; options: FieldOptions }) {
+function isMultiple(field: { type: FieldTypeId; options: FieldOptions }) {
 	return (field.type === 'relation' || field.type === 'list') && !!field.options.multiple;
 }
 
@@ -131,7 +139,7 @@ function quote(value: string) {
 }
 
 /** SQL literal for a (validated) default value. */
-function defaultLiteral(type: FieldType, value: string) {
+function defaultLiteral(type: FieldTypeId, value: string) {
 	switch (type) {
 		case 'number':
 			return String(Number(value));
@@ -170,7 +178,18 @@ function columnSql(input: CreateFieldInput, options: { nullableKey?: boolean } =
 			: `"${input.name}" TEXT PRIMARY KEY${options.nullableKey ? '' : ' NOT NULL'}`;
 	}
 
-	const parts = [`"${input.name}"`, FIELD_TYPES[input.type].column];
+	const parts = [`"${input.name}"`, fieldTypeInfo(input).column];
+
+	// A plugin's type: the column's DEFAULT is the default value as the plugin serialized it.
+	if (isPluginFieldType(input.type)) {
+		const value = input.options.plugin?.default;
+
+		if (value !== undefined) {
+			parts.push(`DEFAULT ${typeof value === 'number' ? String(value) : quote(value)}`);
+		}
+
+		return parts.join(' ');
+	}
 
 	// `@now` and SQL expressions are filled in when a record is created: ADD COLUMN can't have a
 	// non-constant DEFAULT.
@@ -216,6 +235,17 @@ type IdInUseError = ServiceError<7020, 'ID_FIELD_IN_USE'> & { data: { relations:
 type InvalidDefaultExpressionError = ServiceError<7023, 'INVALID_DEFAULT_EXPRESSION'> & {
 	data: { message: string };
 };
+
+/**
+ * The default value doesn't fit the field. For a plugin's type, `data` is `{ message }`: why the
+ * plugin refused it, for the form.
+ */
+type InvalidDefaultError = ServiceError<7003, 'INVALID_DEFAULT_VALUE'>;
+
+/** What calling a plugin for its field type can fail with. */
+type PluginFieldError =
+	| ErrorOf<ReturnType<PluginsService['fieldType']>>
+	| ErrorOf<ReturnType<PluginsService['writeFieldValues']>>;
 
 /** A default value expression failed when it was tried out. */
 class DefaultExpressionError extends Error {}
@@ -274,7 +304,7 @@ export class FieldsService extends Service {
 		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
 		| ServiceError<7001, 'INVALID_FIELD_NAME'>
 		| ServiceError<7002, 'FIELD_ALREADY_EXISTS'>
-		| ServiceError<7003, 'INVALID_DEFAULT_VALUE'>
+		| InvalidDefaultError
 		| ServiceError<7004, 'CREATE_FIELD_FAILED'>
 		| ServiceError<7005, 'GET_FIELD_FAILED'>
 		| ServiceError<7009, 'INVALID_RELATION'>
@@ -287,11 +317,40 @@ export class FieldsService extends Service {
 		| ServiceError<7022, 'ID_FIELD_ALREADY_EXISTS'>
 		| InvalidDefaultExpressionError
 		| ComputeFailedError
+		| PluginFieldError
 	> {
+		if (isPluginFieldType(input.type)) {
+			if (!isValidName(input.name)) {
+				return errAsync(this.error(7001, 'INVALID_FIELD_NAME'));
+			}
+
+			// The type must be installed; its label and column are kept with the field.
+			return this.pluginSnapshot(
+				input.type,
+				input.name,
+				input.defaultValue,
+				input.options.plugin?.column
+			).andThen(({ plugin, defaultValue }) =>
+				this.createColumn(collectionName, {
+					...input,
+					defaultValue,
+					options: { ...input.options, plugin }
+				})
+			);
+		}
+
 		if (!Object.hasOwn(FIELD_TYPES, input.type)) {
 			return errAsync(this.error(7019, 'INVALID_FIELD_TYPE'));
 		}
 
+		return this.createColumn(collectionName, input);
+	}
+
+	/** `create` once the type is known to exist (a plugin's type comes with its snapshot). */
+	private createColumn(
+		collectionName: string,
+		input: CreateFieldInput
+	): ResultAsync<Field, ErrorOf<ReturnType<FieldsService['create']>>> {
 		if (!isValidName(input.name)) {
 			return errAsync(this.error(7001, 'INVALID_FIELD_NAME'));
 		}
@@ -606,7 +665,8 @@ export class FieldsService extends Service {
 		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
 		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
 		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| ServiceError<7003, 'INVALID_DEFAULT_VALUE'>
+		| InvalidDefaultError
+		| PluginFieldError
 		| ServiceError<7006, 'FIELD_NOT_FOUND'>
 		| ServiceError<7010, 'SYSTEM_FIELD'>
 		| ServiceError<7018, 'INVALID_LIST'>
@@ -648,129 +708,149 @@ export class FieldsService extends Service {
 					return errAsync(this.error(7019, 'INVALID_FIELD_TYPE'));
 				}
 
-				const settings = this.settings(field.type, input.defaultValue, {
-					...input.options,
-					// The related collection stays.
-					collectionId: field.options.collectionId
-				});
-
-				if (settings.isErr()) {
-					return errAsync(settings.error);
-				}
-
-				const next: Field = {
-					...field,
-					options: settings.value.options,
-					defaultValue: settings.value.defaultValue ?? null
-				};
-				const wasMultiple = isMultiple(field);
-				const multiple = isMultiple(next);
-
-				// A JSON array can't meaningfully be unique (see `create`).
-				if (multiple && field.unique) {
-					return errAsync(this.error(7024, 'UNIQUE_MULTIPLE'));
-				}
-
-				const removedItems =
-					field.type === 'list'
-						? (field.options.values ?? []).filter((item) => !next.options.values?.includes(item))
-						: [];
-
-				return this.services
-					.database()
-					.requireApp()
-					.andThen((appDatabase) =>
-						fromPromise(
-							(async () => {
-								const databaseId = appDatabase.id;
-								const table = `"${collection.name}"`;
-								const column = `"${field.name}"`;
-
-								if (wasMultiple && !multiple) {
-									const [crowded] = await queryDatabase(
-										databaseId,
-										`SELECT 1 FROM ${table} WHERE json_array_length(${column}) > 1 LIMIT 1`
-									);
-
-									if (crowded) {
-										throw new MultipleValuesError();
-									}
-								}
-
-								if (removedItems.length) {
-									const placeholders = removedItems.map(() => '?').join(', ');
-									const used = await queryDatabase(
-										databaseId,
-										wasMultiple
-											? `SELECT DISTINCT "item"."value" FROM ${table}, json_each(${table}.${column}) AS "item" WHERE "item"."value" IN (${placeholders})`
-											: `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IN (${placeholders})`,
-										removedItems
-									);
-
-									if (used.length) {
-										throw new ListItemsInUseError(used.map(([item]) => String(item)));
-									}
-								}
-
-								if (next.options.defaultSql) {
-									await this.checkDefaultExpression(databaseId, fieldInput(next));
-								}
-
-								if (columnSql(fieldInput(field)) !== columnSql(fieldInput(next))) {
-									const source =
-										multiple && !wasMultiple
-											? `CASE WHEN ${column} IS NULL THEN NULL ELSE json_array(${column}) END`
-											: wasMultiple && !multiple
-												? `json_extract(${column}, '$[0]')`
-												: column;
-
-									await this.rebuildTable(
-										databaseId,
-										collection.name,
-										collectionFields.map((other) =>
-											other.id === field.id
-												? {
-														definition: columnSql(fieldInput(next)),
-														name: other.name,
-														source
-													}
-												: {
-														definition: columnSql(fieldInput(other)),
-														name: other.name,
-														source: `"${other.name}"`
-													}
-										)
-									);
-								}
-
-								const [updated] = await this.db
-									.update(fields)
-									.set({ defaultValue: next.defaultValue, options: next.options })
-									.where(eq(fields.id, field.id))
-									.returning();
-
-								return updated;
-							})(),
-							(error) => {
-								if (error instanceof DefaultExpressionError) {
-									return this.invalidDefaultExpression(error.message);
-								}
-
-								if (error instanceof MultipleValuesError) {
-									return this.error(7025, 'MULTIPLE_VALUES_IN_USE');
-								}
-
-								if (error instanceof ListItemsInUseError) {
-									return {
-										...this.error(7026, 'LIST_ITEMS_IN_USE'),
-										data: { items: error.items }
-									};
-								}
-
-								return this.error(7027, 'UPDATE_FIELD_FAILED', error);
-							}
+				// A plugin's type must still be installed: it checks the default value.
+				const snapshot: ResultAsync<
+					{ plugin: PluginFieldSnapshot; defaultValue: string | undefined } | null,
+					ErrorOf<ReturnType<FieldsService['pluginSnapshot']>>
+				> = isPluginFieldType(field.type)
+					? this.pluginSnapshot(
+							field.type,
+							field.name,
+							input.defaultValue,
+							field.options.plugin?.column
 						)
+					: okAsync(null);
+
+				return snapshot.andThen((prepared) => {
+					const settings = this.settings(
+						field.type,
+						prepared ? prepared.defaultValue : input.defaultValue,
+						{
+							...input.options,
+							// The related collection stays.
+							collectionId: field.options.collectionId,
+							...(prepared && { plugin: prepared.plugin })
+						}
 					);
+
+					if (settings.isErr()) {
+						return errAsync(settings.error);
+					}
+
+					const next: Field = {
+						...field,
+						options: settings.value.options,
+						defaultValue: settings.value.defaultValue ?? null
+					};
+					const wasMultiple = isMultiple(field);
+					const multiple = isMultiple(next);
+
+					// A JSON array can't meaningfully be unique (see `create`).
+					if (multiple && field.unique) {
+						return errAsync(this.error(7024, 'UNIQUE_MULTIPLE'));
+					}
+
+					const removedItems =
+						field.type === 'list'
+							? (field.options.values ?? []).filter((item) => !next.options.values?.includes(item))
+							: [];
+
+					return this.services
+						.database()
+						.requireApp()
+						.andThen((appDatabase) =>
+							fromPromise(
+								(async () => {
+									const databaseId = appDatabase.id;
+									const table = `"${collection.name}"`;
+									const column = `"${field.name}"`;
+
+									if (wasMultiple && !multiple) {
+										const [crowded] = await queryDatabase(
+											databaseId,
+											`SELECT 1 FROM ${table} WHERE json_array_length(${column}) > 1 LIMIT 1`
+										);
+
+										if (crowded) {
+											throw new MultipleValuesError();
+										}
+									}
+
+									if (removedItems.length) {
+										const placeholders = removedItems.map(() => '?').join(', ');
+										const used = await queryDatabase(
+											databaseId,
+											wasMultiple
+												? `SELECT DISTINCT "item"."value" FROM ${table}, json_each(${table}.${column}) AS "item" WHERE "item"."value" IN (${placeholders})`
+												: `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IN (${placeholders})`,
+											removedItems
+										);
+
+										if (used.length) {
+											throw new ListItemsInUseError(used.map(([item]) => String(item)));
+										}
+									}
+
+									if (next.options.defaultSql) {
+										await this.checkDefaultExpression(databaseId, fieldInput(next));
+									}
+
+									if (columnSql(fieldInput(field)) !== columnSql(fieldInput(next))) {
+										const source =
+											multiple && !wasMultiple
+												? `CASE WHEN ${column} IS NULL THEN NULL ELSE json_array(${column}) END`
+												: wasMultiple && !multiple
+													? `json_extract(${column}, '$[0]')`
+													: column;
+
+										await this.rebuildTable(
+											databaseId,
+											collection.name,
+											collectionFields.map((other) =>
+												other.id === field.id
+													? {
+															definition: columnSql(fieldInput(next)),
+															name: other.name,
+															source
+														}
+													: {
+															definition: columnSql(fieldInput(other)),
+															name: other.name,
+															source: `"${other.name}"`
+														}
+											)
+										);
+									}
+
+									const [updated] = await this.db
+										.update(fields)
+										.set({ defaultValue: next.defaultValue, options: next.options })
+										.where(eq(fields.id, field.id))
+										.returning();
+
+									return updated;
+								})(),
+								(error) => {
+									if (error instanceof DefaultExpressionError) {
+										return this.invalidDefaultExpression(error.message);
+									}
+
+									if (error instanceof MultipleValuesError) {
+										return this.error(7025, 'MULTIPLE_VALUES_IN_USE');
+									}
+
+									if (error instanceof ListItemsInUseError) {
+										return {
+											...this.error(7026, 'LIST_ITEMS_IN_USE'),
+											data: { items: error.items }
+										};
+									}
+
+									return this.error(7027, 'UPDATE_FIELD_FAILED', error);
+								}
+							)
+						);
+				});
 			});
 	}
 
@@ -809,7 +889,7 @@ export class FieldsService extends Service {
 	 * options of the type are kept. Shared by `create` and `update`.
 	 */
 	private settings(
-		type: FieldType,
+		type: FieldTypeId,
 		defaultValue: string | undefined,
 		input: FieldOptions
 	): Result<
@@ -871,13 +951,72 @@ export class FieldsService extends Service {
 							? { ...fileOptions(input), collectionId: input.collectionId }
 							: type === 'id'
 								? { generator: input.generator }
-								: (list ?? {});
+								: isPluginFieldType(type)
+									? input.plugin
+										? { plugin: input.plugin }
+										: {}
+									: (list ?? {});
 
 		if (defaultSql) {
 			options.defaultSql = true;
 		}
 
 		return ok({ options, defaultValue: defaultValue || undefined });
+	}
+
+	/**
+	 * What a field of a plugin's type keeps of it (`FieldOptions.plugin`): the installed type's
+	 * label, the column (`column` when the field has one already: it never changes) and the default
+	 * value as the plugin serialized it. Fails with `INVALID_FIELD_TYPE` when the type isn't
+	 * installed and `INVALID_DEFAULT_VALUE` (with the plugin's message) when the plugin refuses the
+	 * default value. A default the plugin serializes to `null` is no default.
+	 */
+	private pluginSnapshot(
+		typeId: PluginFieldTypeId,
+		name: string,
+		defaultValue: string | undefined,
+		column: PluginFieldSnapshot['column'] | undefined
+	): ResultAsync<
+		{ plugin: PluginFieldSnapshot; defaultValue: string | undefined },
+		ServiceError<7019, 'INVALID_FIELD_TYPE'> | InvalidDefaultError | PluginFieldError
+	> {
+		const plugins = this.services.plugins();
+		const invalidDefault = (message: string): InvalidDefaultError => ({
+			...this.error(7003, 'INVALID_DEFAULT_VALUE'),
+			data: { message }
+		});
+
+		return plugins.fieldType(typeId).andThen((type) => {
+			if (!type) {
+				return errAsync(this.error(7019, 'INVALID_FIELD_TYPE'));
+			}
+
+			const plugin: PluginFieldSnapshot = { label: type.label, column: column ?? type.column };
+
+			if (!defaultValue) {
+				return okAsync({ plugin, defaultValue: undefined });
+			}
+
+			return plugins
+				.writeFieldValues(type.pluginId, [
+					{ type: type.type, name, options: {}, value: defaultValue }
+				])
+				.andThen(([result]) => {
+					if (!result || !result.ok) {
+						return errAsync(invalidDefault(result?.message || 'The default value is not valid'));
+					}
+
+					if (result.value instanceof Uint8Array) {
+						return errAsync(invalidDefault("Binary default values can't be stored"));
+					}
+
+					return okAsync(
+						result.value === null
+							? { plugin, defaultValue: undefined }
+							: { plugin: { ...plugin, default: result.value }, defaultValue }
+					);
+				});
+		});
 	}
 
 	/**

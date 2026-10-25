@@ -6,9 +6,11 @@ import {
 	BUNDLE_VERSION,
 	RegistryError,
 	computeIntegrity,
+	contributionSummary,
 	createRegistryClient,
 	parseBundle,
 	parseManifest,
+	pluginVersionSchema,
 	serializeBundle,
 	type PluginBundle,
 	type PluginVersion
@@ -133,5 +135,56 @@ describe('registry client', () => {
 
 		expect(new URL(requested).searchParams.get('category')).toBe('auth');
 		expect(list.items[0]?.categories).toEqual([]);
+	});
+});
+
+describe('contribution summary', () => {
+	const version = {
+		version: '1.0.0',
+		apiVersion: API_VERSION,
+		integrity: 'sha256-abc',
+		size: 10,
+		bundleUrl: 'https://registry.example.com/bundle',
+		pouchbase: null,
+		permissions: { network: [] },
+		publishedAt: '2026-10-25T00:00:00.000Z'
+	};
+
+	it('summarizes what a manifest contributes, with the route keys', () => {
+		const result = parseManifest({
+			...manifest.manifest,
+			contributes: {
+				...manifest.manifest.contributes,
+				fields: [
+					{
+						type: 'rating',
+						label: 'Rating',
+						description: 'Stars.',
+						column: 'INTEGER',
+						input: 'ui/rating.svelte'
+					}
+				]
+			},
+			settings: [{ key: 'api_key', label: 'API key', type: 'secret' }]
+		});
+
+		expect(result.success).toBe(true);
+
+		if (result.success) {
+			expect(contributionSummary(result.manifest, ['POST /sync', 'GET /stats'])).toEqual({
+				fields: [{ type: 'rating', label: 'Rating' }],
+				pages: [{ path: 'hello', title: 'Hello' }],
+				authProviders: [],
+				routes: ['GET /stats', 'POST /sync'],
+				settings: [{ key: 'api_key', label: 'API key' }]
+			});
+		}
+	});
+
+	it('is optional in a version, and its lists may be missing', () => {
+		expect(pluginVersionSchema.parse(version).contributes).toBeUndefined();
+		expect(
+			pluginVersionSchema.parse({ ...version, contributes: { routes: ['GET /x'] } }).contributes
+		).toEqual({ fields: [], pages: [], authProviders: [], routes: ['GET /x'], settings: [] });
 	});
 });

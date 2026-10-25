@@ -3,23 +3,12 @@
 	"apiVersion": 1,
 	"id": "auth-google",
 	"name": "Google sign-in",
-	"icon": "ui/google.svg",
+	"icon": "auth/google/icon.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"
 	},
 	"permissions": {
 		"network": ["openidconnect.googleapis.com"]
-	},
-	"server": "server/index.ts",
-	"contributes": {
-		"authProviders": [
-			{
-				"id": "google",
-				"label": "Google",
-				"consoleUrl": "https://console.cloud.google.com/apis/credentials",
-				"icon": "ui/google.svg"
-			}
-		]
 	}
 }

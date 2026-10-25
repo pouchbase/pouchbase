@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { manifestSchema, UI_DIR, type ManifestIssue, type PluginManifest } from './manifest.js';
+import { svgIconIssues } from './svg.js';
 
 /**
  * A built plugin, as published to the registry and installed by a host: one JSON document with the
@@ -81,14 +82,32 @@ export const bundleSchema = z
 		const required = [
 			...(manifest.server ? [manifest.server] : []),
 			...(manifest.icon ? [manifest.icon] : []),
-			...manifest.contributes.fields.flatMap((field) => [field.input, field.cell ?? []].flat()),
-			...manifest.contributes.pages.map((page) => page.component),
+			...manifest.contributes.fields.flatMap((field) =>
+				[field.input, field.preview ?? [], field.cell ?? [], field.icon ?? []].flat()
+			),
+			...manifest.contributes.pages.flatMap((page) => [page.component, page.icon ?? []].flat()),
 			...manifest.contributes.authProviders.flatMap((provider) => provider.icon ?? [])
 		];
 
 		for (const path of required) {
 			if (!(path in files)) {
 				ctx.addIssue({ code: 'custom', path: ['files'], message: `Missing file: ${path}` });
+			}
+		}
+
+		// The icons of field types and pages are drawn like the dashboard's own icons.
+		const icons = new Set([
+			...manifest.contributes.fields.flatMap((field) => field.icon ?? []),
+			...manifest.contributes.pages.flatMap((page) => page.icon ?? [])
+		]);
+
+		for (const path of icons) {
+			const content = files[path];
+
+			if (content !== undefined) {
+				for (const message of svgIconIssues(content)) {
+					ctx.addIssue({ code: 'custom', path: ['files', path], message: `The icon ${message}` });
+				}
 			}
 		}
 	});

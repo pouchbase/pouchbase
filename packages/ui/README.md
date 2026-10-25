@@ -20,6 +20,8 @@ Import the theme after Tailwind in your global stylesheet. It holds the design t
 @import '@pouchbasejs/ui/theme.css';
 ```
 
+`@pouchbasejs/ui/tokens.css` holds only the design tokens (the `@theme` that `theme.css` imports).
+
 Add the Iconify Vite plugin. It bundles only the icons that are used, in your sources (`src` by default) and in these components, so icons render on the server and are never fetched from the Iconify API:
 
 ```ts
@@ -73,7 +75,7 @@ Every component is a set of parts used through a namespace, with a `Root` part. 
 </Card.Root>
 ```
 
-Icon names must appear literally in the source (`icon="lucide:plus"`, not ``icon={`lucide:${name}`}``) so the Vite plugin can find them. A button whose `onclick` returns a promise shows a spinner until it settles.
+Icon names must appear literally in the source (`icon="lucide:plus"`, not ``icon={`lucide:${name}`}``) so the Vite plugin can find them. For an icon that is a file, such as a plugin's icon of a field type, `<Icon.Root src={url} icon="lucide:puzzle" />` draws the SVG at `url` in the text color (`currentColor`, as a CSS mask, so only its shape counts) at the size of the Iconify icons; `icon` is shown when `src` is empty. The `Select` items take the same as `iconSrc`. A button whose `onclick` returns a promise shows a spinner until it settles.
 
 | Entry point                       | Parts                                                                       |
 | --------------------------------- | --------------------------------------------------------------------------- |
@@ -102,6 +104,16 @@ Icon names must appear literally in the source (`icon="lucide:plus"`, not ``icon
 | `@pouchbasejs/ui/inputs/textarea` | `Root`                                                                      |
 
 Every part accepts `class` and the native attributes of its element.
+
+## In a Pouchbase plugin
+
+The [Install](#install) and [Setup](#setup) steps above are for apps. In a [Pouchbase plugin](https://pouchbase.io/docs/plugins), the dashboard provides these components at runtime, in its own version, so a plugin:
+
+- installs `@pouchbasejs/ui` as a devDependency for type checking only (`^0.2.0`; the plugin templates do), and never bundles it, `bits-ui` or `@iconify/svelte`;
+- imports components from their entry points (`@pouchbasejs/ui/button`, … as in the table above) or the package root;
+- needs no Vite plugin, `virtual:iconify` or `theme.css`: the plugin CLI compiles the Tailwind classes of the plugin's components with `@pouchbasejs/ui/tokens.css`, so they use the same tokens as the dashboard.
+
+The note about literal icon names applies to apps, whose Vite plugin scans their sources. In a plugin, `<Icon.Root icon="lucide:…" />` only renders at once the icons the dashboard bundles for its own use; any other name is fetched from the Iconify API in the browser. Use `src` with an SVG URL instead (a `data:` URL, or an icon of the plugin's bundle), which always works.
 
 ## Versioning
 

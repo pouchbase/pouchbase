@@ -11,5 +11,5 @@
 		"noEmit": true,
 		"resolveJsonModule": true
 	},
-	"include": ["server", "test"]
+	"include": ["auth", "test"]
 }

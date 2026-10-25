@@ -1,3 +1,5 @@
+import type { PluginManifest } from './manifest.js';
+
 import { z } from 'zod';
 
 import { verifyIntegrity } from './bundle.js';
@@ -48,6 +50,19 @@ export const pluginSummarySchema = z.object({
 	updatedAt: z.iso.datetime()
 });
 
+/**
+ * What a version adds to Pouchbase, shown to the admin before installing; see
+ * `contributionSummary`. Every list may be missing (older registries leave out the whole summary).
+ */
+export const contributionSummarySchema = z.object({
+	fields: z.array(z.object({ type: z.string(), label: z.string() })).default([]),
+	pages: z.array(z.object({ path: z.string(), title: z.string() })).default([]),
+	authProviders: z.array(z.object({ id: z.string(), label: z.string() })).default([]),
+	/** Route keys of the server code, e.g. `GET /stats`. */
+	routes: z.array(z.string()).default([]),
+	settings: z.array(z.object({ key: z.string(), label: z.string() })).default([])
+});
+
 export const pluginVersionSchema = z.object({
 	version: z.string(),
 	apiVersion: z.number().int(),
@@ -60,6 +75,8 @@ export const pluginVersionSchema = z.object({
 	pouchbase: z.string().nullable(),
 	/** `permissions` of the manifest, shown to the admin before installing. */
 	permissions: permissionsSchema,
+	/** What the version contributes; missing from older registries. */
+	contributes: contributionSummarySchema.optional(),
 	publishedAt: z.iso.datetime()
 });
 
@@ -93,6 +110,27 @@ export const registryErrorBodySchema = z.object({
 export type PluginSummary = z.output<typeof pluginSummarySchema>;
 
 export type PluginVersion = z.output<typeof pluginVersionSchema>;
+
+export type ContributionSummary = z.output<typeof contributionSummarySchema>;
+
+/**
+ * The `contributes` summary of a version, from its manifest and the route keys of its server code
+ * (which the manifest doesn't list; e.g. what `describe` or `definePlugin(...).routes` reports).
+ */
+export function contributionSummary(
+	manifest: Pick<PluginManifest, 'contributes' | 'settings'>,
+	routes: readonly string[] = []
+): ContributionSummary {
+	const { fields, pages, authProviders } = manifest.contributes;
+
+	return {
+		fields: fields.map(({ type, label }) => ({ type, label })),
+		pages: pages.map(({ path, title }) => ({ path, title })),
+		authProviders: authProviders.map(({ id, label }) => ({ id, label })),
+		routes: [...routes].sort(),
+		settings: (manifest.settings ?? []).map(({ key, label }) => ({ key, label }))
+	};
+}
 
 export type PluginDetails = z.output<typeof pluginDetailsSchema>;
 

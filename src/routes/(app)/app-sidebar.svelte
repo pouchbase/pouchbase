@@ -9,6 +9,7 @@
 	import { getEnvironment } from '#lib/remote/settings.remote.js';
 	import { currentUser, logout } from '../(auth)/auth.remote';
 	import CollectionsNavigation from './collections-navigation.svelte';
+	import PluginsNavigation from './plugins-navigation.svelte';
 	import UpdateStatus from './update-status.svelte';
 
 	const [environment, user] = $derived(await Promise.all([getEnvironment(), currentUser()]));
@@ -59,6 +60,15 @@
 		</Sidebar.Group>
 
 		<CollectionsNavigation />
+
+		<!-- Loads on its own: a plugin that can't be listed never breaks the sidebar. -->
+		<svelte:boundary
+			onerror={(error) => console.error('[plugins] Could not list the plugin pages', error)}
+		>
+			<PluginsNavigation />
+
+			{#snippet failed()}{/snippet}
+		</svelte:boundary>
 
 		<Sidebar.Group>
 			<Sidebar.GroupHeader class="h-row">

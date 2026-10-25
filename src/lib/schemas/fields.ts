@@ -1,3 +1,5 @@
+import type { FieldTypeId, PluginFieldTypeId } from '#lib/fields/field-types.js';
+
 import { z } from 'zod';
 
 import {
@@ -9,6 +11,7 @@ import {
 	MAX_LIST_VALUE_LENGTH,
 	MAX_LIST_VALUES,
 	MAX_SCRIPT_LENGTH,
+	isPluginFieldType,
 	isReservedFieldName,
 	parseListValues,
 	RELATION_ON_DELETE_IDS,
@@ -23,6 +26,17 @@ const MB = 1024 * 1024;
 
 /** The largest upload a file field can allow, in MB (the global upload limit). */
 export const MAX_FILE_SIZE_MB = MAX_FILE_SIZE / MB;
+
+/** A field type: a built-in one, or a plugin's `<plugin>:<type>` (whether it is installed is checked later). */
+export function fieldTypeIdSchema(message?: string): z.ZodType<FieldTypeId, FieldTypeId> {
+	return z.union(
+		[
+			z.enum(FIELD_TYPE_IDS),
+			z.custom<PluginFieldTypeId>((value) => typeof value === 'string' && isPluginFieldType(value))
+		],
+		message
+	);
+}
 
 export const fieldName = z
 	.string()
@@ -130,7 +144,7 @@ const settingsFields = {
 };
 
 type SettingsData = {
-	type: (typeof FIELD_TYPE_IDS)[number];
+	type: FieldTypeId;
 	idGenerator?: (typeof ID_GENERATOR_IDS)[number];
 	defaultValue?: string;
 	defaultSql?: boolean;
@@ -200,7 +214,7 @@ export const createFieldSchema = z
 		/** Collection name, sent as a hidden field. */
 		collection: z.string(),
 		name: fieldName,
-		type: z.enum(FIELD_TYPE_IDS, 'Choose a type'),
+		type: fieldTypeIdSchema('Choose a type'),
 		required: z.boolean().default(false),
 		unique: z.boolean().default(false),
 		/** Only used for relation fields: id of the related collection. */
@@ -233,7 +247,7 @@ export const updateFieldSchema = z
 		/** Hidden fields: the collection, the field and its type (which can't change). */
 		collection: z.string(),
 		name: z.string(),
-		type: z.enum(FIELD_TYPE_IDS),
+		type: fieldTypeIdSchema(),
 		...settingsFields
 	})
 	.superRefine(checkSettings);

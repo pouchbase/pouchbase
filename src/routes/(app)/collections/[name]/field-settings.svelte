@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { AnyRemoteFormField } from '#lib/components/ui/form/form-context.js';
-	import type { FieldType, RichTextFormat } from '#lib/fields/field-types.js';
+	import type { FieldTypeId, RichTextFormat } from '#lib/fields/field-types.js';
 	import * as Form from '#lib/components/ui/form/index.js';
+	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
 	import {
-		FIELD_TYPES,
 		ID_GENERATOR_IDS,
 		ID_GENERATORS,
 		idGenerator,
@@ -23,7 +23,7 @@
 	import { SQL_COMPLETIONS } from './sql-completions';
 
 	type Props = {
-		type: FieldType;
+		type: FieldTypeId;
 		/** The settings fields of the surrounding remote form (add field or edit field). */
 		formFields: {
 			idGenerator: AnyRemoteFormField;
@@ -137,14 +137,14 @@
 		{ value: 'false', label: 'False' }
 	];
 
-	const sqlPlaceholders: Partial<Record<FieldType, string>> = {
+	const sqlPlaceholders: Partial<Record<FieldTypeId, string>> = {
 		date: "datetime('now', '+7 days')",
 		number: 'random() % 100',
 		integer: "unixepoch('now')",
 		json: "json_object('created', datetime('now'))"
 	};
 
-	const defaultPlaceholders: Partial<Record<FieldType, string>> = {
+	const defaultPlaceholders: Partial<Record<FieldTypeId, string>> = {
 		number: '0.5',
 		integer: '0',
 		date: '2026-01-31',
@@ -270,7 +270,7 @@
 	</Form.Field>
 {/if}
 
-{#if FIELD_TYPES[type].defaultable}
+{#if fieldTypeInfo(type).defaultable}
 	<Form.Field field={formFields.defaultValue}>
 		<Form.Label>Default value</Form.Label>
 
@@ -321,6 +321,8 @@
 			{:else if type === 'relation'}
 				New records link to this record when they don't set this field. It can't be deleted while it
 				is the default.
+			{:else if fieldTypeInfo(type).plugin}
+				Used when a record doesn't set this field; the plugin checks it when you save.
 			{:else}
 				Used when a record doesn't set this field.
 				{#if type === 'date'}

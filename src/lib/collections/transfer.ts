@@ -9,6 +9,8 @@ import type { Plan } from '#lib/environments/diff.js';
 import type { CollectionExport } from '#lib/schemas/collections.js';
 import type { SnapshotCollection } from '#lib/schemas/environments.js';
 
+import { splitPluginFieldType } from '@pouchbasejs/plugin-sdk';
+
 import { diffCollectionsOnly, match } from '#lib/environments/diff.js';
 import { COLLECTION_EXPORT_FORMAT } from '#lib/schemas/collections.js';
 
@@ -46,14 +48,25 @@ export function exportCollections(
 export type ImportOptions = {
 	/** Also delete the collections the file doesn't have (built-in collections stay). */
 	removeMissing: boolean;
+	/**
+	 * The plugin field types (`<plugin>:<type>`) this instance has; without it, fields with a
+	 * plugin's type aren't checked.
+	 */
+	pluginFieldTypes?: ReadonlySet<string>;
 };
 
-/** Why a file can't be imported: a relation points at a collection this instance doesn't have. */
-export type ImportProblem = { collection: string; field: string; related: string | null };
+/**
+ * Why a file can't be imported: a relation points at a collection this instance doesn't have
+ * (`relation`), or a field has a plugin's type that isn't installed here (`plugin`).
+ */
+export type ImportProblem =
+	| { kind: 'relation'; collection: string; field: string; related: string | null }
+	| { kind: 'plugin'; collection: string; field: string; type: string; pluginId: string };
 
 /**
- * The plan that imports `file` into an instance with the collections `target`, or the relation
- * fields that point at collections neither the file nor the instance has.
+ * The plan that imports `file` into an instance with the collections `target`, or the problems:
+ * relation fields that point at collections neither the file nor the instance has, and fields
+ * with a plugin's type the instance doesn't have.
  */
 export function planImport(
 	file: CollectionExport,
@@ -74,6 +87,33 @@ export function planImport(
 	);
 	const relatedNames = new Map(file.related.map((related) => [related.id, related.name]));
 	const problems: ImportProblem[] = [];
+	const targetFields = new Map(
+		target.flatMap((collection) => collection.fields.map((field) => [field.id, field] as const))
+	);
+
+	for (const collection of file.collections) {
+		for (const field of collection.fields) {
+			const plugin = splitPluginFieldType(field.type);
+
+			// A field the instance already has with this type needs nothing of the plugin.
+			if (
+				!plugin ||
+				!options.pluginFieldTypes ||
+				options.pluginFieldTypes.has(field.type) ||
+				targetFields.get(field.id)?.type === field.type
+			) {
+				continue;
+			}
+
+			problems.push({
+				kind: 'plugin',
+				collection: collection.name,
+				field: field.name,
+				type: field.type,
+				pluginId: plugin.pluginId
+			});
+		}
+	}
 
 	const imported = file.collections.map((collection) => ({
 		...collection,
@@ -90,6 +130,7 @@ export function planImport(
 
 			if (!collectionId) {
 				problems.push({
+					kind: 'relation',
 					collection: collection.name,
 					field: field.name,
 					related: relatedNames.get(related) ?? null

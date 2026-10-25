@@ -3,23 +3,12 @@
 	"apiVersion": 1,
 	"id": "auth-github",
 	"name": "GitHub sign-in",
-	"icon": "ui/github.svg",
+	"icon": "auth/github/icon.svg",
 	"categories": ["auth"],
 	"engines": {
 		"pouchbase": ">=0.8.0"
 	},
 	"permissions": {
 		"network": ["api.github.com"]
-	},
-	"server": "server/index.ts",
-	"contributes": {
-		"authProviders": [
-			{
-				"id": "github",
-				"label": "GitHub",
-				"consoleUrl": "https://github.com/settings/developers",
-				"icon": "ui/github.svg"
-			}
-		]
 	}
 }

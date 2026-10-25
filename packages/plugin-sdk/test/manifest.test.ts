@@ -1,3 +1,6 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -5,6 +8,10 @@ import {
 	MANIFEST_SCHEMA_URL,
 	PLUGIN_CATEGORIES,
 	PLUGIN_CATEGORY_LABELS,
+	PLUGIN_FIELD_TYPE_PATTERN,
+	PLUGIN_ID_PATTERN,
+	pluginFieldTypeId,
+	splitPluginFieldType,
 	BUNDLE_FORMAT,
 	BUNDLE_VERSION,
 	checkCompatibility,
@@ -15,12 +22,14 @@ import {
 	manifestJsonSchema,
 	parseBundle,
 	parseManifest,
+	resolveSettings,
 	serializeBundle,
 	serverCodeIssues,
 	unknownCategoryIssues,
 	withPackageDefaults
 } from '../src/index.js';
-import { HOST_MODULES, isHostModule } from '../src/ui.js';
+import { TEMPLATES, projectFiles } from '../src/cli/templates.js';
+import { HOST_MODULE_IDS, HOST_MODULES, isHostModule } from '../src/ui.js';
 
 const valid = defineManifest({
 	apiVersion: API_VERSION,
@@ -266,6 +275,89 @@ describe('HOST_MODULES', () => {
 	});
 });
 
+describe('HOST_MODULE_IDS', () => {
+	it('only lists modules that HOST_MODULES allows, once each', () => {
+		for (const id of HOST_MODULE_IDS) {
+			expect(isHostModule(id), id).toBe(true);
+		}
+
+		expect(new Set(HOST_MODULE_IDS).size).toBe(HOST_MODULE_IDS.length);
+	});
+
+	it('lists modules that svelte exports', () => {
+		const pkg = JSON.parse(
+			readFileSync(fileURLToPath(import.meta.resolve('svelte/package.json')), 'utf8')
+		) as { exports: Record<string, unknown> };
+
+		for (const id of HOST_MODULE_IDS.filter((id) => id.split('/')[0] === 'svelte')) {
+			expect(Object.keys(pkg.exports), id).toContain(id === 'svelte' ? '.' : `./${id.slice(7)}`);
+		}
+	});
+
+	it('lists every component of @pouchbasejs/ui', () => {
+		const components = new URL('../../ui/src/components/', import.meta.url);
+		const entries = readdirSync(components, { recursive: true, encoding: 'utf8' })
+			.map((path) => path.replaceAll('\\', '/'))
+			.filter((path) => path.endsWith('/index.ts'))
+			.map((path) => `@pouchbasejs/ui/${path.slice(0, -'/index.ts'.length)}`);
+
+		expect(entries.length).toBeGreaterThan(0);
+		expect([...HOST_MODULE_IDS.filter((id) => id.startsWith('@pouchbasejs/ui/'))].sort()).toEqual(
+			entries.sort()
+		);
+	});
+});
+
+describe('plugin field type ids', () => {
+	it('joins and splits <plugin>:<type>', () => {
+		expect(pluginFieldTypeId('color-picker', 'color')).toBe('color-picker:color');
+		expect(splitPluginFieldType('color-picker:rich_color')).toEqual({
+			pluginId: 'color-picker',
+			type: 'rich_color'
+		});
+	});
+
+	it('matches only a valid plugin id and field type', () => {
+		for (const id of ['demo:rating', 'color-picker:color', 'a1-b2:x_1', `p:a${'b'.repeat(31)}`]) {
+			expect(PLUGIN_FIELD_TYPE_PATTERN.test(id), id).toBe(true);
+		}
+
+		for (const id of [
+			'text',
+			'demo:',
+			':rating',
+			'Demo:rating',
+			'demo:Rating',
+			'demo-:rating',
+			'demo--x:rating',
+			'1demo:rating',
+			'demo:1rating',
+			'demo:rating-x',
+			'demo:rating:x',
+			`p:a${'b'.repeat(32)}`
+		]) {
+			expect(PLUGIN_FIELD_TYPE_PATTERN.test(id), id).toBe(false);
+			expect(splitPluginFieldType(id)).toBeNull();
+		}
+	});
+
+	it('accepts the ids of every valid manifest field', () => {
+		const result = parseManifest(valid);
+
+		expect(result.success).toBe(true);
+
+		if (result.success) {
+			expect(PLUGIN_ID_PATTERN.test(result.manifest.id)).toBe(true);
+
+			for (const field of result.manifest.contributes.fields) {
+				expect(
+					PLUGIN_FIELD_TYPE_PATTERN.test(pluginFieldTypeId(result.manifest.id, field.type))
+				).toBe(true);
+			}
+		}
+	});
+});
+
 describe('categories', () => {
 	it('accepts unknown categories that match the pattern, so hosts tolerate new ones', () => {
 		const result = parseManifest({ ...valid, categories: ['fields', 'future-thing'] });
@@ -394,10 +486,223 @@ describe('manifestJsonSchema', () => {
 
 		expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema');
 		expect(schema.$id).toBe(MANIFEST_SCHEMA_URL);
-		expect(schema.required).toEqual(['apiVersion', 'id']);
+		expect(schema.required).toEqual(['id']);
 		expect(Object.keys(schema.properties as object)).toContain('$schema');
 		expect(
 			(schema.properties as { categories: { items: { enum: string[] } } }).categories.items.enum
 		).toEqual([...PLUGIN_CATEGORIES]);
+	});
+
+	it('marks the keys the convention layout no longer reads as deprecated', () => {
+		const properties = manifestJsonSchema().properties as Record<string, Record<string, unknown>>;
+
+		for (const key of ['settings', 'contributes', 'server']) {
+			expect(properties[key]).toMatchObject({
+				deprecated: true,
+				description: expect.stringMatching(/^Deprecated: /)
+			});
+		}
+
+		expect(properties.apiVersion?.deprecated).toBeUndefined();
+	});
+
+	it('accepts the manifest of every template and of the demo, without deprecated keys', () => {
+		const schema = manifestJsonSchema();
+		const manifests: [string, unknown][] = [
+			...TEMPLATES.map((template): [string, unknown] => [
+				template,
+				JSON.parse(projectFiles('auth-acme', template, '0.0.0')['pouchbase-plugin.json']!)
+			]),
+			[
+				'demo',
+				JSON.parse(
+					readFileSync(
+						fileURLToPath(
+							new URL('../../../examples/plugin-demo/pouchbase-plugin.json', import.meta.url)
+						),
+						'utf8'
+					)
+				)
+			]
+		];
+
+		for (const [name, manifest] of manifests) {
+			expect({ name, problems: schemaProblems(schema, manifest) }).toEqual({ name, problems: [] });
+		}
+
+		// The check itself finds problems.
+		expect(schemaProblems(schema, { id: 'Xyz', settings: [], colour: 'red' })).toEqual([
+			'$.id: does not match ^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$',
+			'$.settings: deprecated',
+			'$.colour: unknown key'
+		]);
+	});
+});
+
+/**
+ * What `value` breaks of a JSON Schema, for the keywords `manifestJsonSchema` uses: `type`,
+ * `enum`, `required`, `properties` (unknown and deprecated keys count as problems), `items`,
+ * `pattern`, `minLength`, `maxLength`, `maxItems`, `exclusiveMinimum` and `maximum`.
+ */
+function schemaProblems(schema: Record<string, unknown>, value: unknown, path = '$'): string[] {
+	const problems: string[] = [];
+	const type = schema.type as string | undefined;
+	const actual = Array.isArray(value)
+		? 'array'
+		: value === null
+			? 'null'
+			: Number.isInteger(value)
+				? 'integer'
+				: typeof value;
+
+	if (type && type !== actual && !(type === 'number' && actual === 'integer')) {
+		return [`${path}: expected ${type}, got ${actual}`];
+	}
+
+	if (Array.isArray(schema.enum) && !schema.enum.includes(value)) {
+		problems.push(`${path}: not one of ${schema.enum.join(', ')}`);
+	}
+
+	if (typeof value === 'string') {
+		if (typeof schema.pattern === 'string' && !new RegExp(schema.pattern, 'u').test(value)) {
+			problems.push(`${path}: does not match ${schema.pattern}`);
+		}
+
+		if (typeof schema.minLength === 'number' && value.length < schema.minLength) {
+			problems.push(`${path}: shorter than ${schema.minLength}`);
+		}
+
+		if (typeof schema.maxLength === 'number' && value.length > schema.maxLength) {
+			problems.push(`${path}: longer than ${schema.maxLength}`);
+		}
+	}
+
+	if (typeof value === 'number') {
+		if (typeof schema.exclusiveMinimum === 'number' && value <= schema.exclusiveMinimum) {
+			problems.push(`${path}: not above ${schema.exclusiveMinimum}`);
+		}
+
+		if (typeof schema.maximum === 'number' && value > schema.maximum) {
+			problems.push(`${path}: above ${schema.maximum}`);
+		}
+	}
+
+	if (Array.isArray(value)) {
+		if (typeof schema.maxItems === 'number' && value.length > schema.maxItems) {
+			problems.push(`${path}: more than ${schema.maxItems} items`);
+		}
+
+		if (schema.items && typeof schema.items === 'object') {
+			value.forEach((item, index) =>
+				problems.push(
+					...schemaProblems(schema.items as Record<string, unknown>, item, `${path}[${index}]`)
+				)
+			);
+		}
+	}
+
+	if (actual === 'object' && schema.properties) {
+		const properties = schema.properties as Record<string, Record<string, unknown>>;
+		const object = value as Record<string, unknown>;
+
+		for (const key of (schema.required as string[] | undefined) ?? []) {
+			if (!(key in object)) {
+				problems.push(`${path}: lacks ${key}`);
+			}
+		}
+
+		for (const [key, item] of Object.entries(object)) {
+			const property = properties[key];
+
+			if (!property) {
+				problems.push(`${path}.${key}: unknown key`);
+			} else if (property.deprecated) {
+				problems.push(`${path}.${key}: deprecated`);
+			} else {
+				problems.push(...schemaProblems(property, item, `${path}.${key}`));
+			}
+		}
+	}
+
+	return problems;
+}
+
+describe('settings', () => {
+	const withSettings = (settings: unknown[]) => parseManifest({ ...valid, settings });
+	const messages = (settings: unknown[]) => {
+		const result = withSettings(settings);
+
+		return result.success ? [] : result.issues.map((issue) => `${issue.path}: ${issue.message}`);
+	};
+
+	it('defaults to no settings, and fills in type and required', () => {
+		const empty = parseManifest(valid);
+
+		expect(empty.success && empty.manifest.settings).toEqual([]);
+
+		const result = withSettings([{ key: 'region', label: 'Region', default: 'eu' }]);
+
+		expect(result.success && result.manifest.settings).toEqual([
+			{ key: 'region', label: 'Region', type: 'text', required: false, default: 'eu' }
+		]);
+	});
+
+	it('accepts defaults of the setting type', () => {
+		expect(
+			messages([
+				{ key: 'limit', label: 'Limit', type: 'number', default: 10 },
+				{ key: 'enabled', label: 'Enabled', type: 'boolean', default: false },
+				{ key: 'endpoint', label: 'Endpoint', type: 'url', default: 'https://api.example.com' },
+				{ key: 'token', label: 'Token', type: 'secret', required: true }
+			])
+		).toEqual([]);
+	});
+
+	it('rejects bad keys, duplicates, defaults of another type and secret defaults', () => {
+		expect(
+			messages([
+				{ key: 'Bad-Key', label: 'Bad' },
+				{ key: 'limit', label: 'Limit', type: 'number', default: '10' },
+				{ key: 'enabled', label: 'Enabled', type: 'boolean', default: 'yes' },
+				{ key: 'endpoint', label: 'Endpoint', type: 'url', default: 'not a url' },
+				{ key: 'token', label: 'Token', type: 'secret', default: 'abc' },
+				{ key: 'name', label: 'Name', default: 1 },
+				{ key: 'limit', label: 'Again' },
+				{ key: 'color', label: 'Color', type: 'color' }
+			])
+		).toEqual([
+			'settings.0.key: Use lowercase letters, numbers and underscores',
+			'settings.1.default: Must be a number',
+			'settings.2.default: Must be true or false',
+			'settings.3.default: Must be an absolute URL',
+			'settings.4.default: A secret setting has no default',
+			'settings.5.default: Must be a string',
+			expect.stringMatching(/^settings\.7\.type: /)
+		]);
+		expect(
+			messages([
+				{ key: 'a', label: 'A' },
+				{ key: 'a', label: 'B' }
+			])
+		).toEqual(['settings.1.key: Duplicate key: a']);
+		expect(
+			messages(Array.from({ length: 31 }, (_, index) => ({ key: `k${index}`, label: 'K' })))
+		).toHaveLength(1);
+	});
+
+	it('resolves saved values over defaults, as strings', () => {
+		expect(
+			resolveSettings(
+				[
+					{ key: 'region', default: 'eu' },
+					{ key: 'limit', default: 10 },
+					{ key: 'enabled', default: true },
+					{ key: 'token' },
+					{ key: 'empty', default: 'x' }
+				],
+				{ region: 'us', empty: '', removed: 'old' }
+			)
+		).toEqual({ region: 'us', limit: '10', enabled: 'true', empty: '' });
+		expect(resolveSettings(undefined, { a: 'b' })).toEqual({});
 	});
 });

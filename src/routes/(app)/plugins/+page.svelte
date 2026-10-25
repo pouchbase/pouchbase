@@ -2,6 +2,7 @@
 	import { PLUGIN_CATEGORIES, PLUGIN_CATEGORY_LABELS } from '@pouchbasejs/plugin-sdk';
 	import type { PluginCategory } from '@pouchbasejs/plugin-sdk';
 	import { Debounced } from 'runed';
+	import { resolve } from '$app/paths';
 	import * as Badge from '#lib/components/ui/badge/index.js';
 	import * as Breadcrumb from '#lib/components/ui/breadcrumb/index.js';
 	import * as Button from '#lib/components/ui/button/index.js';
@@ -10,6 +11,7 @@
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Input from '#lib/components/ui/inputs/input/index.js';
+	import * as Link from '#lib/components/ui/link/index.js';
 	import * as Page from '#lib/components/ui/page/index.js';
 	import * as ProviderIcon from '#lib/components/ui/provider-icon/index.js';
 	import * as Select from '#lib/components/ui/inputs/select/index.js';
@@ -17,6 +19,8 @@
 	import * as Table from '#lib/components/ui/table/index.js';
 	import * as Tile from '#lib/components/ui/tile/index.js';
 	import * as Topbar from '#lib/components/ui/topbar/index.js';
+	import { describeContributions } from './contributions';
+	import PluginSettingsSheet from './plugin-settings-sheet.svelte';
 	import PluginTile from './plugin-tile.svelte';
 	import { getInstalledPlugins, searchPlugins } from './plugins.remote';
 	import UninstallPluginDialog from './uninstall-plugin-dialog.svelte';
@@ -49,23 +53,6 @@
 	const dialogs = Dialog.getDialogs();
 
 	const dateFormat = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' });
-
-	/** `1 field type, 2 pages`: what a plugin adds. */
-	function contributions(plugin: (typeof installed)[number]) {
-		const { fields, pages, authProviders } = plugin.contributes;
-		const parts = [
-			[fields.length, 'field type', 'field types'],
-			[pages.length, 'page', 'pages'],
-			[authProviders.length, 'sign-in provider', 'sign-in providers']
-		] as const;
-
-		return (
-			parts
-				.filter(([count]) => count > 0)
-				.map(([count, one, many]) => `${count} ${count === 1 ? one : many}`)
-				.join(', ') || 'Nothing yet'
-		);
-	}
 </script>
 
 <svelte:head>
@@ -106,15 +93,6 @@
 				</Segmented.Item>
 			</Segmented.Root>
 		</Page.Header>
-
-		<Callout.Root>
-			<Icon.Root icon="lucide:flask-conical" class="size-4 shrink-0" />
-			<p>
-				Plugin support is in development. Installing a plugin deploys its server code and registers
-				the sign-in providers it adds, but sign-in still uses the built-in providers, and field
-				types and pages don't run yet.
-			</p>
-		</Callout.Root>
 
 		{#if tab === 'marketplace'}
 			<div class="flex flex-col gap-2 sm:flex-row">
@@ -201,6 +179,25 @@
 									<div class="flex min-w-0 flex-col">
 										<span class="font-medium text-zinc-900">{plugin.name}</span>
 										<span class="truncate text-xs text-zinc-500">{plugin.description}</span>
+										{#if plugin.pages.length}
+											<ul
+												class="flex flex-wrap gap-x-3 text-xs"
+												aria-label={`Pages of ${plugin.name}`}
+											>
+												{#each plugin.pages as pluginPage (pluginPage.path)}
+													<li>
+														<Link.Root
+															href={resolve('/(app)/plugins/[id]/[...path]', {
+																id: plugin.id,
+																path: pluginPage.path
+															})}
+														>
+															{pluginPage.title}
+														</Link.Root>
+													</li>
+												{/each}
+											</ul>
+										{/if}
 									</div>
 								</div>
 							</Table.Cell>
@@ -212,21 +209,41 @@
 									{/if}
 								</div>
 							</Table.Cell>
-							<Table.Cell class="whitespace-nowrap">{contributions(plugin)}</Table.Cell>
+							<Table.Cell>
+								{describeContributions(plugin.contributes, { names: false }) || 'Nothing yet'}
+							</Table.Cell>
 							<Table.Cell class="whitespace-nowrap">
 								{plugin.installedAt ? dateFormat.format(plugin.installedAt) : 'With Pouchbase'}
 							</Table.Cell>
-							<Table.Cell class="text-right">
-								{#if !plugin.embedded}
-									<Button.Root
-										variant="ghost"
-										size="icon"
-										aria-label={`Remove ${plugin.name}`}
-										onclick={() => void dialogs.open(UninstallPluginDialog, { plugin })}
-									>
-										<Icon.Root icon="lucide:trash-2" />
-									</Button.Root>
-								{/if}
+							<Table.Cell>
+								<div class="flex items-center justify-end gap-1">
+									{#if plugin.missingSettings.length}
+										<Badge.Root variant="warning" title="Required settings have no value yet">
+											<Icon.Root icon="lucide:triangle-alert" />
+											Needs settings
+										</Badge.Root>
+									{/if}
+									{#if plugin.hasSettings}
+										<Button.Root
+											variant="ghost"
+											size="icon"
+											aria-label={`Settings of ${plugin.name}`}
+											onclick={() => void dialogs.open(PluginSettingsSheet, { plugin })}
+										>
+											<Icon.Root icon="lucide:settings" />
+										</Button.Root>
+									{/if}
+									{#if !plugin.embedded}
+										<Button.Root
+											variant="ghost"
+											size="icon"
+											aria-label={`Remove ${plugin.name}`}
+											onclick={() => void dialogs.open(UninstallPluginDialog, { plugin })}
+										>
+											<Icon.Root icon="lucide:trash-2" />
+										</Button.Root>
+									{/if}
+								</div>
 							</Table.Cell>
 						</Table.Row>
 					{/each}

@@ -1,18 +1,42 @@
-import type { FieldOptions, FieldType } from './field-types';
+import type { ColumnType, FieldOptions, FieldTypeId } from './field-types';
+
+import { splitPluginFieldType } from '@pouchbasejs/plugin-sdk';
 
 import { idGenerator } from './field-types';
+
+/** The TypeScript type of a value stored in a column of this type, as D1 returns it. */
+const COLUMN_TYPES: Record<ColumnType, string> = {
+	TEXT: 'string',
+	INTEGER: 'number',
+	REAL: 'number',
+	BLOB: 'string'
+};
 
 /**
  * The TypeScript type of a field's value as the records API returns it, with a note for docs:
  * booleans are `boolean`, JSON fields are parsed (`JsonValue`, declared in the generated types),
  * and multiple relations, files and lists are arrays. `target` is the name of the collection a
  * relation points to. Used by the generated types and the API preview in the dashboard.
+ *
+ * A plugin's type is typed by its column, or `unknown` when `deserializes` (the plugin turns
+ * the stored value into what the API returns, which can be anything).
  */
 export function fieldValueType(
-	field: { type: FieldType; options: FieldOptions },
-	target?: string
+	field: { type: FieldTypeId; options: FieldOptions },
+	target?: string,
+	{ deserializes = false }: { deserializes?: boolean } = {}
 ): { type: string; note?: string } {
 	const items = field.options.values ?? [];
+	const plugin = splitPluginFieldType(field.type);
+
+	if (plugin) {
+		const label = field.options.plugin?.label ?? plugin.type;
+		const note = `${label}, a field type of the plugin ${plugin.pluginId}.`;
+
+		return deserializes
+			? { type: 'unknown', note }
+			: { type: COLUMN_TYPES[field.options.plugin?.column ?? 'TEXT'], note };
+	}
 
 	switch (field.type) {
 		case 'id':
