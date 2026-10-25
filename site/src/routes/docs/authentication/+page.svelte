@@ -117,7 +117,7 @@
 		</li>
 		<li>
 			<strong>OAuth</strong> with Google, GitHub, Microsoft, Discord and Twitch, or any provider a
-			<a href="{resolve('/docs/plugins')}#sign-in-providers">sign-in plugin</a> adds. The five are
+			<a href={resolve('/docs/plugins/sign-in-providers')}>sign-in plugin</a> adds. The five are
 			built-in plugins; install more from the <strong>Plugins</strong> page. Create an OAuth app at the
 			provider, register the callback URL that the setup dialog shows, then enter the client ID and secret.
 		</li>

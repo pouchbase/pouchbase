@@ -2,6 +2,8 @@ import type { PageServerLoad } from './$types';
 
 import { highlightAll } from '#lib/server/highlight.js';
 
-import * as snippets from './snippets';
+import { devRegistry, init, templates } from './snippets';
 
-export const load: PageServerLoad = () => ({ code: highlightAll(snippets) });
+export const load: PageServerLoad = () => ({
+	code: highlightAll({ init, templates, devRegistry })
+});

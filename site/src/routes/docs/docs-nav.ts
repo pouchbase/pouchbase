@@ -32,7 +32,32 @@ export const docsNavigation: DocsGroup[] = [
 		]
 	},
 	{
-		label: 'Extend Pouchbase',
-		links: [{ label: 'Plugins', href: resolve('/docs/plugins') }]
+		label: 'Plugins',
+		links: [
+			{ label: 'Overview', href: resolve('/docs/plugins') },
+			{ label: 'Project structure', href: resolve('/docs/plugins/project-structure') },
+			{ label: 'Field types', href: resolve('/docs/plugins/field-types') },
+			{ label: 'Dashboard pages', href: resolve('/docs/plugins/pages') },
+			{ label: 'Components and icons', href: resolve('/docs/plugins/components') },
+			{ label: 'Routes', href: resolve('/docs/plugins/routes') },
+			{ label: 'Sign-in providers', href: resolve('/docs/plugins/sign-in-providers') },
+			{ label: 'Settings', href: resolve('/docs/plugins/settings') },
+			{ label: 'Testing and debugging', href: resolve('/docs/plugins/testing') },
+			{ label: 'Publishing and updates', href: resolve('/docs/plugins/publishing') },
+			{ label: 'Security and limits', href: resolve('/docs/plugins/security') },
+			{ label: 'CLI reference', href: resolve('/docs/plugins/cli') }
+		]
 	}
 ];
+
+/** The pages before and after a docs page, in reading order. */
+export function docsNeighbours(pathname: string) {
+	const links = docsNavigation.flatMap((group) => group.links);
+	const index = links.findIndex((link) => link.href === pathname);
+
+	if (index === -1) {
+		return { previous: undefined, next: undefined };
+	}
+
+	return { previous: links[index - 1], next: links[index + 1] };
+}

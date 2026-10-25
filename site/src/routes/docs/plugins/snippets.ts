@@ -114,7 +114,7 @@ export const packageDefaults = snippet(
 export const manifestCommand = snippet(
 	'bash',
 	`
-npx pouchbase-plugin manifest > manifest.json   # the JSON on stdout, the steps on stderr`
+npx pouchbase-plugin manifest > manifest.json   # the full manifest, with every contribution`
 );
 
 export const field = snippet(
@@ -367,21 +367,6 @@ npx pouchbase-plugin add setting limit --type number     # appends to its settin
 
 export const outsideApi = demo('typescript', demoGithubStatus);
 
-export const testScripts = snippet(
-	'json',
-	`
-{
-	"scripts": {
-		"check": "svelte-check --tsconfig ./tsconfig.json",
-		"test": "vitest run"
-	},
-	"devDependencies": {
-		"svelte-check": "^4.7.7",
-		"vitest": "^5.0.5"
-	}
-}`
-);
-
 export const testRoute = snippet(
 	'typescript',
 	`
@@ -480,51 +465,6 @@ HTTP/2 502
 [plugins] color-picker GET /stats: Cannot read properties of undefined (reading 'count')`
 );
 
-export const validate = snippet(
-	'bash',
-	`
-$ npx pouchbase-plugin validate
-› Reading pouchbase-plugin.json
-  demo, convention layout
-› Looking for fields/, pages/, auth/, routes/
-  3 field types, 3 pages, 5 route files
-› Reading the settings in plugin.ts
-  3 settings: greeting (text), max_length (number), shout (boolean)
-› Bundling the server code
-› Reading the field types, auth providers and routes
-  4 KiB of server code, in one module
-  Resolved icon lucide:pipette for field color (@iconify-json/lucide of the plugin)
-  Resolved icon lucide:phone-call for field phone (@iconify-json/lucide of the plugin)
-  Resolved icon lucide:star-half for field rating (@iconify-json/lucide of the plugin)
-› Reading the pages
-  Resolved icon lucide:terminal for page api (@iconify-json/lucide of the plugin)
-  Resolved icon lucide:shapes for page fields (@iconify-json/lucide of the plugin)
-  Resolved icon lucide:layout-dashboard for page overview (@iconify-json/lucide of the plugin)
-› Checking the UI files
-  33 files, 6 compiled from TypeScript
-  demo@0.1.5 (API version 1)
-  Found 3 field types (color, phone, rating), 3 pages (overview, fields, api), 5 routes (POST /echo, GET /github-status, GET /info, GET /items/:id, GET /me), 3 settings (greeting, max_length, shout)
-  May reach www.githubstatus.com
-› Compiling the components
-  20 components compiled
-› Compiling the Tailwind classes
-  204 classes, 30 KiB
-› Checking the bundle
-  95 KiB of at most 1024 KiB
-✓ demo@0.1.5 is valid (330 ms)`
-);
-
-export const validateError = snippet(
-	'bash',
-	`
-$ npx pouchbase-plugin validate
-› Reading pouchbase-plugin.json
-  color-picker, convention layout
-› Looking for fields/, pages/, auth/, routes/
-✗ fields/rating: has no input.svelte: every field type needs an input component
-  Hint: pouchbase-plugin add field <type> shows what the files of a field type look like.`
-);
-
 export const build = snippet(
 	'bash',
 	`
@@ -535,18 +475,8 @@ npx pouchbase-plugin build   # writes dist/color-picker-1.2.0.json`
 export const publish = snippet(
 	'bash',
 	`
-$ export POUCHBASE_REGISTRY_TOKEN=pbp_...
-$ npx pouchbase-plugin publish
-› Publishing to https://api.pouchbase.io (the default)
-  Token from $POUCHBASE_REGISTRY_TOKEN
-› Reading pouchbase-plugin.json
-  color-picker, convention layout
-...
-› Looking up color-picker on the registry
-  Latest published version: 1.1.0 (3 in total)
-› Uploading color-picker@1.2.0 (14 KiB)
-✓ Published color-picker@1.2.0 in 1.4 s
-  Next: install or update color-picker from the Plugins page of Pouchbase.`
+export POUCHBASE_REGISTRY_TOKEN=pbp_...   # a publish token from your pouchbase.io account
+npx pouchbase-plugin publish             # builds, checks and uploads the bundle`
 );
 
 export const ci = snippet(
@@ -554,18 +484,4 @@ export const ci = snippet(
 	`
 # For example in a GitHub Actions step, with the token as a repository secret
 POUCHBASE_REGISTRY_TOKEN=\${{ secrets.POUCHBASE_REGISTRY_TOKEN }} npx pouchbase-plugin publish --quiet`
-);
-
-export const legacy = snippet(
-	'json',
-	`
-{
-	"apiVersion": 1,
-	"id": "color-picker",
-	"name": "Color picker",
-	"server": "server/index.ts",
-	"contributes": {
-		"fields": [{ "type": "color", "label": "Color", "column": "TEXT", "input": "ui/color-input.svelte" }]
-	}
-}`
 );

@@ -9,6 +9,7 @@
 	import * as Prose from '#lib/components/ui/prose/index.js';
 	import * as SideNav from '#lib/components/ui/side-nav/index.js';
 	import type { Snippet } from 'svelte';
+	import DocsPager from './docs-pager.svelte';
 
 	interface Props {
 		title: string;
@@ -40,6 +41,8 @@
 		<Prose.Root>
 			{@render children()}
 		</Prose.Root>
+
+		<DocsPager />
 	</article>
 
 	{#if sections.length > 0}
