@@ -524,7 +524,63 @@ export class CollectionsService extends Service {
 	 * that deletes collections, fields or data only runs with `force`.
 	 */
 	import(file: CollectionExport, options: ImportOptions): ResultAsync<ImportResult, ImportError> {
-		return this.schemas()
+		return this.schemas().andThen((target) => this.importInto(file, options, target));
+	}
+
+	/**
+	 * Changes several existing collections at once (`PATCH /api/schema/<name>` for each), in one
+	 * plan on one read of the schema: a plugin's collections on install and update. Changes nothing
+	 * when they already match. A plan that deletes fields or data only runs with `force`.
+	 */
+	updateManyFromApi(
+		items: { name: string; input: ApiUpdateCollection }[],
+		force: boolean
+	): ResultAsync<ImportResult, ImportError | ServiceError<6006, 'COLLECTION_NOT_FOUND'>> {
+		return this.schemas().andThen((target) => {
+			const collections: SnapshotCollection[] = [];
+
+			for (const { name, input } of items) {
+				const existing = target.find((collection) => collection.name === name);
+
+				if (!existing) {
+					return errAsync(this.error(6006, 'COLLECTION_NOT_FOUND'));
+				}
+
+				collections.push(
+					toSnapshot(
+						existing.id,
+						name,
+						{
+							fields: input.fields ?? existing.fields,
+							indexes: input.indexes ?? existing.indexes,
+							rules: input.rules ?? {},
+							thumbnails: input.thumbnails
+						},
+						existing
+					)
+				);
+			}
+
+			return this.importInto(
+				{
+					format: COLLECTION_EXPORT_FORMAT,
+					exportedAt: new Date().toISOString(),
+					collections,
+					related: []
+				},
+				{ removeMissing: false, force, dryRun: false },
+				target
+			);
+		});
+	}
+
+	/** `import` into `target`, the schema as it is now. */
+	private importInto(
+		file: CollectionExport,
+		options: ImportOptions,
+		target: SnapshotCollection[]
+	): ResultAsync<ImportResult, ImportError> {
+		return okAsync(target)
 			.andThen((target) =>
 				this.services
 					.plugins()

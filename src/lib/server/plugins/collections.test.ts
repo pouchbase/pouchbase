@@ -3,7 +3,7 @@ import type { SnapshotCollection } from '#lib/schemas/environments.js';
 import { parseManifest } from '@pouchbasejs/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { collectionFields, collectionIndexes } from './collections';
+import { collectionFields, collectionIndexes, collectionKeyField } from './collections';
 import { pluginMay } from './grant';
 
 function manifest() {
@@ -57,7 +57,7 @@ describe('collectionFields', () => {
 					required: false,
 					unique: false,
 					defaultValue: null,
-					options: { collectionId: 'posts-id' }
+					options: { collectionId: 'posts-id', multiple: false, onDelete: 'set_null' }
 				},
 				{
 					name: 'parent',
@@ -65,7 +65,7 @@ describe('collectionFields', () => {
 					required: false,
 					unique: false,
 					defaultValue: null,
-					options: { collectionId: 'reviews-id' }
+					options: { collectionId: 'reviews-id', multiple: false, onDelete: 'set_null' }
 				},
 				{
 					name: 'score',
@@ -165,6 +165,46 @@ describe('collectionFields', () => {
 		expect(byName?.get('score')?.hidden).toBe(true);
 		expect(byName?.get('note')?.hidden).toBe(true);
 		expect(byName?.get('post')?.hidden).toBeUndefined();
+	});
+
+	it('spells out the options Pouchbase stores, so an unchanged field stays unchanged', () => {
+		const plugin = manifest();
+		const contribution = {
+			...plugin.contributes.collections[0]!,
+			fields: [
+				{ name: 'status', type: 'list', options: { values: ['draft', 'published'] } },
+				{ name: 'body', type: 'rich_text', options: {} },
+				{ name: 'post', type: 'relation', options: { collection: 'posts', onDelete: 'cascade' } }
+			]
+		} as (typeof plugin.contributes.collections)[number];
+		const result = collectionFields(plugin, contribution, ids, null);
+
+		expect('fields' in result && result.fields.slice(3).map((field) => field.options)).toEqual([
+			{ values: ['draft', 'published'], multiple: false },
+			{ format: 'html' },
+			{ collectionId: 'posts-id', multiple: false, onDelete: 'cascade' }
+		]);
+	});
+});
+
+describe('collectionKeyField', () => {
+	it("is the collection's own id field, else the default one", () => {
+		const [reviews] = manifest().contributes.collections;
+		const custom = {
+			...reviews,
+			fields: [...reviews.fields, { name: 'key', type: 'id', options: { generator: 'uuid' } }]
+		};
+
+		expect(collectionKeyField(reviews)).toEqual({
+			name: 'id',
+			type: 'id',
+			options: { generator: 'random' }
+		});
+		expect(collectionKeyField(custom as typeof reviews)).toMatchObject({
+			name: 'key',
+			type: 'id',
+			options: { generator: 'uuid' }
+		});
 	});
 });
 

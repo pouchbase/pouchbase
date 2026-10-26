@@ -1,5 +1,7 @@
+import type { ApiUpdateCollection } from '#lib/schemas/collections.js';
 import type { ServiceError } from './base.service';
 import type { CompiledUi, CompileIssue } from '../plugins/compile';
+import type { EmbeddedPlugin } from '../plugins/embedded';
 import type { PluginSettingsState } from '../plugins/settings';
 import type {
 	DescribeResult,
@@ -40,6 +42,7 @@ import {
 	pluginCollectionName,
 	pluginFieldTypeId,
 	resolveSettings,
+	splitBundle,
 	splitPluginFieldType
 } from '@pouchbasejs/plugin-sdk';
 import { and, asc, eq, inArray, like, notInArray, sql } from 'drizzle-orm';
@@ -57,6 +60,7 @@ import {
 	collections,
 	fields,
 	pluginAuthProviders,
+	pluginBundleParts,
 	pluginModules,
 	pluginSettings,
 	plugins
@@ -70,7 +74,8 @@ import {
 	embeddedPlugins,
 	InProcessRuntime
 } from '../plugins/embedded';
-import { collectionFields, collectionIndexes } from '../plugins/collections';
+import { installedInProcess, RUN_INSTALLED_IN_PROCESS } from '../plugins/in-process';
+import { collectionFields, collectionIndexes, collectionKeyField } from '../plugins/collections';
 import { hasHooks, passThroughWrite, readInChunks } from '../plugins/field-values';
 import { internalKeyFor } from '../plugins/internal-keys';
 import { matchPage } from '../plugins/requests';
@@ -109,6 +114,9 @@ const PER_PAGE = 24;
 
 /** How often `describe` is tried right after a deploy, while workers.dev picks up the Worker. */
 const DESCRIBE_ATTEMPTS = 5;
+
+/** The `server.js` of installed plugins that run in process (in dev), by plugin and update. */
+const storedServers = new Map<string, Promise<string | null>>();
 
 /** Rows of `plugin_modules` per insert; D1 binds at most 100 values per statement. */
 const MODULE_ROWS_PER_INSERT = 15;
@@ -688,7 +696,6 @@ export class PluginsService extends Service {
 								version: manifest.version,
 								apiVersion: manifest.apiVersion,
 								manifest,
-								bundle: new TextDecoder().decode(bytes),
 								integrity: version.integrity,
 								registryUrl: registryUrl(),
 								workerUrl: worker?.url ?? null,
@@ -700,6 +707,7 @@ export class PluginsService extends Service {
 								providerRow(manifest.id, contribution, configs.get(contribution.id)!, now)
 							);
 							const modules = moduleRows(manifest, ui, now);
+							const parts = splitBundle(new TextDecoder().decode(bytes));
 
 							return fromPromise(
 								this.db.batch([
@@ -713,7 +721,12 @@ export class PluginsService extends Service {
 									...(providers.length
 										? [this.db.insert(pluginAuthProviders).values(providers)]
 										: []),
-									// Replaces the modules of the previous version.
+									// Replaces the bundle and the modules of the previous version.
+									this.db.delete(pluginBundleParts).where(eq(pluginBundleParts.pluginId, id)),
+									// One part per statement: each is up to 1.5 MB.
+									...parts.map((data, part) =>
+										this.db.insert(pluginBundleParts).values({ pluginId: id, part, data })
+									),
 									this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
 									...chunks(modules, MODULE_ROWS_PER_INSERT).map((rows) =>
 										this.db.insert(pluginModules).values(rows)
@@ -869,6 +882,7 @@ export class PluginsService extends Service {
 					this.db.delete(plugins).where(eq(plugins.id, id)),
 					this.db.delete(apiKeys).where(eq(apiKeys.pluginId, id)),
 					this.db.delete(pluginAuthProviders).where(eq(pluginAuthProviders.pluginId, id)),
+					this.db.delete(pluginBundleParts).where(eq(pluginBundleParts.pluginId, id)),
 					this.db.delete(pluginModules).where(eq(pluginModules.pluginId, id)),
 					this.db.delete(pluginSettings).where(eq(pluginSettings.pluginId, id))
 				]);
@@ -1327,14 +1341,9 @@ export class PluginsService extends Service {
 
 		return fromPromise(
 			(async () => {
-				const [row] = await this.db
-					.select({ bundle: plugins.bundle })
-					.from(plugins)
-					.where(eq(plugins.id, pluginId));
+				const files = await this.storedFiles(pluginId);
 
-				if (row) {
-					const files = (JSON.parse(row.bundle) as { files?: Record<string, string> }).files ?? {};
-
+				if (files) {
 					return asset(Object.hasOwn(files, path) ? files[path] : undefined);
 				}
 
@@ -1344,6 +1353,23 @@ export class PluginsService extends Service {
 			})(),
 			(error) => this.listFailed(error)
 		);
+	}
+
+	/** The files of an installed plugin's stored bundle; `null` when it isn't installed. Throws. */
+	private async storedFiles(pluginId: string): Promise<Record<string, string> | null> {
+		const parts = await this.db
+			.select({ data: pluginBundleParts.data })
+			.from(pluginBundleParts)
+			.where(eq(pluginBundleParts.pluginId, pluginId))
+			.orderBy(asc(pluginBundleParts.part));
+
+		if (!parts.length) {
+			return null;
+		}
+
+		const bundle = parts.map((part) => part.data).join('');
+
+		return (JSON.parse(bundle) as { files?: Record<string, string> }).files ?? {};
 	}
 
 	private findRow(id: string): ResultAsync<PluginRow | null, ListFailed> {
@@ -1406,18 +1432,27 @@ export class PluginsService extends Service {
 
 	/** The runtime of a plugin, without settings bound; `null` without server code. */
 	private runtimeOf(source: PluginSource): PluginRuntime | null {
-		if (source.row) {
-			return source.row.workerUrl && source.row.workerSecret
-				? new WorkerRuntime(source.row.workerUrl, source.row.workerSecret)
+		const { row } = source;
+
+		if (row) {
+			if (RUN_INSTALLED_IN_PROCESS) {
+				return row.manifest.server
+					? this.inProcess(installedInProcess(row.manifest, () => this.storedServer(row)))
+					: null;
+			}
+
+			return row.workerUrl && row.workerSecret
+				? new WorkerRuntime(row.workerUrl, row.workerSecret)
 				: null;
 		}
 
 		const plugin = embeddedPlugin(source.manifest.id);
 
-		if (!plugin?.manifest.server) {
-			return null;
-		}
+		return plugin?.manifest.server ? this.inProcess(plugin) : null;
+	}
 
+	/** Runs a plugin's server code inside Pouchbase: a built-in one, or an installed one in dev. */
+	private inProcess(plugin: EmbeddedPlugin) {
 		// `event.fetch` handles requests to Pouchbase itself in this isolate, without the network,
 		// with a key that only this isolate knows.
 		const pouch = new Pouchbase(this.ctx.url.origin, {
@@ -1426,6 +1461,20 @@ export class PluginsService extends Service {
 		});
 
 		return new InProcessRuntime(plugin, { pouch });
+	}
+
+	/** The `server.js` of an installed plugin's stored bundle, read once per install or update. */
+	private storedServer(row: InstalledRow) {
+		const key = `${row.id}:${row.updatedAt.getTime()}`;
+		let code = storedServers.get(key);
+
+		if (!code) {
+			code = this.storedFiles(row.id).then((files) => files?.[SERVER_FILE] ?? null);
+			code.catch(() => storedServers.delete(key));
+			storedServers.set(key, code);
+		}
+
+		return code;
 	}
 
 	/**
@@ -1520,87 +1569,136 @@ export class PluginsService extends Service {
 					};
 		};
 
-		return service
-			.list()
-			.mapErr(failed)
-			.andThen((existing) => {
-				const byName = new Map(existing.map((collection) => [collection.name, collection]));
-				const taken = named.find(({ name }) => {
-					const collection = byName.get(name);
+		/** The collections and their schemas, read at the same time. */
+		const read = () => {
+			const list = service.list().mapErr(failed);
+			const schemas = service.schemas().mapErr(failed);
 
-					return collection && collection.pluginId !== manifest.id;
+			return list.andThen((existing) => schemas.map((current) => ({ existing, current })));
+		};
+
+		/** A collection with only its key field, as the schema API takes it. */
+		const keyOnly = ({ contribution, name }: (typeof named)[number]) =>
+			apiCreateCollectionSchema.safeParse({
+				name,
+				fields: [collectionKeyField(contribution)],
+				indexes: [],
+				rules: {}
+			});
+
+		return read().andThen(({ existing, current }) => {
+			const byName = new Map(existing.map((collection) => [collection.name, collection]));
+			const taken = named.find(({ name }) => {
+				const collection = byName.get(name);
+
+				return collection && collection.pluginId !== manifest.id;
+			});
+
+			if (taken) {
+				return errAsync<never, CollectionTaken>({
+					...this.error(19020, 'PLUGIN_COLLECTION_TAKEN'),
+					data: { name: taken.name }
 				});
+			}
 
-				if (taken) {
-					return errAsync<never, CollectionTaken>({
-						...this.error(19020, 'PLUGIN_COLLECTION_TAKEN'),
-						data: { name: taken.name }
-					});
+			// Checked with stand-in ids for the collections that don't exist yet.
+			const planned = new Map(existing.map((collection) => [collection.name, collection.id]));
+
+			for (const { name } of named) {
+				if (!planned.has(name)) {
+					planned.set(name, `new-${name}`);
 				}
+			}
 
-				// Checked with stand-in ids for the collections that don't exist yet.
-				const planned = new Map(existing.map((collection) => [collection.name, collection.id]));
+			const issues = named.flatMap((item) => input(item, planned, null).issues ?? []);
 
-				for (const { name } of named) {
-					if (!planned.has(name)) {
-						planned.set(name, `new-${name}`);
+			if (issues.length) {
+				return errAsync(invalid(issues));
+			}
+
+			// Every collection has its key field before the rest, so relations between them find each
+			// other's ids, and a relation's target has the `id` field it needs, whatever the order:
+			// new collections are created with it, and one left without fields by an install that
+			// failed gets it.
+			const missing = named.filter(({ name }) => !byName.has(name));
+			const keyless = named.filter(
+				({ name }) =>
+					byName.has(name) &&
+					!current
+						.find((collection) => collection.name === name)
+						?.fields.some((field) => field.type === 'id')
+			);
+
+			const created = inSequence(
+				missing.map((item) => () => {
+					const parsed = keyOnly(item);
+
+					if (!parsed.success) {
+						return errAsync(failed(parsed.error));
 					}
-				}
 
-				const issues = named.flatMap((item) => input(item, planned, null).issues ?? []);
-
-				if (issues.length) {
-					return errAsync(invalid(issues));
-				}
-
-				// Created without fields first, so relations between them find each other's ids.
-				return inSequence(
-					named
-						.filter(({ name }) => !byName.has(name))
-						.map(
-							({ name }) =>
-								() =>
-									service
-										.createFromApi({ name, fields: [], indexes: [], rules: {} })
-										.mapErr(failed)
-										.andThen(() =>
-											fromPromise(
-												this.db
-													.update(collections)
-													.set({ pluginId: manifest.id })
-													.where(eq(collections.name, name)),
-												failed
-											)
-										)
-						)
-				)
-					.andThen(() => service.list().mapErr(failed))
-					.andThen((all) => {
-						const ids = new Map(all.map((collection) => [collection.name, collection.id]));
-
-						return inSequence(
-							named.map(
-								(item) => () =>
-									service
-										.schema(item.name)
-										.mapErr(failed)
-										.andThen((current) => {
-											const result = input(item, ids, current);
-
-											if (!result.collection) {
-												return errAsync(invalid(result.issues ?? []));
-											}
-
-											const { fields, indexes, rules } = result.collection;
-
-											return service
-												.updateFromApi(item.name, { fields, indexes, rules }, false)
-												.mapErr(failed);
-										})
+					return service
+						.createFromApi(parsed.data)
+						.mapErr(failed)
+						.andThen(() =>
+							fromPromise(
+								this.db
+									.update(collections)
+									.set({ pluginId: manifest.id })
+									.where(eq(collections.name, item.name)),
+								failed
 							)
 						);
-					});
+				})
+			).andThen(() => {
+				const keys = keyless.map((item) => ({ item, parsed: keyOnly(item) }));
+				const broken = keys.find(({ parsed }) => !parsed.success);
+
+				if (broken && !broken.parsed.success) {
+					return errAsync(failed(broken.parsed.error));
+				}
+
+				return keys.length
+					? service
+							.updateManyFromApi(
+								keys.map(({ item, parsed }) => ({
+									name: item.name,
+									input: { fields: parsed.data?.fields }
+								})),
+								false
+							)
+							.mapErr(failed)
+							.map(() => undefined)
+					: okAsync(undefined);
 			});
+
+			// One plan for all of them, on one read of the schema; an update that changes nothing
+			// writes nothing.
+			return created
+				.andThen(() => (missing.length || keyless.length ? read() : okAsync({ existing, current })))
+				.andThen((now) => {
+					const ids = new Map(now.existing.map((collection) => [collection.name, collection.id]));
+					const items: { name: string; input: ApiUpdateCollection }[] = [];
+
+					for (const item of named) {
+						const schema = now.current.find((collection) => collection.name === item.name);
+						const result = input(item, ids, schema ?? null);
+
+						if (!result.collection) {
+							return errAsync(invalid(result.issues ?? []));
+						}
+
+						const { fields, indexes, rules } = result.collection;
+
+						items.push({ name: item.name, input: { fields, indexes, rules } });
+					}
+
+					return service
+						.updateManyFromApi(items, false)
+						.mapErr(failed)
+						.map(() => undefined);
+				});
+		});
 	}
 
 	private fieldCallFailed(error: unknown): FieldCallFailed {
@@ -1677,12 +1775,7 @@ export class PluginsService extends Service {
 	private async compileStored(
 		manifest: PluginManifest
 	): Promise<{ path: string; code: string; imports: string[] }[]> {
-		const [stored] = await this.db
-			.select({ bundle: plugins.bundle })
-			.from(plugins)
-			.where(eq(plugins.id, manifest.id));
-		const files =
-			(JSON.parse(stored?.bundle ?? '{}') as { files?: Record<string, string> }).files ?? {};
+		const files = (await this.storedFiles(manifest.id)) ?? {};
 
 		if (
 			!Object.keys(files).some((path) => path.startsWith(`${UI_DIR}/`) && UI_MODULE_FILE.test(path))
@@ -1800,6 +1893,42 @@ export class PluginsService extends Service {
 					configs: new Map<string, ProviderConfig>(),
 					description: null
 				}));
+		}
+
+		// In dev the server code runs inside Pouchbase (see `RUN_INSTALLED_IN_PROCESS`): no Worker,
+		// so none is deployed and a Worker of an earlier install goes.
+		if (RUN_INSTALLED_IN_PROCESS) {
+			if (existing?.workerUrl) {
+				this.deleteWorkerLater(script, manifest.id);
+			}
+
+			return this.services
+				.apiKeys()
+				.deletePluginKeys(manifest.id)
+				.orElse((error) => {
+					console.error(`[plugins] Could not remove the API keys of ${manifest.id}`, error);
+
+					return okAsync(undefined);
+				})
+				.andThen(() =>
+					fromPromise(
+						describePlugin(this.inProcess(installedInProcess(manifest, server)), context),
+						(error) => this.callFailed(error)
+					)
+				)
+				.andThen((description) => {
+					const result = providerConfigs(manifest, description.authProviders);
+
+					if ('missing' in result) {
+						return errAsync(
+							this.callFailed(
+								new PluginCallError(`The server code has no auth provider ${result.missing}`)
+							)
+						);
+					}
+
+					return okAsync({ worker: null, configs: result.configs, description });
+				});
 		}
 
 		const secret = existing?.workerSecret ?? generateToken();

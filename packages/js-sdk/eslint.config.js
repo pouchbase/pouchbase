@@ -13,7 +13,11 @@ export default defineConfig(
 	ts.configs.recommended,
 	prettier,
 	{
-		languageOptions: { globals: { ...globals.browser, ...globals.node } },
+		languageOptions: {
+			globals: { ...globals.browser, ...globals.node },
+			// Set explicitly: in a monorepo, typescript-eslint can't infer it when several configs are loaded.
+			parserOptions: { tsconfigRootDir: import.meta.dirname }
+		},
 		rules: {
 			// typescript-eslint strongly recommend that you do not use the no-undef lint rule on TypeScript projects.
 			'no-undef': 'off'

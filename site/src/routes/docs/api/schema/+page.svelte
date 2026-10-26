@@ -31,7 +31,10 @@
 			'POST /api/schema/import',
 			'Applies an export file: { applied, plan }; ?dryRun=true, ?removeMissing=true, ?force=true'
 		],
-		['GET /api/types?token=…', 'TypeScript types of every collection, as text']
+		[
+			'GET /api/types?token=…',
+			'TypeScript types of every collection, as text (token or service key)'
+		]
 	];
 
 	const body = [
@@ -167,8 +170,10 @@
 	<p>
 		<Code.Root>GET /api/types</Code.Root> returns TypeScript types for every collection, as text. It takes
 		the token from the <strong>Types</strong> page of the dashboard, as
-		<Code.Root>?token=</Code.Root> or <Code.Root>Authorization: Bearer</Code.Root>, instead of an
-		API key; without a valid one it answers <Code.Root>401</Code.Root>. The
+		<Code.Root>?token=</Code.Root> or <Code.Root>Authorization: Bearer</Code.Root>, or an API key
+		with the <Code.Root>service</Code.Root> scope (<Code.Root>Authorization: Bearer pbk_…</Code.Root
+		>); without a valid one it answers <Code.Root>401</Code.Root>, and other API keys get
+		<Code.Root>403</Code.Root>. The
 		<a href={resolve('/docs/sdk/types')}>SDK</a> has a command that writes them to a file.
 	</p>
 

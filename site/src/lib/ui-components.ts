@@ -3,7 +3,7 @@ import { resolve } from '$app/paths';
 /**
  * The components of `@pouchbasejs/ui` (`packages/ui`), documented under `/docs/ui`. Text may use
  * `backticks` for inline code and [links](/docs/ui/<slug>#<hash>) to these docs. Each example is a component in
- * `src/routes/docs/ui/[component]/examples/<slug>/<example>.svelte`, shown as a live preview and as
+ * `src/routes/docs/plugins/ui/[component=slug]/examples/<slug>/<example>.svelte`, shown as a live preview and as
  * its source.
  */
 
@@ -917,5 +917,7 @@ export function uiComponentHref(specifier: string) {
 
 	const component = uiComponents.find((item) => `@pouchbasejs/ui/${item.entry}` === specifier);
 
-	return component ? resolve('/docs/plugins/ui/[component]', { component: component.slug }) : undefined;
+	return component
+		? resolve('/docs/plugins/ui/[component=slug]', { component: component.slug })
+		: undefined;
 }

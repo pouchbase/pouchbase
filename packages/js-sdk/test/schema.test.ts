@@ -99,6 +99,21 @@ describe('pouch.schema', () => {
 		expect(JSON.parse(String(calls[1]?.init.body))).toEqual(file);
 	});
 
+	it('downloads the types with the API key', async () => {
+		const code = 'export interface Schema {}\n';
+		const calls: Call[] = [];
+		const fetch = vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+			calls.push({ url: String(input), init });
+
+			return new Response(code, { headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
+		}) as unknown as typeof globalThis.fetch;
+		const pouch = new Pouchbase('https://pouch.example.com', { fetch, apiKey: 'pbk_service' });
+
+		expect(await pouch.schema.types()).toBe(code);
+		expect(calls[0]?.url).toBe('https://pouch.example.com/api/types');
+		expect(authorization(calls[0])).toBe('Bearer pbk_service');
+	});
+
 	it('needs an API key', async () => {
 		const { fetch, calls } = mockFetch([200, { items: [] }]);
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch });

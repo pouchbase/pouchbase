@@ -56,7 +56,11 @@ export type FieldOptions = {
 	 * A plugin's field type: what the field keeps of it (set by Pouchbase), so it stays described
 	 * when the plugin is removed. `default` is the default value as the plugin stored it.
 	 */
-	plugin?: { label: string; column: 'TEXT' | 'INTEGER' | 'REAL' | 'BLOB'; default?: string | number };
+	plugin?: {
+		label: string;
+		column: 'TEXT' | 'INTEGER' | 'REAL' | 'BLOB';
+		default?: string | number;
+	};
 };
 
 /** A field of a collection, as the schema API returns it. */
@@ -278,6 +282,19 @@ export class SchemaService {
 		});
 	}
 
+	/**
+	 * The TypeScript types of every collection (`GET /api/types`), as the `pouchbase types` command
+	 * writes them: a `<Name>Record` and `<Name>Create` per collection and a `Schema` for
+	 * `createClient<Schema>(url)`.
+	 *
+	 * ```ts
+	 * await writeFile('src/pouchbase.ts', await pouch.schema.types());
+	 * ```
+	 */
+	types(options: CallOptions = {}): Promise<string> {
+		return this.#send('/api/types', { ...options, accept: 'text/plain, application/json' });
+	}
+
 	#path(name: string) {
 		return `/api/schema/${encodeURIComponent(name)}`;
 	}
@@ -288,6 +305,7 @@ export class SchemaService {
 			method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
 			body?: unknown;
 			query?: Record<string, string | boolean | undefined>;
+			accept?: string;
 		}
 	): Promise<T> {
 		if (!this.#apiKey) {
@@ -303,7 +321,10 @@ export class SchemaService {
 			method: options.method,
 			body: options.body,
 			query: options.query,
-			headers: { Authorization: `Bearer ${this.#apiKey}` },
+			headers: {
+				Authorization: `Bearer ${this.#apiKey}`,
+				...(options.accept ? { Accept: options.accept } : {})
+			},
 			auth: false,
 			signal: options.signal
 		});

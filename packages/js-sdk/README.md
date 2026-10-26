@@ -279,7 +279,13 @@ The **Types** page of the Pouchbase admin shows TypeScript types for your collec
 npx @pouchbasejs/js-sdk types "https://pouchbase.example.com/api/types?token=…" --out src/pouchbase.ts
 ```
 
-The URL can also come from `POUCHBASE_TYPES_URL`; without `--out` the types are printed. The file has a `<Name>Record` (what the API returns) and a `<Name>Create` (what to send) per collection, and a `Schema` with both. Pass it to the client:
+The URL can also come from `POUCHBASE_TYPES_URL`; without `--out` the types are printed. Server-side code with an API key of the `service` scope can skip the token: pass the URL of the instance and the key instead (or set `POUCHBASE_URL` and `POUCHBASE_API_KEY`):
+
+```sh
+npx @pouchbasejs/js-sdk types https://pouchbase.example.com --api-key pbk_… --out src/pouchbase.ts
+```
+
+The file has a `<Name>Record` (what the API returns) and a `<Name>Create` (what to send) per collection, and a `Schema` with both. Pass it to the client:
 
 ```ts
 import type { Schema } from './pouchbase';

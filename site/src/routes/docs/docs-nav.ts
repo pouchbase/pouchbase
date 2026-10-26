@@ -192,7 +192,7 @@ const plugins: DocsTab = {
 						.filter((component) => component.category === category.id)
 						.map((component) => ({
 							label: component.title,
-							href: resolve('/docs/plugins/ui/[component]', { component: component.slug })
+							href: resolve('/docs/plugins/ui/[component=slug]', { component: component.slug })
 						}))
 				}))
 			]
@@ -243,4 +243,25 @@ export function docsNeighbours(pathname: string) {
 	}
 
 	return { previous: tabPages[index - 1], next: tabPages[index + 1] };
+}
+
+/** A docs page with the labels of the sections it is in, e.g. for `llms.txt`. */
+export interface DocsOutlineLink extends DocsLink {
+	sections: string[];
+}
+
+function outlineLinks(item: DocsItem, sections: string[]): DocsOutlineLink[] {
+	return isSection(item)
+		? item.items.flatMap((child) => outlineLinks(child, [...sections, item.label]))
+		: [{ ...item, sections }];
+}
+
+/** Every page of a group, in reading order, with the sections around it. */
+export function groupOutline(group: DocsGroup): DocsOutlineLink[] {
+	return group.items.flatMap((item) => outlineLinks(item, []));
+}
+
+/** Every docs page, in the order of the tabs. */
+export function allDocsLinks(): DocsLink[] {
+	return docsTabs.flatMap(tabLinks);
 }

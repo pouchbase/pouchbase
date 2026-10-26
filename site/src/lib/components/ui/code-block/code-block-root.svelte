@@ -12,6 +12,7 @@
 
 <div
 	{...rest}
+	data-code-block={title ?? ''}
 	class={[
 		'not-prose overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-sm text-zinc-100 shadow-2xl shadow-zinc-950/30',
 		className

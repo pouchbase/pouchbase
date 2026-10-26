@@ -202,7 +202,7 @@
 	<h3>Icons inside a component</h3>
 
 	<p>
-		Use <a href={resolve('/docs/plugins/ui/[component]', { component: 'icon' })}
+		Use <a href={resolve('/docs/plugins/ui/[component=slug]', { component: 'icon' })}
 			><Code.Root>Icon.Root</Code.Root></a
 		>
 		from <Code.Root>@pouchbasejs/ui/icon</Code.Root> with

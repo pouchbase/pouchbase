@@ -19,7 +19,7 @@
 		const [path, hash] = target.split('#');
 		const slug = path.replace(/^\/docs\/ui\/?/, '');
 		const url = slug
-			? resolve('/docs/plugins/ui/[component]', { component: slug })
+			? resolve('/docs/plugins/ui/[component=slug]', { component: slug })
 			: resolve('/docs/plugins/ui');
 
 		return hash ? `${url}#${hash}` : url;

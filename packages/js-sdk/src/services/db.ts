@@ -81,8 +81,11 @@ export type CallOptions = {
 	signal?: AbortSignal;
 };
 
-/** Options for `find()`, `insert()` and `patch()`. */
-export type SelectOptions<S, I = undefined> = CallOptions & {
+/**
+ * Options for `find()`, `insert()` and `patch()`. `H` is every `include` the collection allows
+ * (`Include`): `I` is inferred from the object passed, `H` only gives the editor its completions.
+ */
+export type SelectOptions<S, I = undefined, H = never> = CallOptions & {
 	/** Only return these fields; the result type has only them too. */
 	select?: S;
 	/**
@@ -90,11 +93,11 @@ export type SelectOptions<S, I = undefined> = CallOptions & {
 	 * them out. Related records the view rule of their collection hides are left out (`null` for a
 	 * single relation).
 	 */
-	include?: I;
+	include?: I | NoInfer<H>;
 };
 
 /** Options for `findMany()`. */
-export type FindManyOptions<R, S, I = undefined> = SelectOptions<S, I> & {
+export type FindManyOptions<R, S, I = undefined, H = never> = SelectOptions<S, I, H> & {
 	/** Which records; all of them without it. */
 	where?: Where<R> | Condition;
 	/** The order; the order of creation without it. */
@@ -106,11 +109,14 @@ export type FindManyOptions<R, S, I = undefined> = SelectOptions<S, I> & {
 };
 
 /** Options for `findFirst()`. */
-export type FindFirstOptions<R, S, I = undefined> = Omit<FindManyOptions<R, S, I>, 'limit'>;
+export type FindFirstOptions<R, S, I = undefined, H = never> = Omit<
+	FindManyOptions<R, S, I, H>,
+	'limit'
+>;
 
 /** Options for `iterate()` and `findAll()`. */
-export type IterateOptions<R, S, I = undefined> = Omit<
-	FindManyOptions<R, S, I>,
+export type IterateOptions<R, S, I = undefined, H = never> = Omit<
+	FindManyOptions<R, S, I, H>,
 	'limit' | 'offset'
 > & {
 	/** Records per request, 1 to 500. Defaults to 200. */
@@ -118,7 +124,7 @@ export type IterateOptions<R, S, I = undefined> = Omit<
 };
 
 /** Options for `pouch.db.<name>.subscribe()`. */
-export type CollectionSubscribeOptions<R, S, I = undefined> = Omit<
+export type CollectionSubscribeOptions<R, S, I = undefined, H = never> = Omit<
 	SubscribeOptions<R>,
 	'select' | 'include'
 > & {
@@ -127,7 +133,7 @@ export type CollectionSubscribeOptions<R, S, I = undefined> = Omit<
 	/** Only these fields of each record; the event type has only them too. */
 	select?: S;
 	/** Relations to send as records instead of ids, as in `find()`. */
-	include?: I;
+	include?: I | NoInfer<H>;
 };
 
 /** What `findMany()` returns: some of the matching records, and how many match in all. */
@@ -191,7 +197,7 @@ export class CollectionClient<
 	find<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(id: string, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I> | null> {
+	>(id: string, options: SelectOptions<S, I, Include<Schema, L>> = {}): Pending<Output<R, S, Schema, L, I> | null> {
 		return pending(
 			this.#pouch
 				.request<Output<R, S, Schema, L, I>>(this.#path(id), {
@@ -221,7 +227,7 @@ export class CollectionClient<
 	findOrThrow<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(id: string, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I>> {
+	>(id: string, options: SelectOptions<S, I, Include<Schema, L>> = {}): Pending<Output<R, S, Schema, L, I>> {
 		return pending(
 			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(id), {
 				query: { select: compileSelect(options.select), include: compileInclude(options.include) },
@@ -246,7 +252,7 @@ export class CollectionClient<
 	findMany<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(options: FindManyOptions<R, S, I> = {}): Pending<Page<Output<R, S, Schema, L, I>>> {
+	>(options: FindManyOptions<R, S, I, Include<Schema, L>> = {}): Pending<Page<Output<R, S, Schema, L, I>>> {
 		return pending(
 			this.#pouch
 				.request<ListResponse<Output<R, S, Schema, L, I>>>(this.#path(), {
@@ -274,7 +280,7 @@ export class CollectionClient<
 	findFirst<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(options: FindFirstOptions<R, S, I> = {}): Pending<Output<R, S, Schema, L, I> | null> {
+	>(options: FindFirstOptions<R, S, I, Include<Schema, L>> = {}): Pending<Output<R, S, Schema, L, I> | null> {
 		return pending(this.findMany({ ...options, limit: 1 }).then((page) => page.items[0] ?? null));
 	}
 
@@ -298,7 +304,7 @@ export class CollectionClient<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
 	>(
-		options: IterateOptions<R, S, I> = {}
+		options: IterateOptions<R, S, I, Include<Schema, L>> = {}
 	): AsyncGenerator<Output<R, S, Schema, L, I>, void, undefined> {
 		const { batchSize = 200, ...query } = options;
 		const limit = Math.min(Math.max(Math.trunc(batchSize), 1), 500);
@@ -319,7 +325,7 @@ export class CollectionClient<
 	findAll<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(options: IterateOptions<R, S, I> = {}): Pending<Output<R, S, Schema, L, I>[]> {
+	>(options: IterateOptions<R, S, I, Include<Schema, L>> = {}): Pending<Output<R, S, Schema, L, I>[]> {
 		return pending(
 			(async () => {
 				const items: Output<R, S, Schema, L, I>[] = [];
@@ -344,7 +350,7 @@ export class CollectionClient<
 	insert<
 		const S extends readonly FieldName<R>[] | undefined = undefined,
 		const I extends Include<Schema, L> | undefined = undefined
-	>(data: C, options: SelectOptions<S, I> = {}): Pending<Output<R, S, Schema, L, I>, FieldName<C>> {
+	>(data: C, options: SelectOptions<S, I, Include<Schema, L>> = {}): Pending<Output<R, S, Schema, L, I>, FieldName<C>> {
 		return pending(
 			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(), {
 				method: 'POST',
@@ -365,7 +371,7 @@ export class CollectionClient<
 	>(
 		id: string,
 		data: Partial<C>,
-		options: SelectOptions<S, I> = {}
+		options: SelectOptions<S, I, Include<Schema, L>> = {}
 	): Pending<Output<R, S, Schema, L, I>, FieldName<C>> {
 		return pending(
 			this.#pouch.request<Output<R, S, Schema, L, I>>(this.#path(id), {
@@ -394,7 +400,7 @@ export class CollectionClient<
 		const I extends Include<Schema, L> | undefined = undefined
 	>(
 		callback: (event: RealtimeEvent<Output<R, S, Schema, L, I>>) => void,
-		options: CollectionSubscribeOptions<R, S, I> = {}
+		options: CollectionSubscribeOptions<R, S, I, Include<Schema, L>> = {}
 	): RealtimeSubscription {
 		const { id, select, include, ...rest } = options;
 

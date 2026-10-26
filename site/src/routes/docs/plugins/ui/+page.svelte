@@ -44,7 +44,7 @@
 		<div class="not-prose my-4 grid gap-3 sm:grid-cols-2">
 			{#each uiComponents.filter((component) => component.category === category.id) as component (component.slug)}
 				<LinkCard.Root
-					href={resolve('/docs/plugins/ui/[component]', { component: component.slug })}
+					href={resolve('/docs/plugins/ui/[component=slug]', { component: component.slug })}
 					class="gap-1.5 p-4"
 				>
 					<LinkCard.Title>
@@ -119,7 +119,7 @@
 	<p>
 		Icon names must appear literally in the source, as in <Code.Root>icon="lucide:plus"</Code.Root>,
 		so the Vite plugin can find them. See
-		<a href={resolve('/docs/plugins/ui/[component]', { component: 'icon' })}>Icon</a> for SVG files.
+		<a href={resolve('/docs/plugins/ui/[component=slug]', { component: 'icon' })}>Icon</a> for SVG files.
 	</p>
 
 	<h2 id="in-a-plugin">In a plugin</h2>

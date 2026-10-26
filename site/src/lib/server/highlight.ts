@@ -66,7 +66,7 @@ export function highlight({ language, code }: Snippet): HighlightedCode {
 		}
 	}
 
-	return { text, lines };
+	return { language, text, lines };
 }
 
 /** Highlights every snippet of a page, keeping their names. */

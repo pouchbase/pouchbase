@@ -324,8 +324,7 @@ export const plugins = sqliteTable('plugins', {
 	version: text('version').notNull(),
 	apiVersion: integer('api_version').notNull(),
 	manifest: pluginManifest('manifest').notNull(),
-	/** The bundle as downloaded (JSON, at most `MAX_BUNDLE_SIZE`); checked against `integrity`. */
-	bundle: text('bundle').notNull(),
+	/** Of the bundle as downloaded, which `plugin_bundle_parts` holds. */
 	integrity: text('integrity').notNull(),
 	/** The registry it was installed from, for updates. */
 	registryUrl: text('registry_url').notNull(),
@@ -345,6 +344,21 @@ export const plugins = sqliteTable('plugins', {
 		.notNull()
 		.$defaultFn(() => new Date())
 });
+
+/**
+ * The bundle of an installed plugin as downloaded (JSON, at most `MAX_BUNDLE_SIZE`), in parts from
+ * `splitBundle` so each fits in a row; joined in `part` order. Written with the plugin on install
+ * and update.
+ */
+export const pluginBundleParts = sqliteTable(
+	'plugin_bundle_parts',
+	{
+		pluginId: text('plugin_id').notNull(),
+		part: integer('part').notNull(),
+		data: text('data').notNull()
+	},
+	(table) => [primaryKey({ columns: [table.pluginId, table.part] })]
+);
 
 /**
  * The compiled UI modules of an installed plugin: one row per `ui/` file, as an ES module for

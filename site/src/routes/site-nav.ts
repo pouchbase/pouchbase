@@ -2,6 +2,9 @@ import { resolve } from '$app/paths';
 
 export const GITHUB_URL = 'https://github.com/pouchbase/pouchbase';
 
+/** The public origin of the site, e.g. for the absolute links in `/llms.txt`. */
+export const SITE_URL = 'https://pouchbase.io';
+
 export interface NavLink {
 	label: string;
 	href: string;

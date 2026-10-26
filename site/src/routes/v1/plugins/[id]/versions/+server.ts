@@ -24,7 +24,7 @@ export const POST: RequestHandler = async ({ params, request, url }) => {
 	}
 
 	if (Number(request.headers.get('content-length') ?? 0) > MAX_BUNDLE_SIZE) {
-		return registryError(413, 'too_large', `Bundles are at most ${MAX_BUNDLE_SIZE / 1024} KiB`);
+		return registryError(413, 'too_large', `Bundles are at most ${MAX_BUNDLE_SIZE / 1024 / 1024} MiB`);
 	}
 
 	try {

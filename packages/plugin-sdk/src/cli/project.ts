@@ -129,7 +129,7 @@ export async function buildBundle(
 
 	if (bytes.byteLength > MAX_BUNDLE_SIZE) {
 		throw new ProjectError(
-			`The bundle is ${Math.ceil(bytes.byteLength / 1024)} KiB; the limit is ${MAX_BUNDLE_SIZE / 1024} KiB`
+			`The bundle is ${kib(bytes.byteLength)}; the limit is ${MAX_BUNDLE_SIZE / 1024 / 1024} MiB`
 		);
 	}
 
@@ -140,7 +140,7 @@ export async function buildBundle(
 		throw new ProjectError('The bundle is not valid', result.issues);
 	}
 
-	log?.detail(`${kib(bytes.byteLength)} of at most ${kib(MAX_BUNDLE_SIZE)}`);
+	log?.detail(`${kib(bytes.byteLength)} of at most ${MAX_BUNDLE_SIZE / 1024 / 1024} MiB`);
 
 	return {
 		bundle: result.bundle,

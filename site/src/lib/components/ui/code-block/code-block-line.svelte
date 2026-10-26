@@ -23,7 +23,7 @@
 	};
 </script>
 
-<span {...rest} class={['block', kinds[kind], className]}>
+<span {...rest} data-kind={kind} class={['block', kinds[kind], className]}>
 	{#if kind === 'command'}
 		<span class="text-brand-400 select-none" aria-hidden="true">$ </span>
 	{/if}

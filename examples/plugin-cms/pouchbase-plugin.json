@@ -1,0 +1,9 @@
+{
+	"$schema": "https://pouchbase.io/schemas/plugin-manifest.json",
+	"id": "cms",
+	"name": "CMS",
+	"categories": ["pages"],
+	"engines": {
+		"pouchbase": ">=0.10.0"
+	}
+}

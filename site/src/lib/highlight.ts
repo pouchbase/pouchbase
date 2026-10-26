@@ -21,6 +21,7 @@ export interface HighlightedToken {
 }
 
 export interface HighlightedCode {
+	language: Language;
 	/** The code as text, e.g. for a copy button. */
 	text: string;
 	lines: HighlightedToken[][];

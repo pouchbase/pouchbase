@@ -18,7 +18,7 @@ declare global {
 		}
 		interface Locals {
 			/** The signed-in user, once `currentUser()` loaded it; `null` when signed out. */
-			user?: import('@pouchbasejs/js-sdk').User | null;
+			user?: import('#lib/server/pouchbase.js').UsersRecord | null;
 		}
 		// interface PageData {}
 		// interface PageState {}

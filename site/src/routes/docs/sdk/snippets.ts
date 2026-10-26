@@ -56,7 +56,10 @@ export const typesCli = snippet(
 npx @pouchbasejs/js-sdk types "https://pouchbase.example.com/api/types?token=…" --out src/pouchbase.ts
 
 # Or with the URL in the environment, e.g. in CI
-POUCHBASE_TYPES_URL="https://pouchbase.example.com/api/types?token=…" npx @pouchbasejs/js-sdk types --out src/pouchbase.ts`
+POUCHBASE_TYPES_URL="https://pouchbase.example.com/api/types?token=…" npx @pouchbasejs/js-sdk types --out src/pouchbase.ts
+
+# Or with an API key of the service scope instead of the token
+npx @pouchbasejs/js-sdk types https://pouchbase.example.com --api-key pbk_… --out src/pouchbase.ts`
 );
 
 export const typesScript = snippet(

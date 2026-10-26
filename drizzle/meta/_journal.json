@@ -134,6 +134,13 @@
 			"when": 1792946978959,
 			"tag": "0018_field_hidden",
 			"breakpoints": true
+		},
+		{
+			"idx": 19,
+			"version": "6",
+			"when": 1792959492426,
+			"tag": "0019_plugin_bundle_parts",
+			"breakpoints": true
 		}
 	]
 }

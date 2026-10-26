@@ -25,7 +25,7 @@ pnpm dev
 
 Every template writes `plugin.ts`, the plugin itself (see [A plugin](#a-plugin)), and a small `pouchbase-plugin.json` with `$schema`, `id` and `name` (and `categories`, except `empty`; `auth-provider` also writes an example host in `permissions.network`). It sets `engines.pouchbase` to `>=0.10.0`, keeps `version`, `description` and `license` in `package.json`, type-checks every `.ts` and `.svelte` file (`tsconfig.json`, with the `types` of [Types](#types)), and comes with a test in `test/`, a `vitest.config.ts` (see [Testing](#testing)) and the scripts `dev`, `check` (`svelte-check`), `test` (`vitest run`), `validate`, `build` and `release`.
 
-For a complete example with field types, pages, routes, settings, tests and every CLI command, see [`examples/plugin-demo`](https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-demo). The guide, with testing, debugging, limits and the security model, is on [pouchbase.io/docs/plugins](https://pouchbase.io/docs/plugins); this README is the reference.
+For a complete example with field types, pages, routes, settings, tests and every CLI command, see [`examples/plugin-demo`](https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-demo); [`examples/plugin-cms`](https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-cms) builds a small CMS with collections of its own and a WordPress-style post editor. The guide, with testing, debugging, limits and the security model, is on [pouchbase.io/docs/plugins](https://pouchbase.io/docs/plugins); this README is the reference.
 
 `pnpm dev` rebuilds the plugin on every change and serves it from a local registry on `http://localhost:4510`. Start a Pouchbase on the same machine with `POUCHBASE_REGISTRY_URL=http://localhost:4510` (any installation, such as the Docker image, or `pnpm dev` in the Pouchbase repository) and install the plugin from the Plugins page. Every build is served as a new prerelease, `<version>-dev.<n>`, so Pouchbase sees it as an update; `--exact-version` serves the version from `package.json` instead.
 
@@ -525,7 +525,7 @@ It returns `ctx`, the `requests` that reached `ctx.fetch` and the `logs` of `ctx
 
 | What                  | Limit                                                                                                                       |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| Bundle                | 1 MiB (`MAX_BUNDLE_SIZE`)                                                                                                   |
+| Bundle                | 25 MiB (`MAX_BUNDLE_SIZE`)                                                                                                  |
 | Call                  | 10 seconds for a field hook or `profile`, and until a route's response starts                                               |
 | Contributions         | 20 field types, 20 pages, 10 auth providers, 20 collections, 30 settings (`MAX_PLUGIN_SETTINGS`)                            |
 | Collections           | The name with its prefix up to 63 characters; up to 50 names in each of `permissions.collections.read` and `write`          |
@@ -534,7 +534,7 @@ It returns `ctx`, the `requests` that reached `ctx.fetch` and the `logs` of `ctx
 | `permissions.network` | Up to 20 host names (`api.example.com`, `*.example.com`): no schemes, ports, paths, IP addresses or `localhost`; HTTPS only |
 | Categories            | 3 (`MAX_CATEGORIES`)                                                                                                        |
 
-Plugin Workers also follow the limits of the Cloudflare Workers plan. On Pouchbase hosted on Workers, installing a plugin compiles its components inside Pouchbase's request, which may need more CPU time than the Workers Free plan allows for a plugin with many or large components.
+Plugin Workers also follow the limits of the Cloudflare Workers plan, such as the size of `server.js` (3 MB compressed on Workers Free, 10 MB on Workers Paid). On Pouchbase hosted on Workers, installing a plugin compiles its components inside Pouchbase's request, which may need more CPU time than the Workers Free plan allows for a plugin with many or large components.
 
 ## Security
 
@@ -549,19 +549,19 @@ Plugin Workers also follow the limits of the Cloudflare Workers plan. On Pouchba
 
 ## Bundle
 
-`pouchbase-plugin build` writes one JSON file, `dist/<id>-<version>.json`: the full manifest, the server code bundled into `server.js`, and the UI files under `ui/` at their path in the project (`fields/rating/input.svelte` → `ui/fields/rating/input.svelte`, `lib/stars.ts` → `ui/lib/stars.js`, `icon.svg` → `ui/icon.svg`, an icon by Iconify name → `ui/icons/<prefix>/<name>.svg`; `.svelte`, `.js`, `.css`, `.json` and `.svg` files, though from `plugin.ts` only the components and icons it names, the modules they import and the images end up there). `server.js` may not import anything, `cloudflare:*` and `node:*` modules included: `parseBundle` (used by the CLI, the registry and Pouchbase) refuses server code with static or dynamic imports (`serverCodeIssues`). Bundles are at most 1 MiB (`MAX_BUNDLE_SIZE`). The registry lists a Subresource Integrity hash (`sha256-…`) with every version, and Pouchbase refuses a download that doesn't match.
+`pouchbase-plugin build` writes one JSON file, `dist/<id>-<version>.json`: the full manifest, the server code bundled into `server.js`, and the UI files under `ui/` at their path in the project (`fields/rating/input.svelte` → `ui/fields/rating/input.svelte`, `lib/stars.ts` → `ui/lib/stars.js`, `icon.svg` → `ui/icon.svg`, an icon by Iconify name → `ui/icons/<prefix>/<name>.svg`; `.svelte`, `.js`, `.css`, `.json` and `.svg` files, though from `plugin.ts` only the components and icons it names, the modules they import and the images end up there). `server.js` may not import anything, `cloudflare:*` and `node:*` modules included: `parseBundle` (used by the CLI, the registry and Pouchbase) refuses server code with static or dynamic imports (`serverCodeIssues`). Bundles are at most 25 MiB (`MAX_BUNDLE_SIZE`); `splitBundle` cuts the text of one into parts that each fit in a database row, as Pouchbase and the registry store it. The registry lists a Subresource Integrity hash (`sha256-…`) with every version, and Pouchbase refuses a download that doesn't match.
 
 ## Registry API
 
 The dashboard and the CLI talk to a plugin registry (`https://api.pouchbase.io` by default) through `createRegistryClient`. Any server that implements these endpoints can be a registry:
 
-| Method | Path                                                  | Response                                                                                                                                                                                                       |
-| ------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/v1/plugins?q=&category=&page=&perPage=&apiVersion=` | `PluginList`; `category` only lists plugins in that category                                                                                                                                                   |
-| GET    | `/v1/plugins/:id`                                     | `PluginDetails`, 404                                                                                                                                                                                           |
-| GET    | `/v1/plugins/:id/versions/:version`                   | `PluginVersion`, 404; `:version` may be `latest`                                                                                                                                                               |
-| GET    | `PluginVersion.bundleUrl`                             | the bundle                                                                                                                                                                                                     |
-| POST   | `/v1/plugins/:id/versions`                            | 201 `PluginVersion`; 401 without a valid token, 403 for another account's plugin, 409 for a published version, 413 above 1 MiB, 422 for an invalid bundle. The bundle as body, `Authorization: Bearer <token>` |
+| Method | Path                                                  | Response                                                                                                                                                                                                        |
+| ------ | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/v1/plugins?q=&category=&page=&perPage=&apiVersion=` | `PluginList`; `category` only lists plugins in that category                                                                                                                                                    |
+| GET    | `/v1/plugins/:id`                                     | `PluginDetails`, 404                                                                                                                                                                                            |
+| GET    | `/v1/plugins/:id/versions/:version`                   | `PluginVersion`, 404; `:version` may be `latest`                                                                                                                                                                |
+| GET    | `PluginVersion.bundleUrl`                             | the bundle                                                                                                                                                                                                      |
+| POST   | `/v1/plugins/:id/versions`                            | 201 `PluginVersion`; 401 without a valid token, 403 for another account's plugin, 409 for a published version, 413 above 25 MiB, 422 for an invalid bundle. The bundle as body, `Authorization: Bearer <token>` |
 
 Errors have the body `{ "error": { "code": "...", "message": "...", "issues": [...] } }`.
 

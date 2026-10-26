@@ -26,7 +26,10 @@
 		The <strong>Types</strong> page of the dashboard has the URL of the TypeScript types of your
 		collections, with a token in it. The <Code.Root>pouchbase types</Code.Root> command of the SDK downloads
 		them; <Code.Root>--out</Code.Root> writes them to a file, and without it they are printed. The URL
-		can also come from <Code.Root>POUCHBASE_TYPES_URL</Code.Root>.
+		can also come from <Code.Root>POUCHBASE_TYPES_URL</Code.Root>. Server-side code with an API key
+		of the <Code.Root>service</Code.Root> scope can skip the token: pass the URL of the instance with
+		<Code.Root>--api-key</Code.Root> (or set <Code.Root>POUCHBASE_URL</Code.Root> and
+		<Code.Root>POUCHBASE_API_KEY</Code.Root>).
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -94,7 +97,8 @@
 	<p>
 		<Code.Root>fetchTypes(url)</Code.Root> downloads the types from code, for a build step of your own.
 		It throws a <Code.Root>PouchbaseError</Code.Root> with status 401 when the token in the URL is missing
-		or outdated.
+		or outdated. With an API key of the <Code.Root>service</Code.Root> scope,
+		<Code.Root>pouch.schema.types()</Code.Root> returns them without a token.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

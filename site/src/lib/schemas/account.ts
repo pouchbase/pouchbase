@@ -37,6 +37,6 @@ export const publishTokenIdSchema = z.object({ id: z.string().min(1) });
 export const uploadBundleSchema = z.object({
 	bundle: z
 		.file('Choose a bundle')
-		.max(MAX_BUNDLE_SIZE, `Bundles are at most ${MAX_BUNDLE_SIZE / 1024} KiB`)
+		.max(MAX_BUNDLE_SIZE, `Bundles are at most ${MAX_BUNDLE_SIZE / 1024 / 1024} MiB`)
 		.refine((file) => file.name.endsWith('.json'), 'Choose the .json file in dist/')
 });

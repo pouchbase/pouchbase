@@ -1,4 +1,4 @@
-import type { PublishTokenRecord } from './pouchbase';
+import type { PublishTokensRecord } from './pouchbase';
 
 import { pouchbase, service } from './pouchbase';
 import { backendFailure } from './registry';
@@ -15,7 +15,7 @@ export const PUBLISH_TOKEN_PREFIX = 'pbp_';
 const LAST_USED_INTERVAL = 60 * 1000;
 
 /** A token as the account pages list it; the token itself is only shown once. */
-export type PublishToken = Pick<PublishTokenRecord, 'id' | 'name' | 'prefix'> & {
+export type PublishToken = Pick<PublishTokensRecord, 'id' | 'name' | 'prefix'> & {
 	createdAt: string;
 	lastUsedAt: string | null;
 };
@@ -26,12 +26,12 @@ async function hashToken(token: string) {
 	return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-function toToken(record: PublishTokenRecord): PublishToken {
+function toToken(record: PublishTokensRecord): PublishToken {
 	return {
 		id: record.id,
 		name: record.name,
 		prefix: record.prefix,
-		createdAt: record.created_at,
+		createdAt: new Date(record.created_at).toISOString(),
 		lastUsedAt: record.last_used_at
 	};
 }

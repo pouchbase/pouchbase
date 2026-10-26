@@ -20,7 +20,13 @@ export const BUNDLE_FORMAT = 'pouchbase-plugin-bundle';
 export const BUNDLE_VERSION = 1;
 
 /** Largest bundle a host installs, in bytes. */
-export const MAX_BUNDLE_SIZE = 1024 * 1024;
+export const MAX_BUNDLE_SIZE = 25 * 1024 * 1024;
+
+/**
+ * Length of the parts `splitBundle` cuts a bundle's text into, in UTF-16 code units: at most 1.5 MB
+ * of UTF-8 each, so a part fits in one row of a D1 database (2 MB).
+ */
+export const BUNDLE_PART_LENGTH = 512 * 1024;
 
 /** Path of the server code in a bundle. */
 export const SERVER_FILE = 'server.js';
@@ -127,7 +133,7 @@ export function parseBundle(bytes: Uint8Array): BundleResult {
 	if (bytes.byteLength > MAX_BUNDLE_SIZE) {
 		return {
 			success: false,
-			issues: [{ path: '', message: `Larger than ${MAX_BUNDLE_SIZE / 1024} KiB` }]
+			issues: [{ path: '', message: `Larger than ${MAX_BUNDLE_SIZE / 1024 / 1024} MiB` }]
 		};
 	}
 
@@ -157,6 +163,30 @@ export function parseBundle(bytes: Uint8Array): BundleResult {
 /** The bytes of a bundle, as stored and published. */
 export function serializeBundle(bundle: PluginBundle): Uint8Array<ArrayBuffer> {
 	return new TextEncoder().encode(JSON.stringify(bundle));
+}
+
+/**
+ * The text of a bundle (or any string) in parts of at most `length` code units, for storage that
+ * limits the size of a value; `parts.join('')` gives the text back. A surrogate pair is never cut.
+ */
+export function splitBundle(text: string, length = BUNDLE_PART_LENGTH): string[] {
+	const parts: string[] = [];
+	let start = 0;
+
+	while (start < text.length) {
+		let end = Math.min(start + length, text.length);
+		const last = text.charCodeAt(end - 1);
+
+		// A high surrogate at the end goes with its low surrogate into the next part.
+		if (end < text.length && end - start > 1 && last >= 0xd800 && last <= 0xdbff) {
+			end--;
+		}
+
+		parts.push(text.slice(start, end));
+		start = end;
+	}
+
+	return parts;
 }
 
 function base64(bytes: Uint8Array) {

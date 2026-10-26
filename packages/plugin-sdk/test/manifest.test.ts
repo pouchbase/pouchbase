@@ -27,6 +27,7 @@ import {
 	resolveSettings,
 	serializeBundle,
 	serverCodeIssues,
+	splitBundle,
 	unknownCategoryIssues,
 	withPackageDefaults
 } from '../src/index.js';
@@ -322,6 +323,22 @@ describe('serverCodeIssues', () => {
 		);
 
 		expect(parsed.success).toBe(false);
+	});
+});
+
+describe('splitBundle', () => {
+	it('cuts text into parts that join back together', () => {
+		expect(splitBundle('', 4)).toEqual([]);
+		expect(splitBundle('abcdefghij', 4)).toEqual(['abcd', 'efgh', 'ij']);
+		expect(splitBundle('abcd', 4)).toEqual(['abcd']);
+	});
+
+	it('never cuts a surrogate pair', () => {
+		const text = 'abc😀def';
+		const parts = splitBundle(text, 4);
+
+		expect(parts).toEqual(['abc', '😀de', 'f']);
+		expect(parts.join('')).toBe(text);
 	});
 });
 

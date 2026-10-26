@@ -18,6 +18,7 @@ import {
 	REGISTRY_API_PREFIX,
 	SERVER_FILE,
 	serializeBundle,
+	splitBundle,
 	unknownCategoryIssues
 } from '@pouchbasejs/plugin-sdk';
 import semver from 'semver';
@@ -28,7 +29,7 @@ import { service } from './pouchbase';
 
 /**
  * The plugin registry (API version 1 of `@pouchbasejs/plugin-sdk`, see `registry.ts` there) on top
- * of the Pouchbase collections `plugins` and `plugin_versions`. The routes under `/v1` and the
+ * of the Pouchbase collections `plugins`, `plugin_versions` and `plugin_bundle_parts`. The routes under `/v1` and the
  * account pages call these functions; failures are thrown as a `RegistryFailure`.
  */
 
@@ -75,7 +76,8 @@ function iconUrl(origin: string, slug: string, version: string) {
 	return `${registryBase(origin)}/plugins/${slug}/icon?v=${encodeURIComponent(version)}`;
 }
 
-function iso(value: string) {
+/** A timestamp of a record (milliseconds since 1970) as ISO 8601. */
+function iso(value: number) {
 	return new Date(value).toISOString();
 }
 
@@ -83,15 +85,15 @@ function toSummary(plugin: PluginRecord): PluginSummary {
 	return {
 		id: plugin.slug,
 		name: plugin.name,
-		description: plugin.description,
+		description: plugin.description ?? '',
 		version: plugin.version,
 		apiVersion: plugin.api_version,
 		author: plugin.author || null,
 		iconUrl: plugin.icon_url || null,
-		keywords: plugin.keywords,
+		keywords: plugin.keywords ?? [],
 		categories: plugin.categories ?? [],
-		downloads: plugin.downloads,
-		verified: plugin.verified,
+		downloads: plugin.downloads ?? 0,
+		verified: plugin.verified ?? false,
 		updatedAt: iso(plugin.updated_at)
 	};
 }
@@ -151,13 +153,37 @@ function toVersion(
 	};
 }
 
-/** The `contributes` summary of a stored version; `undefined` when its bundle can't be read. */
-async function versionContributes(row: VersionRow): Promise<ContributionSummary | undefined> {
-	const stored = await service()
-		.db.plugin_versions.findFirst({ where: { id: row.id }, select: ['bundle'] })
+/** Parts read per request: up to 1.5 MB each. */
+const PARTS_PER_REQUEST = 8;
+
+/** The bundle of version `id`: its first part with the ones in `plugin_bundle_parts`. */
+async function readBundle(id: string, first: string): Promise<string> {
+	const parts = await service()
+		.db.plugin_bundle_parts.findAll({
+			where: { version: id },
+			orderBy: { part: 'asc' },
+			select: ['data'],
+			batchSize: PARTS_PER_REQUEST
+		})
 		.catch(backendFailure);
 
-	return stored ? bundleContributes(stored.bundle) : undefined;
+	return first + parts.map((part) => part.data).join('');
+}
+
+/** The bundle of a stored version; `null` when there is none. */
+async function storedBundle(where: Where<PluginVersionRecord>): Promise<string | null> {
+	const row = await service()
+		.db.plugin_versions.findFirst({ where, select: ['id', 'bundle'] })
+		.catch(backendFailure);
+
+	return row ? readBundle(row.id, row.bundle) : null;
+}
+
+/** The `contributes` summary of a stored version; `undefined` when its bundle can't be read. */
+async function versionContributes(row: VersionRow): Promise<ContributionSummary | undefined> {
+	const bundle = await storedBundle({ id: row.id });
+
+	return bundle === null ? undefined : bundleContributes(bundle);
 }
 
 /** API versions as `plugins.api_versions` stores them: `,1,2,`. */
@@ -267,7 +293,7 @@ export async function getPlugin(origin: string, slug: string): Promise<PluginDet
 
 	return {
 		...toSummary(plugin),
-		license: plugin.license,
+		license: plugin.license ?? '',
 		homepage: plugin.homepage || null,
 		repository: plugin.repository || null,
 		readme: plugin.readme || null,
@@ -310,23 +336,18 @@ export async function getBundle(slug: string, version: string): Promise<string |
 		return null;
 	}
 
-	const row = await service()
-		.db.plugin_versions.findFirst({
-			where: { plugin: plugin.id, version },
-			select: ['bundle']
-		})
-		.catch(backendFailure);
+	const bundle = await storedBundle({ plugin: plugin.id, version });
 
-	if (!row) {
+	if (bundle === null) {
 		return null;
 	}
 
 	// The count is a hint; a failed update shouldn't fail the download.
 	await service()
-		.db.plugins.patch(plugin.id, { downloads: plugin.downloads + 1 })
+		.db.plugins.patch(plugin.id, { downloads: (plugin.downloads ?? 0) + 1 })
 		.catch((error: unknown) => console.error('Plugin registry: counting a download failed', error));
 
-	return row.bundle;
+	return bundle;
 }
 
 /**
@@ -340,18 +361,13 @@ export async function getIcon(slug: string): Promise<string | null> {
 		return null;
 	}
 
-	const row = await service()
-		.db.plugin_versions.findFirst({
-			where: { plugin: plugin.id, version: plugin.version },
-			select: ['bundle']
-		})
-		.catch(backendFailure);
+	const bundle = await storedBundle({ plugin: plugin.id, version: plugin.version });
 
-	if (!row) {
+	if (bundle === null) {
 		return null;
 	}
 
-	const { manifest, files } = JSON.parse(row.bundle) as {
+	const { manifest, files } = JSON.parse(bundle) as {
 		manifest: { icon?: string };
 		files: Record<string, string>;
 	};
@@ -364,6 +380,35 @@ export async function listOwnPlugins(userId: string): Promise<PluginRecord[]> {
 	return service()
 		.db.plugins.findAll({ where: { owner: userId }, orderBy: { created_at: 'desc' } })
 		.catch(backendFailure);
+}
+
+/**
+ * Stores the parts of a bundle after the first one for version `id`. When one fails, the version
+ * goes again, so no version is listed without its whole bundle; then it throws.
+ */
+async function storeParts(id: string, parts: string[]) {
+	const db = service().db;
+
+	try {
+		// One at a time: each part is a request of up to 1.5 MB.
+		for (const [index, data] of parts.entries()) {
+			await db.plugin_bundle_parts.insert(
+				{ version: id, part: index + 1, data },
+				{ select: ['id'] }
+			);
+		}
+	} catch (error) {
+		const stored = await db.plugin_bundle_parts
+			.findAll({ where: { version: id }, select: ['id'] })
+			.catch(() => []);
+
+		await Promise.all(stored.map((part) => db.plugin_bundle_parts.remove(part.id))).catch(
+			() => undefined
+		);
+		await db.plugin_versions.remove(id).catch(() => undefined);
+
+		throw error;
+	}
 }
 
 /**
@@ -440,6 +485,7 @@ export async function publishVersion(
 	// Stored and served as serialized here, so the integrity matches the bytes hosts download.
 	const serialized = serializeBundle(parsed.bundle);
 	const bundle = new TextDecoder().decode(serialized);
+	const [first = '', ...rest] = splitBundle(bundle);
 	const integrity = await computeIntegrity(serialized);
 	const categories = effectiveCategories(manifest);
 	const metadata = {
@@ -473,7 +519,7 @@ export async function publishVersion(
 			});
 		} else {
 			const apiVersions = apiVersionList([
-				...plugin.api_versions.split(',').filter(Boolean).map(Number),
+				...(plugin.api_versions ?? '').split(',').filter(Boolean).map(Number),
 				manifest.apiVersion
 			]);
 			const newest = semver.gt(manifest.version, plugin.version);
@@ -493,10 +539,12 @@ export async function publishVersion(
 				size: serialized.byteLength,
 				pouchbase: manifest.engines.pouchbase ?? null,
 				permissions: manifest.permissions,
-				bundle
+				bundle: first
 			},
 			{ select: [...VERSION_FIELDS] }
 		);
+
+		await storeParts(row.id, rest);
 
 		return toVersion(origin, slug, row, bundleContributes(bundle));
 	} catch (error) {

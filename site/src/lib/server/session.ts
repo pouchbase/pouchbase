@@ -1,4 +1,4 @@
-import type { User } from '@pouchbasejs/js-sdk';
+import type { UsersRecord } from './pouchbase';
 import type { Cookies } from '@sveltejs/kit';
 
 import { isTokenValid } from '@pouchbasejs/js-sdk';
@@ -41,7 +41,7 @@ export function sessionToken(cookies: Cookies) {
 }
 
 /** Whether the user followed the link in the verification email; only they can use their account. */
-export function isVerified(user: User | null) {
+export function isVerified(user: UsersRecord | null) {
 	return user?.verified === true;
 }
 
@@ -49,7 +49,7 @@ export function isVerified(user: User | null) {
  * The signed-in user, checked with the instance once per request; `null` when signed out or when
  * the email address isn't verified yet.
  */
-export async function currentUser(): Promise<User | null> {
+export async function currentUser(): Promise<UsersRecord | null> {
 	const { cookies, locals } = getRequestEvent();
 
 	if (locals.user !== undefined) {
@@ -70,7 +70,7 @@ export async function currentUser(): Promise<User | null> {
 }
 
 /** The signed-in user; redirects to the sign-in page, and back here afterwards, without one. */
-export async function requireUser(): Promise<User> {
+export async function requireUser(): Promise<UsersRecord> {
 	const user = await currentUser();
 
 	if (!user) {

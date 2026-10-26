@@ -11,7 +11,11 @@
 </script>
 
 <!-- Source code (a file or a snippet) instead of terminal lines, with syntax highlighting. -->
-<span {...rest} class={['block leading-6 whitespace-pre [tab-size:2] text-zinc-100', className]}>
+<span
+	{...rest}
+	data-language={code.language}
+	class={['block leading-6 whitespace-pre [tab-size:2] text-zinc-100', className]}
+>
 	{#each code.lines as line, index (index)}
 		<span class="block min-h-6">
 			{#each line as token, position (position)}

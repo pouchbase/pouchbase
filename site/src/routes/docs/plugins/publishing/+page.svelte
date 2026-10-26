@@ -26,7 +26,7 @@
 			about:
 				'That version is already published. Published versions never change: bump version in package.json for every release.'
 		},
-		{ status: '413', about: 'The bundle is larger than 1 MiB.' },
+		{ status: '413', about: 'The bundle is larger than 25 MiB.' },
 		{
 			status: '422',
 			about:

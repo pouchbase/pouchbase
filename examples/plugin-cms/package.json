@@ -1,0 +1,38 @@
+{
+	"name": "pouchbase-plugin-cms",
+	"version": "0.1.5",
+	"private": true,
+	"description": "An example plugin that turns Pouchbase into a small CMS: a posts collection and a WordPress-style post editor.",
+	"license": "MIT",
+	"author": "Pouchbase (https://pouchbase.io)",
+	"homepage": "https://github.com/pouchbase/pouchbase/tree/main/examples/plugin-cms",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/pouchbase/pouchbase.git",
+		"directory": "examples/plugin-cms"
+	},
+	"keywords": [
+		"example",
+		"cms",
+		"blog",
+		"posts",
+		"editor"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "pouchbase-plugin dev",
+		"check": "tsc --noEmit",
+		"test": "vitest run",
+		"validate": "pouchbase-plugin validate",
+		"build": "pouchbase-plugin build",
+		"release": "pouchbase-plugin publish"
+	},
+	"devDependencies": {
+		"@pouchbasejs/js-sdk": "workspace:*",
+		"@pouchbasejs/plugin-sdk": "workspace:*",
+		"@pouchbasejs/ui": "workspace:*",
+		"svelte": "^5.57.2",
+		"typescript": "^6.0.3",
+		"vitest": "^5.0.5"
+	}
+}

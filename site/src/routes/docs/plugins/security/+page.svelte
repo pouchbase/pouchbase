@@ -10,7 +10,7 @@
 	];
 
 	const limits = [
-		{ limit: 'Bundle', value: '1 MiB: the manifest, server code and UI files together.' },
+		{ limit: 'Bundle', value: '25 MiB: the manifest, server code and UI files together.' },
 		{
 			limit: 'Call time',
 			value:

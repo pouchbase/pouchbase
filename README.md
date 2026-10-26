@@ -231,7 +231,7 @@ Every sign-in returns `{ token, user_id }`; a sign-up returns `{ token, user_id,
 | `DELETE /api/db/<collection>/<id>`                    | Deletes a record when the delete rule allows it; `204`                                                             |
 | `GET /api/realtime?collection=<name>` (WebSocket)     | Changes to records the view rule allows, as they happen, see [Realtime](#realtime)                                 |
 | `GET /api/files/<id>`                                 | A file from the `files` collection (public; ids are random); `?size=<size>`, `?download`                           |
-| `GET /api/types?token=…`                              | TypeScript types of every collection; the URL is on the **Types** page                                             |
+| `GET /api/types?token=…`                              | TypeScript types of every collection; the URL is on the **Types** page, or send a service key (`Bearer pbk_…`)     |
 | `GET /api/plugins/<id>/assets/ui/<file>.svg`          | An image of a plugin, e.g. a sign-in provider's logo (public, sandboxed)                                           |
 | `<any method> /api/functions/<name>/<path>`           | Calls a [function](#functions); `401` when it requires sign-in, `404` if none                                      |
 | `POST /api/mail/send`                                 | Sends an [email template](#email-templates); needs an API key (`Bearer pbk_…`)                                     |

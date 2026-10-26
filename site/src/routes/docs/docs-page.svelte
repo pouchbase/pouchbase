@@ -8,6 +8,7 @@
 <script lang="ts">
 	import * as Prose from '#lib/components/ui/prose/index.js';
 	import * as SideNav from '#lib/components/ui/side-nav/index.js';
+	import { page } from '$app/state';
 	import type { Snippet } from 'svelte';
 	import DocsPager from './docs-pager.svelte';
 
@@ -25,6 +26,8 @@
 <svelte:head>
 	<title>{title} · Pouchbase docs</title>
 	<meta name="description" content={description} />
+	<!-- The page as Markdown, for AI assistants (`./[...path].md/+server.ts`). -->
+	<link rel="alternate" type="text/markdown" href="{page.url.pathname}.md" />
 </svelte:head>
 
 <div class="flex gap-12">
@@ -38,7 +41,8 @@
 			<p class="text-lg text-zinc-600">{description}</p>
 		</header>
 
-		<Prose.Root>
+		<!-- What the Markdown version of the page is made of; see `#lib/server/markdown.ts`. -->
+		<Prose.Root data-markdown="content">
 			{@render children()}
 		</Prose.Root>
 

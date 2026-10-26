@@ -13,7 +13,8 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"lint": "prettier --check . && eslint .",
 		"format": "prettier --write .",
-		"gen": "wrangler types"
+		"gen": "wrangler types",
+		"types": "node scripts/types.js"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -57,6 +58,8 @@
 		"@pouchbasejs/ui": "workspace:*",
 		"bits-ui": "^2.20.0",
 		"motion-sv": "^0.2.2",
+		"node-html-markdown": "^2.0.0",
+		"node-html-parser": "^6.1.13",
 		"semver": "^7.8.5",
 		"shiki": "^4.5.0",
 		"zod": "^4.6.7"
