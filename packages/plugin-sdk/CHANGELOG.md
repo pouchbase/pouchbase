@@ -1,5 +1,26 @@
 # @pouchbasejs/plugin-sdk
 
+## 0.4.0
+
+### Minor Changes
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Rename a field type's cell to its preview: `preview` in `defineField` and in the manifest, and `FieldPreviewProps`; the manifest key `cell` and `FieldCellProps` are gone.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Order a plugin's pages and their sidebar links by the order of `pages` in `definePlugin`.
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Add `ctx.pouch`, a client of `@pouchbasejs/js-sdk` for the records API, collections of a plugin's own with `collections` in `definePlugin` (and `defineCollection()`), `permissions.collections` to read or write the app's collections, and `fakePouch()` in `@pouchbasejs/plugin-sdk/testing`.
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Build a plugin from one `definePlugin({ ... })` in `plugin.ts` that declares its settings, field types, pages (with their title, sidebar link, icon and `layout`: the reading width, the full width, or all of the space), sign-in providers and routes by id, importing their code, components and `.svg` icons from any folder; the CLI writes the manifest itself (`pouchbase-plugin manifest` prints it). `add` creates the files of a contribution and adds it to `plugin.ts`, `validate` checks imports and compiles components exactly as Pouchbase does, components and icons are typed (`@pouchbasejs/plugin-sdk/env`), field types, pages and sign-in providers can have icons, `@pouchbasejs/plugin-sdk/vite` lets tests import `plugin.ts`, and `@pouchbasejs/plugin-sdk/testing` provides `fakeContext()`. The former layout, with `contributes` and `server` in `pouchbase-plugin.json` and components in `ui/`, is gone: the CLI refuses those keys. `HOST_MODULES` and `isHostModule` are removed in favor of `HOST_MODULE_IDS` and `isHostModuleId`.
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Raise the bundle limit (`MAX_BUNDLE_SIZE`) from 1 MiB to 25 MiB, and add `splitBundle` to cut a bundle's text into parts that fit in a database row.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Compile the Tailwind classes of a plugin's components into the bundle, with the dashboard's design tokens, so plugins can be styled like the dashboard.
+
+### Patch Changes
+
+- Updated dependencies [[`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140)]:
+  - @pouchbasejs/js-sdk@0.8.0
+
 ## 0.3.0
 
 ### Minor Changes

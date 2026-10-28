@@ -1,5 +1,53 @@
 # pouchbase
 
+## 0.10.0
+
+### Minor Changes
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: API keys no longer have a scope: every key, the key of a function too, acts as an admin and reaches the whole API (the records API without API rules, hidden fields, the schema, the types, email and realtime); the New API key dialog no longer asks for one. Only the key of a plugin stays limited to its collections in the records API
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: the password endpoints are now `POST /api/auth/password/login` and `POST /api/auth/password/register` instead of `sign-in` and `sign-up`, and login no longer accepts `identity` instead of `email`.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - `POST /api/mail/send` also sends emails of your own: `{ "subject", "html", "text"?, "to" }` without a template.
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Add a dark mode to the dashboard and its error pages, with a switch in the sidebar for light, dark or the system setting.
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Conditions in API rules and `where` get functions: `contains()`, `starts_with()`, `ends_with()`, `like()`, `lower()`, `length()`, `count()`, date functions such as `now()`, `today()`, `date_add()`, `start_of()`, `year()` and `weekday()`; `contains` and `not contains` became `contains(title, "x")` and `!contains(title, "x")`, `$now` became `now()`, and Created and Updated fields now compare with dates such as `"2026-01-01"`
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Conditions in API rules and `where` combine with `&&` or `AND`, `||` or `OR`, and `!` or `NOT` instead of lowercase `and`, `or` and `not`, and the rule editor highlights fields, `$user`, functions, values and operators in their own colors
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Conditions follow relations: `author.role == "admin"`, `post.author.name` and `any(editors.role) == "admin"` compare fields of related records, up to three relations deep, in API rules, `where` and realtime subscriptions; in `where` the related records are checked against the view rule of their collection, and the rule editor suggests and checks the related fields
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Add hidden fields: a field marked hidden is only seen by admins, API keys, plugins and API rules; the records API, includes, realtime events and `/api/auth/me` leave it out for app users, who can't filter, sort, select or write on it either
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Install plugins with bundles of up to 25 MiB instead of 1 MiB.
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Give plugins access to data through `ctx.pouch`, the JS SDK signed in as the plugin with an API key of its own: Pouchbase creates the collections a plugin declares (`<plugin>_<name>`, deleted with their records when the plugin is removed) and lets it read and write those and the collections in its `permissions.collections`, which the admin sees before installing.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Run everything plugins contribute: their routes under `/api/plugins/<id>/` (with `ctx.user`, `ctx.admin` and route parameters), their pages in the dashboard with sidebar links, icons and their own layout (the reading width, the full width, or all of the space below the top bar), their field types in collections (input, preview, validation, default values, icons; fields of a removed plugin stay read-only with their data), and their settings, which admins fill in on the Plugins page. Components are compiled when a plugin is installed, and the install dialog lists what a plugin adds. In development (`vite dev`), installed plugins run their server code inside Pouchbase instead of in a Worker, so `ctx.pouch` reaches a Pouchbase on `localhost` and installing needs no deploy.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Realtime accepts an API key as the `auth` token: the socket acts as an admin, so the view rules don't apply; an invalid key or the key of a plugin is closed with `4401` and a reason that says why
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: the realtime WebSocket moves from `/api/live` to `/api/realtime`, and the records grid shows **Realtime** instead of **Live** while connected
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: drop the old forms that were still accepted: API rules and `where` only take the current condition syntax (no `contains` operator, `$now` or the syntax before 0.9, and saved rules are no longer upgraded), thumbnail sizes only `WxH:mode`, `/api/files/<id>` only `?size=` (not `?thumb=`), collection imports only export format 2, and the registry only `POUCHBASE_REGISTRY_URL` (not `PLUGIN_REGISTRY_URL`)
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - The generated TypeScript types (`/api/types`) include `MailTemplates`: every email template the API can send, with its variables.
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - `GET /api/types` also takes an API key, besides the token from the Types page.
+
+### Patch Changes
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Serve thumbnails for `?size=` on `/api/files/<id>`, which `pouch.files.url(id, { size })` of the SDK sends
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Show the preview of a plugin's field type in the records grid.
+
+- [`d343deb`](https://github.com/pouchbase/pouchbase/commit/d343deb5c00fc0c4762102547b0d23869e228c0b) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Show validation errors in dialogs that edit one item, such as Add field, Edit field and the backup, secret and plugin dialogs; they were lost when the form was submitted.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Show the field types of a plugin in the Add field dialog right after installing or updating it, without reloading the page.
+
+- [`b354417`](https://github.com/pouchbase/pouchbase/commit/b3544179796035c96aa3aa7758f5f65e1d1e02ae) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Realtime checks the view rule of an event in memory and once per group of subscribers it can't tell apart, instead of one database query per subscriber, so collections with many subscribers stay fast
+
 ## 0.9.0
 
 ### Minor Changes

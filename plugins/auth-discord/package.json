@@ -1,6 +1,6 @@
 {
 	"name": "@pouchbase-plugins/auth-discord",
-	"version": "1.0.1",
+	"version": "1.0.2",
 	"private": true,
 	"description": "Sign in with Discord.",
 	"license": "MIT",

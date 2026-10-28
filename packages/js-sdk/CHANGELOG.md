@@ -1,5 +1,35 @@
 # @pouchbasejs/js-sdk
 
+## 0.8.0
+
+### Minor Changes
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: `pouch.asService()` is removed: a client with an `apiKey` sends the key instead of the session's token on every request and realtime connection, so it acts as an admin without a separate client
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: `pouch.auth.signIn()` is now `pouch.auth.login()`, `signInWithOAuth()` is `oauth()`, `signOut()` is `logout()` and `signUp()` is `register()`, with the types `RegisterInput` and `RegisterResult`; they call `/api/auth/password/login` and `/api/auth/password/register`.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: `pouch.mail.send()` takes the template's name, or an email of your own (`{ subject, html, text? }`), as its first argument and the options as its second: `pouch.mail.send('welcome', { to, variables })`.
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - `where` sends `contains` and `notContains` as the `contains()` function of the condition syntax and adds `startsWith` and `endsWith`; needs Pouchbase 0.10 or later
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - `where` objects compile to conditions with `&&`, `||` and `!`, the new syntax of the API
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Add `hidden` to the fields of `pouch.schema`, for fields that only admins and API keys see
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: `pouch.live.watch()` is now `pouch.realtime.subscribe()`, `pouch.db.<name>.watch()` is `pouch.db.<name>.subscribe()` and `pouch.session.watch()` is `pouch.session.subscribe()`; a subscription ends with `unsubscribe()` instead of `stop()`, the client connects to `/api/realtime`, and the types are renamed (`RealtimeService`, `RealtimeConnection`, `RealtimeEvent`, `RealtimeSubscription`, `RealtimeAction`, `SubscribeOptions`); `pouch.realtime.subscribe()` is typed by the schema like `pouch.db.<name>.subscribe()` (topics, `where`, `select`, `include` and events)
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Breaking: remove `OAUTH_PROVIDERS`; use `KNOWN_OAUTH_PROVIDERS`
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Type `pouch.mail.send()` with the generated `MailTemplates`: `createClient<Schema, MailTemplates>(url, { apiKey })` checks template names and their (required) variables.
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Download the types with an API key: `pouch.schema.types()`, and `pouchbase types <instance url> --api-key pbk_…` (or `POUCHBASE_URL` and `POUCHBASE_API_KEY`); `pouchbase types` no longer saves a web page as the types when the URL has no token.
+
+### Patch Changes
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Editors now suggest the relations of a collection in `include`, and an unknown relation there is a type error.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Type field types that come from plugins (`<plugin>:<type>`) in the schema API.
+
 ## 0.7.0
 
 ### Minor Changes
