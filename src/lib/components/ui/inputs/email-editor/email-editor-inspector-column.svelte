@@ -6,7 +6,7 @@
 		MIN_COLUMN_WIDTH,
 		resizeColumn,
 		rowWidths
-	} from './email-editor-blocks';
+	} from './email-editor-columns';
 	import type { SelectedBlock } from './email-editor-blocks';
 	import { getEmailEditorContext } from './email-editor-context';
 	import { fieldId, updateSelectedBlock } from './email-editor-inspector-fields';

@@ -4,6 +4,7 @@
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
+	import * as CardHeading from '#lib/components/ui/card-heading/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Code from '#lib/components/ui/inputs/code/index.js';
@@ -70,25 +71,23 @@
 </script>
 
 <Card.Root>
-	<Card.Header>
-		<div class="flex flex-wrap items-start justify-between gap-4">
-			<div class="flex flex-col gap-1.5">
-				<div class="flex items-center gap-2">
-					<Card.Title id="function-code-title">Code</Card.Title>
-					<Badge.Root variant="outline">
-						{language === 'typescript' ? 'TypeScript' : 'JavaScript'}
-					</Badge.Root>
-					{#if changed}
-						<Badge.Root variant="warning">Not deployed</Badge.Root>
-					{/if}
-				</div>
-				<Card.Description>
-					An ES module whose default export has a <code>fetch(request, env)</code> handler, like a
-					Cloudflare Worker. Secrets are in <code>env</code>; <code>pouchbaseUser(request)</code> returns
-					the signed-in app user.
-				</Card.Description>
-			</div>
+	<CardHeading.Root title="Code" titleId="function-code-title">
+		{#snippet badges()}
+			<Badge.Root variant="outline">
+				{language === 'typescript' ? 'TypeScript' : 'JavaScript'}
+			</Badge.Root>
+			{#if changed}
+				<Badge.Root variant="warning">Not deployed</Badge.Root>
+			{/if}
+		{/snippet}
 
+		{#snippet description()}
+			An ES module whose default export has a <code>fetch(request, env)</code> handler, like a
+			Cloudflare Worker. Secrets are in <code>env</code>; <code>pouchbaseUser(request)</code> returns
+			the signed-in app user.
+		{/snippet}
+
+		{#snippet actions()}
 			<div class="flex flex-wrap gap-2">
 				<Button.Root variant="secondary" onclick={upload}>
 					<Icon.Root icon="lucide:upload" />
@@ -104,8 +103,8 @@
 					Deploy
 				</Button.Root>
 			</div>
-		</div>
-	</Card.Header>
+		{/snippet}
+	</CardHeading.Root>
 
 	<Card.Content class="flex flex-col gap-3">
 		{#if !fn.deployed && !changed}

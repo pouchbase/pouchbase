@@ -19,7 +19,7 @@ Everything in this project is **English**: code, identifiers, comments, UI text,
 
 Before writing or editing any `.svelte` file, load the **`pouchbase-site-components`** skill (`../.claude/skills/pouchbase-site-components/SKILL.md`). These are the same conventions as in the Pouchbase app. In short:
 
-- Reuse what exists in `src/lib/components/ui/`; if nothing fits, check the Pouchbase app (`../src/lib/components/ui/`) and copy it over, otherwise **always** create a reusable component in `ui/` instead of inline markup.
+- Reuse what exists in `@pouchbasejs/ui` (`../packages/ui`, imported as `@pouchbasejs/ui/<name>`) and in `src/lib/components/ui/` (site-specific components only); never copy a component from the app or the package into the site, extend the package component instead. If nothing fits, **always** create a reusable component in `ui/` instead of inline markup.
 - Compound structure with an `index.ts` and a namespace import: `<Button.Root>`, `<Card.Title>`, ...
 - File names are lowercase kebab-case, prefixed with the component name: `card-root.svelte`, `card-title.svelte`, `card-context.ts`.
 - Icons always come from Iconify through `<Icon.Root icon="lucide:plus" />` (literal names, bundled by the `iconify` Vite plugin from `@pouchbasejs/ui/vite`); never `@lucide/svelte` or other icon component libraries.

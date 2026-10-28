@@ -4,7 +4,7 @@ import { Plugin } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { BLOCK_DEFAULTS } from '#lib/mail/document.js';
-import { resizedColumnWidths, rowWidths, setColumnWidths } from '../email-editor-blocks';
+import { resizedColumnWidths, rowWidths, setColumnWidths } from '../email-editor-columns';
 import { stored } from './shared';
 
 /** A handle on the left edge of every column but the first, to drag the border between two. */

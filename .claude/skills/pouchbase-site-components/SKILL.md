@@ -17,9 +17,16 @@ you in another language.
 
 ## 2. Reuse first, otherwise create a component
 
-1. Before writing any UI, check `src/lib/components/ui/` for an existing component. If the
-   Pouchbase app has one (`src/lib/components/ui/` at the repository root), check there too and copy
-   the component over instead of writing a new one, so both projects stay consistent.
+1. Before writing any UI, check `@pouchbasejs/ui` (the workspace package `packages/ui`, which the
+   site imports as `import * as Button from '@pouchbasejs/ui/button'`) for an existing component:
+   it holds the primitives and the shared composites (button, badge, callout, card, code-block,
+   copy-button, dialog, empty, error-state, icon, sheet, table, toast, tooltip, the inputs, ...).
+   Then check `site/src/lib/components/ui/`, which only holds site-specific components (chip-group,
+   code, link-card, navigation-menu, pagination, preview, prose, separator, side-nav, tab-nav, form,
+   and the site's own error-state, code-block and logo). Never copy a component from the app or the
+   package into the site: extend the package component with a prop or variant instead (that is how
+   the `brand` variant of `Button`/`Badge`, `not-prose` on `Callout`/`Table` and the `dark`
+   `ScrollArea` got there).
 2. If one fits, use it. Extend it with a prop or variant if needed; don't fork it.
 3. If none fits, **always create a reusable component** in `src/lib/components/ui/<component>/`.
    Do not write one-off inline markup for things like buttons, inputs, cards, alerts, dialogs,
@@ -149,8 +156,9 @@ The website has no forms yet. When one is needed (newsletter, contact, ...):
 
 - Use **remote functions**: `form(schema, handler)` in a `*.remote.ts` file, with a Zod schema in
   `src/lib/schemas/` (schemas can't be exported from a `.remote.ts` file).
-- Port the `Form` component and the `inputs/` folder from the Pouchbase app rather than writing raw
-  inputs, and extend it with new parts (e.g. `form-textarea.svelte`) when needed.
+- Build on the site's `Form` component (`src/lib/components/ui/form/`) and the inputs from
+  `@pouchbasejs/ui/inputs/*` rather than writing raw inputs, and extend it with new parts (e.g.
+  `form-textarea.svelte`) when needed.
 - Form-level errors use `invalid('message')` in the handler; `Form.Root` shows them.
 
 ## 8. Styling

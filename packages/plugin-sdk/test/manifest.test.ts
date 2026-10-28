@@ -358,9 +358,12 @@ describe('HOST_MODULE_IDS', () => {
 			.map((path) => `@pouchbasejs/ui/${path.slice(0, -'/index.ts'.length)}`);
 
 		expect(entries.length).toBeGreaterThan(0);
-		expect([...HOST_MODULE_IDS.filter((id) => id.startsWith('@pouchbasejs/ui/'))].sort()).toEqual(
-			entries.sort()
+		// `@pouchbasejs/ui/format` holds helpers (`formatFileSize`), not a component.
+		const componentIds = HOST_MODULE_IDS.filter(
+			(id) => id.startsWith('@pouchbasejs/ui/') && id !== '@pouchbasejs/ui/format'
 		);
+
+		expect([...componentIds].sort()).toEqual(entries.sort());
 	});
 });
 

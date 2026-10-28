@@ -28,6 +28,11 @@ describe('follow', () => {
 		expect(follow(slots, 0, 50).target).toBe(1);
 		expect(follow(slots, 2, -60).target).toBe(1);
 	});
+
+	it('reaches the first and the last slot when the items are equally tall', () => {
+		expect(follow(slots, 0, 500).target).toBe(2);
+		expect(follow(slots, 2, -500).target).toBe(0);
+	});
 });
 
 describe('scrollStep', () => {

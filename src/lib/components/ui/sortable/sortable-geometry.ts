@@ -68,11 +68,11 @@ export function follow(slots: Slot[], from: number, moved: number) {
 	slots.forEach((other, index) => {
 		const middle = other.top + other.height / 2;
 
-		if (index > from && center > middle) {
+		if (index > from && center >= middle) {
 			target = Math.max(target, index);
 		}
 
-		if (index < from && center < middle) {
+		if (index < from && center <= middle) {
 			target = Math.min(target, index);
 		}
 	});

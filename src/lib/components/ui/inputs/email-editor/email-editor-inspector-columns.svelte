@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Inspector from '../../inspector/index.js';
 	import { columnWidths } from '#lib/mail/document.js';
-	import { COLUMN_LAYOUTS, setColumnLayout } from './email-editor-blocks';
+	import { COLUMN_LAYOUTS, setColumnLayout } from './email-editor-columns';
 	import type { SelectedBlock } from './email-editor-blocks';
 	import { getEmailEditorContext } from './email-editor-context';
 	import { fieldId, updateSelectedBlock } from './email-editor-inspector-fields';

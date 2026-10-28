@@ -42,9 +42,26 @@ you in another language.
   `packages/ui` (add it to `src/index.ts` and the README there, add a shim in the app, and a
   changeset for `@pouchbasejs/ui`); its names and props are part of the plugin API, so changes
   are additive only.
-- **Composites and everything app-specific** stay in `src/lib/components/ui/`: `form`, `dialog`,
-  `sheet`, `toast`, `data-grid`, `navigation`, `sidebar`, `copy-button`, `inputs/{copy,code,file,
-  rich-text,email-editor,...}` and anything that needs remote functions, `$app` or `#lib`.
+- **App composites and everything app-specific** stay in `src/lib/components/ui/`: `form`,
+  `confirm-dialog`, `row-actions`, `card-heading`, `page`, `data-grid`, `navigation`,
+  `sidebar`, `image-editor`, `inputs/{copy,code,rich-text,email-editor,...}` and anything that
+  needs remote functions, `$app` or `#lib`.
+
+### Composites to reach for before writing markup
+
+- `Page.Layout` (`page/`): the topbar breadcrumb and the page header in one: `title`, `crumb`,
+  `parents`, `description`, `badges`/`actions` snippets, `width`, `gap`. Every page uses it
+  unless its header is special (the collection grid, plugin pages).
+- `CardHeading.Root` (`card-heading/`): a card header with `title`, `description` and
+  `badges`/`actions` snippets, instead of a hand-written flex row inside `Card.Header`.
+- `RowActions.Root` + `RowActions.Item` (`row-actions/`): the "…" menu of a row or a card.
+- `ConfirmDialog.Root` (`confirm-dialog/`): a confirmation dialog around a remote form
+  (`form`, `title`, `description` snippet, `submit`, `success`, `hidden` fields, `close`,
+  `redirects` when the action redirects). Every delete/reset dialog is one.
+- Large editors are folders with a state module and one part per panel:
+  `image-editor/` (`image-editor-state.svelte.ts` + crop/adjust/filters/export panels) and
+  `inputs/email-editor/` (`nodes/<node>.ts` per Tiptap node, one inspector part per block type,
+  `email-editor-blocks.ts` and `email-editor-columns.ts` for the editor commands).
 
 ## 3. Compound structure
 

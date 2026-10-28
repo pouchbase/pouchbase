@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
+	import * as CardHeading from '#lib/components/ui/card-heading/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
@@ -59,15 +60,11 @@
 	</Card.Root>
 
 	<Card.Root>
-		<Card.Header>
-			<div class="flex flex-wrap items-start justify-between gap-4">
-				<div class="flex flex-col gap-1.5">
-					<Card.Title>Delete function</Card.Title>
-					<Card.Description>
-						Deletes the Worker on Cloudflare with its secrets, and every version.
-					</Card.Description>
-				</div>
-
+		<CardHeading.Root
+			title="Delete function"
+			description="Deletes the Worker on Cloudflare with its secrets, and every version."
+		>
+			{#snippet actions()}
 				<Button.Root
 					variant="danger"
 					onclick={() => void dialogs.open(DeleteFunctionDialog, { fn })}
@@ -75,7 +72,7 @@
 					<Icon.Root icon="lucide:trash-2" />
 					Delete function
 				</Button.Root>
-			</div>
-		</Card.Header>
+			{/snippet}
+		</CardHeading.Root>
 	</Card.Root>
 </div>

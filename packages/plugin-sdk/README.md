@@ -419,7 +419,7 @@ Pouchbase compiles the components `plugin.ts` names, and the files they import, 
 
   - Svelte: `svelte`, `svelte/store`, `svelte/transition`, `svelte/animate`, `svelte/easing`, `svelte/motion`, `svelte/reactivity`, `svelte/events` and `svelte/attachments` (the compiled code also imports `svelte/internal/*`, which Pouchbase provides too);
   - the prop types: `@pouchbasejs/plugin-sdk/ui`;
-  - the dashboard's components: `@pouchbasejs/ui` and one entry per component, `@pouchbasejs/ui/badge`, `/button`, `/callout`, `/card`, `/empty`, `/icon`, `/link`, `/meter`, `/progress`, `/scroll-area`, `/segmented`, `/skeleton`, `/spinner`, `/swatch`, `/table`, `/thumbnail`, `/tile`, `/tooltip`, `/inputs/checkbox`, `/inputs/input`, `/inputs/select`, `/inputs/slider` and `/inputs/textarea` (`import * as Button from '@pouchbasejs/ui/button'`).
+  - the dashboard's components: `@pouchbasejs/ui`, `@pouchbasejs/ui/format` (`formatFileSize`) and one entry per component, `@pouchbasejs/ui/badge`, `/button`, `/callout`, `/card`, `/code-block`, `/copy-button`, `/dialog`, `/empty`, `/error-state`, `/icon`, `/link`, `/meter`, `/progress`, `/scroll-area`, `/segmented`, `/sheet`, `/skeleton`, `/spinner`, `/swatch`, `/table`, `/thumbnail`, `/tile`, `/toast`, `/tooltip`, `/inputs/checkbox`, `/inputs/file`, `/inputs/input`, `/inputs/select`, `/inputs/slider` and `/inputs/textarea` (`import * as Button from '@pouchbasejs/ui/button'`).
 
 Nothing else: no other packages, which aren't in the browser, and no files outside the plugin.
 

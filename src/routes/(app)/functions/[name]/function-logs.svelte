@@ -3,6 +3,7 @@
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
+	import * as CardHeading from '#lib/components/ui/card-heading/index.js';
 	import * as Empty from '#lib/components/ui/empty/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Segmented from '#lib/components/ui/segmented/index.js';
@@ -44,16 +45,13 @@
 </script>
 
 <Card.Root>
-	<Card.Header>
-		<div class="flex flex-wrap items-start justify-between gap-4">
-			<div class="flex flex-col gap-1.5">
-				<Card.Title>Logs</Card.Title>
-				<Card.Description>
-					Requests, <code>console.log()</code> output and errors, newest first. New lines show up after
-					a minute or so. Cloudflare keeps them for 3 days, or 7 days on the Workers Paid plan.
-				</Card.Description>
-			</div>
+	<CardHeading.Root title="Logs">
+		{#snippet description()}
+			Requests, <code>console.log()</code> output and errors, newest first. New lines show up after a
+			minute or so. Cloudflare keeps them for 3 days, or 7 days on the Workers Paid plan.
+		{/snippet}
 
+		{#snippet actions()}
 			<div class="flex items-center gap-2">
 				<Segmented.Root
 					value={String(hours)}
@@ -74,8 +72,8 @@
 					<Icon.Root icon="lucide:refresh-cw" />
 				</Button.Root>
 			</div>
-		</div>
-	</Card.Header>
+		{/snippet}
+	</CardHeading.Root>
 
 	<Card.Content>
 		{#if result.forbidden}
