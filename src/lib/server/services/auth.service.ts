@@ -42,8 +42,8 @@ export type InvalidInputError = ServiceError<11025, 'INVALID_INPUT'> & {
 export type AuthError =
 	| ContextError
 	| ServiceError<5001, 'SET_SETTING_FAILED'>
-	| ServiceError<10001, 'GET_PROVIDER_FAILED'>
-	| ServiceError<19001, 'LIST_PLUGINS_FAILED'>
+	| ServiceError<10000, 'OAUTH_PROVIDERS_FAILED'>
+	| ServiceError<19001, 'PLUGINS_FAILED'>
 	| ErrorOf<ReturnType<FilesService['ensureFilesCollection']>>
 	| ErrorOf<ReturnType<CollectionsService['ensureSystem']>>
 	| ErrorOf<ReturnType<MailTemplatesService['send']>>

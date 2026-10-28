@@ -1,29 +1,8 @@
-import type { Pouchbase } from '@pouchbasejs/js-sdk';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
-import type {
-	DescribeResult,
-	PluginCall,
-	PluginCallContext,
-	PluginRouteContext,
-	PluginRouteInfo,
-	PluginRuntime
-} from './runtime';
 
 import { parseManifest } from '@pouchbasejs/plugin-sdk';
 import * as discovered from 'virtual:pouchbase/embedded-plugins';
-
-import { restrictedFetch } from './network';
-import {
-	CALL_TIMEOUT,
-	describePlugin,
-	dispatch,
-	dispatchRoute,
-	EMPTY_CALL_CONTEXT,
-	pluginContext,
-	routeRequestHeaders,
-	withTimeout
-} from './runtime';
 
 /**
  * Built-in plugins: the first-party plugins in `plugins/*` of this repository, bundled into
@@ -31,8 +10,8 @@ import {
  * `pouchbase-plugin build` does and hands over the manifests (with `contributes` and the fields
  * from `package.json`), their `.svg` files and their generated server entries, which Vite compiles
  * from the plugins' sources. They ship with the app, so their `engines` range is not checked, and
- * they can't be removed. Their server code runs inside Pouchbase (`InProcessRuntime`), with the same
- * `ctx.fetch` allowlist as an installed plugin. Installing the same plugin id from the registry
+ * they can't be removed. Their server code runs inside Pouchbase (`InProcessRuntime` in
+ * `in-process.ts`), with the same `ctx.fetch` allowlist as an installed plugin. Installing the same plugin id from the registry
  * shadows the built-in one.
  */
 
@@ -164,76 +143,4 @@ export function embeddedPlugins(): EmbeddedPlugin[] {
 /** The built-in plugin with this id, or `null`. */
 export function embeddedPlugin(id: string): EmbeddedPlugin | null {
 	return embeddedPlugins().find((plugin) => plugin.manifest.id === id) ?? null;
-}
-
-/**
- * Runs a built-in plugin's server code inside Pouchbase. `pouch` is its `ctx.pouch`, which the
- * host builds for the request (see `PluginsService`); without one, its requests fail.
- */
-export class InProcessRuntime implements PluginRuntime {
-	constructor(
-		private readonly plugin: EmbeddedPlugin,
-		private readonly options: { timeout?: number; fetch?: typeof fetch; pouch?: Pouchbase } = {}
-	) {}
-
-	async call(call: PluginCall, context: PluginCallContext = EMPTY_CALL_CONTEXT): Promise<unknown> {
-		const { manifest } = this.plugin;
-		const ctx = pluginContext(
-			manifest,
-			context,
-			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
-			{ pouch: this.options.pouch }
-		);
-
-		return withTimeout(
-			this.plugin.load().then((definition) => dispatch(definition, call, ctx)),
-			this.options.timeout ?? CALL_TIMEOUT
-		);
-	}
-
-	/**
-	 * Runs the route for `request` directly, like the Worker does: the handler gets the request
-	 * with its original URL, without the cookie and the host's own headers.
-	 */
-	async route(
-		request: Request,
-		info: PluginRouteInfo,
-		context: PluginRouteContext
-	): Promise<Response> {
-		const { manifest } = this.plugin;
-		const ctx = pluginContext(
-			manifest,
-			context,
-			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
-			{ admin: context.admin, user: context.user, pouch: this.options.pouch }
-		);
-		const forwarded = new Request(request, { headers: routeRequestHeaders(request.headers) });
-
-		return withTimeout(
-			this.plugin.load().then((definition) => dispatchRoute(definition, forwarded, info.path, ctx)),
-			this.options.timeout ?? CALL_TIMEOUT
-		);
-	}
-}
-
-const descriptions = new Map<string, Promise<DescribeResult>>();
-
-/**
- * `describe` of a built-in plugin, with its settings. Its code can't change within a build, so
- * the answer is kept per plugin and settings.
- */
-export function describeEmbedded(
-	plugin: EmbeddedPlugin,
-	context: PluginCallContext = EMPTY_CALL_CONTEXT
-): Promise<DescribeResult> {
-	const key = `${plugin.manifest.id}\n${JSON.stringify(context.settings)}`;
-	let description = descriptions.get(key);
-
-	if (!description) {
-		description = describePlugin(new InProcessRuntime(plugin), context);
-		description.catch(() => descriptions.delete(key));
-		descriptions.set(key, description);
-	}
-
-	return description;
 }

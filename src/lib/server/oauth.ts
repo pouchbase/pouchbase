@@ -1,4 +1,4 @@
-import type { ProviderConfig } from './plugins/runtime';
+import type { ProviderConfig } from './plugins/protocol';
 
 /**
  * OAuth 2.0 authorization code flow, using plain `fetch` and Web Crypto so it runs on Workers. The

@@ -1,6 +1,6 @@
 import type { OAuthProvider } from '#lib/auth/oauth-providers.js';
 import type { oauthProviders, pluginAuthProviders } from './db/schema';
-import type { ProviderConfig } from './plugins/runtime';
+import type { ProviderConfig } from './plugins/protocol';
 
 import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 

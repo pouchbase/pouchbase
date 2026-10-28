@@ -1,0 +1,180 @@
+import type { PluginUser } from '@pouchbasejs/plugin-sdk/server';
+import type { PluginCall } from '../protocol';
+
+import { Pouchbase } from '@pouchbasejs/js-sdk';
+
+import { dispatch, dispatchRoute, pluginContext, routeRequestHeaders } from '../dispatch';
+import {
+	CALL_PATH,
+	CONTEXT_HEADER,
+	decodeCallJson,
+	encodeCallJson,
+	ERROR_HEADER,
+	ROUTE_PATH,
+	SECRET_HEADER
+} from './codec';
+import { originFetch, pluginFetch } from './pouchbase-guard.js';
+import config from './pouchbase-config.js';
+import definition from './plugin.js';
+
+/**
+ * `pouchbase.js`, the entry of a plugin's Worker (see `worker.ts` for the whole picture): answers
+ * `POST /__call` and `/__route/<path>` (any method, with `CONTEXT_HEADER`) with the plugin secret
+ * in `SECRET_HEADER` (compared in constant time), and 404 to everything else. The calls and the
+ * routes run through the same `dispatch.ts` as a plugin that runs inside Pouchbase. Bundled by
+ * `vite/plugin-worker.ts`; the guard is imported first so it runs before `plugin.js`.
+ */
+
+/** The Worker's bindings. */
+type Env = {
+	POUCHBASE_PLUGIN_SECRET?: string;
+	POUCHBASE_URL?: string;
+	POUCHBASE_API_KEY?: string;
+};
+
+/** `CONTEXT_HEADER` as the host sends it; see `routeContextHeader`. */
+type RouteInput = {
+	settings?: unknown;
+	admin?: unknown;
+	user?: unknown;
+	url?: unknown;
+};
+
+const encoder = new TextEncoder();
+
+function matches(value: string | null, secret: string | undefined) {
+	const left = encoder.encode(value ?? '');
+	const right = encoder.encode(secret ?? '');
+
+	return (
+		left.byteLength > 0 &&
+		left.byteLength === right.byteLength &&
+		(
+			crypto.subtle as unknown as { timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean }
+		).timingSafeEqual(left, right)
+	);
+}
+
+function json(body: unknown, status = 200, headers: Record<string, string> = {}) {
+	return new Response(encodeCallJson(body), {
+		status,
+		headers: { 'content-type': 'application/json', ...headers }
+	});
+}
+
+function message(error: unknown) {
+	return error instanceof Error ? error.message : String(error);
+}
+
+let client: Pouchbase | null = null;
+
+/** `ctx.pouch`: the JS SDK with the plugin's key; one per isolate. */
+function pouch(env: Env) {
+	if (!client) {
+		const origin = new URL(env.POUCHBASE_URL ?? '').origin;
+
+		client = new Pouchbase(origin, {
+			fetch: originFetch(origin),
+			headers: { authorization: `Bearer ${env.POUCHBASE_API_KEY ?? ''}` }
+		});
+	}
+
+	return client;
+}
+
+/** The plugin's context for a call or a route: the settings the host sent, as strings. */
+function context(input: unknown, env: Env, route: { admin?: unknown; user?: unknown } = {}) {
+	const sent = (input as { settings?: unknown } | null)?.settings;
+	const settings =
+		typeof sent === 'object' && sent !== null ? (sent as Record<string, string>) : {};
+
+	return pluginContext(config.plugin, { settings }, pluginFetch, {
+		admin: route.admin === true,
+		user: route.user && typeof route.user === 'object' ? (route.user as PluginUser) : null,
+		pouch: pouch(env)
+	});
+}
+
+/** A route request: rebuilt with its original URL, without the host's own headers. */
+async function route(request: Request, env: Env) {
+	let input: RouteInput;
+
+	try {
+		input = JSON.parse(request.headers.get(CONTEXT_HEADER) ?? '') as RouteInput;
+	} catch {
+		return json({ ok: false, error: 'The route context is not valid JSON' }, 400);
+	}
+
+	const forwarded = new URL(request.url);
+	const path = forwarded.pathname.slice(ROUTE_PATH.length) || '/';
+	let url = forwarded.href;
+
+	try {
+		url = new URL(String(input?.url ?? '')).href;
+	} catch {
+		// Not a URL: the forwarded one will do.
+	}
+
+	const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
+	const original = new Request(url, {
+		method: request.method,
+		headers: routeRequestHeaders(request.headers),
+		body: hasBody ? request.body : null,
+		// Needed to send a stream; not part of `RequestInit` in every lib.
+		...(hasBody ? { duplex: 'half' } : {}),
+		redirect: 'manual'
+	} as RequestInit);
+
+	try {
+		return await dispatchRoute(definition, original, path, context(input, env, input ?? {}));
+	} catch (error) {
+		console.error(
+			`[plugin ${config.plugin.id}] Route ${original.method} ${path} failed`,
+			message(error)
+		);
+
+		return json({ ok: false, error: message(error) }, 500, { [ERROR_HEADER]: '1' });
+	}
+}
+
+export default {
+	async fetch(request: Request, env: Env) {
+		if (!matches(request.headers.get(SECRET_HEADER), env.POUCHBASE_PLUGIN_SECRET)) {
+			return new Response('Not found', { status: 404 });
+		}
+
+		const { pathname } = new URL(request.url);
+
+		if (request.headers.has(CONTEXT_HEADER)) {
+			if (pathname !== ROUTE_PATH && !pathname.startsWith(`${ROUTE_PATH}/`)) {
+				return new Response('Not found', { status: 404 });
+			}
+
+			return route(request, env);
+		}
+
+		if (request.method !== 'POST' || pathname !== CALL_PATH) {
+			return new Response('Not found', { status: 404 });
+		}
+
+		let body: { call?: PluginCall; context?: unknown } | null;
+
+		try {
+			body = decodeCallJson(await request.text()) as typeof body;
+		} catch {
+			return json({ ok: false, error: 'The call is not valid JSON' }, 400);
+		}
+
+		try {
+			const value = await dispatch(
+				definition,
+				body?.call as PluginCall,
+				context(body?.context, env)
+			);
+
+			return json({ ok: true, value: value ?? null });
+		} catch (error) {
+			return json({ ok: false, error: message(error) }, 500);
+		}
+	}
+};

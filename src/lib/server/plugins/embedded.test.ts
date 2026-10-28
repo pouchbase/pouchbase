@@ -1,8 +1,9 @@
 import { resolveSettings } from '@pouchbasejs/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { embeddedPlugin, embeddedPlugins, InProcessRuntime, loadEmbeddedPlugins } from './embedded';
-import { describePlugin, oauthProfileSchema } from './runtime';
+import { embeddedPlugin, embeddedPlugins, loadEmbeddedPlugins } from './embedded';
+import { InProcessRuntime } from './in-process';
+import { describePlugin, oauthProfileSchema } from './protocol';
 
 describe('embeddedPlugins', () => {
 	it('finds the first-party plugins in plugins/', () => {

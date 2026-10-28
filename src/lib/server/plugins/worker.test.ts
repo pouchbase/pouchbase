@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
-import { PluginCallError } from './runtime';
+import { PluginCallError } from './dispatch';
 import {
 	CALL_PATH,
 	CONTEXT_HEADER,

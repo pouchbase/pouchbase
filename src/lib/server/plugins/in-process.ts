@@ -1,17 +1,96 @@
+import type { Pouchbase } from '@pouchbasejs/js-sdk';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
 import type { EmbeddedPlugin } from './embedded';
+import type {
+	DescribeResult,
+	PluginCall,
+	PluginCallContext,
+	PluginRouteContext,
+	PluginRouteInfo,
+	PluginRuntime
+} from './protocol';
 
-import { dev } from '$app/env';
+import { dispatch, dispatchRoute, pluginContext, routeRequestHeaders } from './dispatch';
+import { restrictedFetch } from './network';
+import { CALL_TIMEOUT, describePlugin, EMPTY_CALL_CONTEXT, withTimeout } from './protocol';
 
 /**
- * In development (`vite dev`), installed plugins run their server code inside Pouchbase, like the
- * built-in plugins (`InProcessRuntime`), instead of in a Worker of their own: a Worker on
- * Cloudflare can't reach a Pouchbase on `localhost`, so its `ctx.pouch` would always fail, and
- * skipping the deploy makes installing much faster. The code runs without the Worker's sandbox,
- * so only install plugins you trust while developing; builds always deploy Workers.
+ * Running a plugin's server code inside Pouchbase: the built-in plugins always do, and in
+ * development installed plugins do too (see `RUN_INSTALLED_IN_PROCESS` in `install.ts`).
  */
-export const RUN_INSTALLED_IN_PROCESS = dev;
+
+/**
+ * Runs a plugin's server code inside Pouchbase. `pouch` is its `ctx.pouch`, which the host builds
+ * for the request (see `PluginsService`); without one, its requests fail.
+ */
+export class InProcessRuntime implements PluginRuntime {
+	constructor(
+		private readonly plugin: EmbeddedPlugin,
+		private readonly options: { timeout?: number; fetch?: typeof fetch; pouch?: Pouchbase } = {}
+	) {}
+
+	async call(call: PluginCall, context: PluginCallContext = EMPTY_CALL_CONTEXT): Promise<unknown> {
+		const { manifest } = this.plugin;
+		const ctx = pluginContext(
+			manifest,
+			context,
+			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
+			{ pouch: this.options.pouch }
+		);
+
+		return withTimeout(
+			this.plugin.load().then((definition) => dispatch(definition, call, ctx)),
+			this.options.timeout ?? CALL_TIMEOUT
+		);
+	}
+
+	/**
+	 * Runs the route for `request` directly, like the Worker does: the handler gets the request
+	 * with its original URL, without the cookie and the host's own headers.
+	 */
+	async route(
+		request: Request,
+		info: PluginRouteInfo,
+		context: PluginRouteContext
+	): Promise<Response> {
+		const { manifest } = this.plugin;
+		const ctx = pluginContext(
+			manifest,
+			context,
+			restrictedFetch(manifest.permissions.network, this.options.fetch ?? fetch),
+			{ admin: context.admin, user: context.user, pouch: this.options.pouch }
+		);
+		const forwarded = new Request(request, { headers: routeRequestHeaders(request.headers) });
+
+		return withTimeout(
+			this.plugin.load().then((definition) => dispatchRoute(definition, forwarded, info.path, ctx)),
+			this.options.timeout ?? CALL_TIMEOUT
+		);
+	}
+}
+
+const descriptions = new Map<string, Promise<DescribeResult>>();
+
+/**
+ * `describe` of a built-in plugin, with its settings. Its code can't change within a build, so
+ * the answer is kept per plugin and settings.
+ */
+export function describeEmbedded(
+	plugin: EmbeddedPlugin,
+	context: PluginCallContext = EMPTY_CALL_CONTEXT
+): Promise<DescribeResult> {
+	const key = `${plugin.manifest.id}\n${JSON.stringify(context.settings)}`;
+	let description = descriptions.get(key);
+
+	if (!description) {
+		description = describePlugin(new InProcessRuntime(plugin), context);
+		description.catch(() => descriptions.delete(key));
+		descriptions.set(key, description);
+	}
+
+	return description;
+}
 
 /** Imported server modules, by plugin id, version and code, so each version is imported once. */
 const modules = new Map<string, Promise<ServerDefinition | undefined>>();

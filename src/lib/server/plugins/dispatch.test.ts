@@ -1,24 +1,27 @@
 import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
-import type { PluginRuntime } from './runtime';
+import type { PluginRuntime } from './protocol';
 
 import { resolveSettings } from '@pouchbasejs/plugin-sdk';
 import { describe, expect, it } from 'vitest';
 
-import { describeEmbedded, embeddedPlugin } from './embedded';
+import { embeddedPlugin } from './embedded';
+import { describeEmbedded } from './in-process';
 import { matchRoute } from './routes';
 import {
-	describeResultSchema,
 	dispatch,
 	dispatchRoute,
-	EMPTY_CALL_CONTEXT,
-	parseProfile,
 	PluginCallError,
 	pluginContext,
+	routeRequestHeaders
+} from './dispatch';
+import {
+	describeResultSchema,
+	EMPTY_CALL_CONTEXT,
+	parseProfile,
 	pluginUser,
 	readFieldValues,
-	routeRequestHeaders,
 	writeFieldValues
-} from './runtime';
+} from './protocol';
 
 describe('parseProfile', () => {
 	const profile = {

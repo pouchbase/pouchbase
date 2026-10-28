@@ -2,7 +2,7 @@ import type { FieldOptions, FieldTypeId } from '../../fields/field-types';
 import type { PlanStep, PlanWarning } from '../../environments/diff';
 import type { CollectionSettings } from '../../files/thumbnails';
 import type { MailStyle } from '../../mail/layout';
-import type { DescribeResult } from '../plugins/runtime';
+import type { DescribeResult } from '../plugins/protocol';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
 
 import {

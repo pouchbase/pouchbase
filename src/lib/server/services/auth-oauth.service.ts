@@ -13,7 +13,7 @@ import { queryDatabase } from '../db/query';
 import { generateRecordId } from '../crypto';
 import { oauthRequests } from '../db';
 import { authorizationUrl, exchangeCode, randomToken } from '../oauth';
-import { parseProfile } from '../plugins/runtime';
+import { parseProfile } from '../plugins/protocol';
 import { Failure, Service } from './base.service';
 import { decideSignIn, normalizeEmail } from '../auth/sign-in';
 

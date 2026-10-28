@@ -1,15 +1,14 @@
-import type { ServiceError } from './base.service';
 import type { OAuthProvider } from '#lib/auth/oauth-providers.js';
+import type { ResultAsync } from 'neverthrow';
 import type {
 	OAuthProviderCredentials,
 	OAuthProviderDetails,
 	OAuthProviderSettings,
 	ProviderJoinRow
 } from '../oauth-settings';
-import type { ResultAsync } from 'neverthrow';
+import type { ServiceError } from './base.service';
 
 import { eq } from 'drizzle-orm';
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { oauthProviders, pluginAuthProviders, plugins } from '../db';
 import { toProviderDetails, toProviderSettings } from '../oauth-settings';
@@ -28,6 +27,12 @@ export type UpdateOAuthProviderInput = {
 	clientSecret?: string;
 };
 
+export type OAuthProvidersError =
+	| ServiceError<10000, 'OAUTH_PROVIDERS_FAILED'>
+	/** The provider can't be switched on without a client id and secret. */
+	| ServiceError<10003, 'PROVIDER_INCOMPLETE'>
+	| ServiceError<10004, 'PROVIDER_NOT_FOUND'>;
+
 /**
  * The OAuth providers app users can sign in with, and their client id and secret. Every provider
  * comes from a plugin: `plugin_auth_providers` (kept up to date by `PluginsService`) says which
@@ -42,18 +47,18 @@ const JOIN_COLUMNS = {
 	installedVersion: plugins.version
 };
 
-type ListFailed = ServiceError<10000, 'LIST_PROVIDERS_FAILED'>;
-
-type GetFailed = ServiceError<10001, 'GET_PROVIDER_FAILED'>;
-
 export class OAuthProvidersService extends Service {
+	private readonly failed = (error: unknown) => this.error(10000, 'OAUTH_PROVIDERS_FAILED', error);
+
 	/** Every provider an installed or built-in plugin contributes, with its settings, by label. */
-	list(): ResultAsync<OAuthProviderSettings[], ListFailed> {
-		return this.sync()
-			.andThen(() =>
-				fromPromise(this.joined(), (error) => this.error(10000, 'LIST_PROVIDERS_FAILED', error))
-			)
-			.map((rows) => rows.map(toProviderSettings).sort((a, b) => a.label.localeCompare(b.label)));
+	list(): ResultAsync<OAuthProviderSettings[], OAuthProvidersError> {
+		return this.run(async () => {
+			await this.sync();
+
+			const rows = await this.joined();
+
+			return rows.map(toProviderSettings).sort((a, b) => a.label.localeCompare(b.label));
+		}, this.failed);
 	}
 
 	/**
@@ -62,51 +67,48 @@ export class OAuthProvidersService extends Service {
 	 */
 	labels(): ResultAsync<
 		Map<OAuthProvider, Pick<OAuthProviderSettings, 'label' | 'iconUrl'>>,
-		ListFailed
+		OAuthProvidersError
 	> {
-		return fromPromise(this.joined(), (error) =>
-			this.error(10000, 'LIST_PROVIDERS_FAILED', error)
-		).map(
-			(rows) =>
-				new Map(
-					rows.map((row) => {
-						const { label, iconUrl } = toProviderSettings(row);
+		return this.run(async () => {
+			const rows = await this.joined();
 
-						return [row.provider.provider, { label, iconUrl }];
-					})
-				)
-		);
+			return new Map(
+				rows.map((row) => {
+					const { label, iconUrl } = toProviderSettings(row);
+
+					return [row.provider.provider, { label, iconUrl }];
+				})
+			);
+		}, this.failed);
 	}
 
 	/** A provider with its OAuth config and credentials; `null` when no plugin contributes it. */
-	find(provider: OAuthProvider): ResultAsync<OAuthProviderDetails | null, GetFailed> {
-		return this.sync()
-			.andThen(() =>
-				fromPromise(this.joined(provider), (error) =>
-					this.error(10001, 'GET_PROVIDER_FAILED', error)
-				)
-			)
-			.map(([row]) => (row ? toProviderDetails(row) : null));
+	find(provider: OAuthProvider): ResultAsync<OAuthProviderDetails | null, OAuthProvidersError> {
+		return this.run(async () => {
+			await this.sync();
+
+			const [row] = await this.joined(provider);
+
+			return row ? toProviderDetails(row) : null;
+		}, this.failed);
 	}
 
 	/** The stored credentials; `null` when no plugin contributes the provider. */
-	credentials(provider: OAuthProvider): ResultAsync<OAuthProviderCredentials | null, GetFailed> {
+	credentials(
+		provider: OAuthProvider
+	): ResultAsync<OAuthProviderCredentials | null, OAuthProvidersError> {
 		return this.find(provider).map((details) => details?.credentials ?? null);
 	}
 
 	update(
 		provider: OAuthProvider,
 		input: UpdateOAuthProviderInput
-	): ResultAsync<
-		void,
-		| GetFailed
-		| ServiceError<10002, 'UPDATE_PROVIDER_FAILED'>
-		| ServiceError<10003, 'PROVIDER_INCOMPLETE'>
-		| ServiceError<10004, 'PROVIDER_NOT_FOUND'>
-	> {
-		return this.credentials(provider).andThen((current) => {
+	): ResultAsync<void, OAuthProvidersError> {
+		return this.run(async () => {
+			const current = await this.must(this.credentials(provider));
+
 			if (!current) {
-				return errAsync(this.error(10004, 'PROVIDER_NOT_FOUND'));
+				this.fail(10004, 'PROVIDER_NOT_FOUND');
 			}
 
 			const clientId = input.clientId.trim();
@@ -114,34 +116,28 @@ export class OAuthProvidersService extends Service {
 
 			// A provider can only be switched on once it can actually be used.
 			if (input.enabled && (!clientId || !clientSecret)) {
-				return errAsync(this.error(10003, 'PROVIDER_INCOMPLETE'));
+				this.fail(10003, 'PROVIDER_INCOMPLETE');
 			}
 
 			const values = { enabled: input.enabled, clientId, clientSecret, updatedAt: new Date() };
 
-			return fromPromise(
-				this.db
-					.insert(oauthProviders)
-					.values({ provider, ...values })
-					.onConflictDoUpdate({ target: oauthProviders.provider, set: values }),
-				(error) => this.error(10002, 'UPDATE_PROVIDER_FAILED', error)
-			).map(() => undefined);
-		});
+			await this.db
+				.insert(oauthProviders)
+				.values({ provider, ...values })
+				.onConflictDoUpdate({ target: oauthProviders.provider, set: values });
+		}, this.failed);
 	}
 
 	/**
 	 * Registers the providers of the built-in plugins before they are read. A failure is logged and
 	 * the providers registered before are used.
 	 */
-	private sync(): ResultAsync<void, never> {
-		return this.services
-			.plugins()
-			.ensureEmbedded()
-			.orElse((failure) => {
-				console.error('[oauth] Could not register the built-in sign-in providers', failure);
+	private async sync() {
+		const synced = await this.services.plugins().ensureEmbedded();
 
-				return okAsync(undefined);
-			});
+		if (synced.isErr()) {
+			console.error('[oauth] Could not register the built-in sign-in providers', synced.error);
+		}
 	}
 
 	/** `plugin_auth_providers` ⟕ `oauth_providers` ⟕ `plugins`, optionally for one provider. */

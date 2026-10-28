@@ -8,7 +8,7 @@ import {
 	deliverRouteResponse,
 	ROUTE_CORS_HEADERS
 } from '#lib/server/plugins/requests.js';
-import { pluginUser } from '#lib/server/plugins/runtime.js';
+import { pluginUser } from '#lib/server/plugins/protocol.js';
 import { API_KEY_PREFIX } from '#lib/server/services/api-keys.service.js';
 
 /**

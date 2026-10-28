@@ -1,4 +1,4 @@
-import type { FieldHandlerInfo, FieldReadItem, FieldWriteItem, FieldWriteResult } from './runtime';
+import type { FieldHandlerInfo, FieldReadItem, FieldWriteItem, FieldWriteResult } from './protocol';
 import type { FieldValue } from '@pouchbasejs/plugin-sdk/server';
 
 /**
