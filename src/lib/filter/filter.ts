@@ -25,7 +25,7 @@ import { FILTER_FUNCTIONS, functionSignature, isFilterFunction, normalizeUnit } 
  *   end of the line. The words are uppercase, so they never look like field names.
  *
  * Shared between the client (validating rules in forms) and the server, which compiles the parsed
- * expression to SQL (`src/lib/server/filter.ts`).
+ * expression to SQL (`src/lib/server/filter/compile.ts`).
  */
 
 export const COMPARE_OPERATORS = ['==', '!=', '>', '>=', '<', '<='] as const;

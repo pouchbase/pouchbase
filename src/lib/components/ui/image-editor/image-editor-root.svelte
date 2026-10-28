@@ -1,6 +1,6 @@
 <script module lang="ts">
 	import type { z } from 'zod';
-	import type { imageEditsSchema } from '#lib/schemas/collection-settings.js';
+	import type { imageEditsSchema } from '#lib/schemas/images.js';
 
 	/** What `save` gets: the file and the edits to apply to it. */
 	export type ImageEditRequest = z.input<typeof imageEditsSchema>;

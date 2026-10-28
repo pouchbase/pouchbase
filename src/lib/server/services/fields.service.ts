@@ -27,20 +27,19 @@ import {
 	fillComputedColumns,
 	type ComputedSpec
 } from '../computed';
-import { isUniqueViolation, queryDatabase } from '../db/query';
+import { isUniqueViolation } from '../db/query';
 import { collections, fields } from '../db';
 import { planFieldChanges } from '../fields/changes';
 import {
 	addColumn,
+	changeColumn,
 	checkDefaultExpression,
-	columnSql,
+	checkNarrowing,
 	createUniqueIndex,
 	DefaultExpressionError,
 	dropUniqueIndex,
 	fieldInput,
 	fieldsOf,
-	keptColumn,
-	rebuildTable,
 	removeColumn,
 	renameColumn,
 	renameColumns
@@ -48,8 +47,6 @@ import {
 import { pluginSnapshot } from '../fields/plugin-snapshot';
 import { readableColumns } from '../records/values';
 import { Service } from './base.service';
-
-export { uniqueIndexName } from '../fields/ddl';
 
 export type Field = typeof fields.$inferSelect;
 
@@ -395,72 +392,21 @@ export class FieldsService extends Service {
 				options: settings.options,
 				defaultValue: settings.defaultValue ?? null
 			};
-			const wasMultiple = isMultiple(field);
-			const multiple = isMultiple(next);
 
 			// A JSON array can't meaningfully be unique (see `create`).
-			if (multiple && field.unique) {
+			if (isMultiple(next) && field.unique) {
 				this.fail(7024, 'UNIQUE_MULTIPLE');
 			}
 
-			const removedItems =
-				field.type === 'list'
-					? (field.options.values ?? []).filter((item) => !next.options.values?.includes(item))
-					: [];
 			const { id: databaseId } = await this.must(this.services.database().requireApp());
-			const table = `"${collection.name}"`;
-			const column = `"${field.name}"`;
 
-			if (wasMultiple && !multiple) {
-				const [crowded] = await queryDatabase(
-					databaseId,
-					`SELECT 1 FROM ${table} WHERE json_array_length(${column}) > 1 LIMIT 1`
-				);
-
-				if (crowded) {
-					this.fail(7025, 'MULTIPLE_VALUES_IN_USE');
-				}
-			}
-
-			if (removedItems.length) {
-				const placeholders = removedItems.map(() => '?').join(', ');
-				const used = await queryDatabase(
-					databaseId,
-					wasMultiple
-						? `SELECT DISTINCT "item"."value" FROM ${table}, json_each(${table}.${column}) AS "item" WHERE "item"."value" IN (${placeholders})`
-						: `SELECT DISTINCT ${column} FROM ${table} WHERE ${column} IN (${placeholders})`,
-					removedItems
-				);
-
-				if (used.length) {
-					this.fail(7026, 'LIST_ITEMS_IN_USE', {
-						data: { items: used.map(([item]) => String(item)) }
-					});
-				}
-			}
+			await checkNarrowing(databaseId, collection.name, field, next);
 
 			if (next.options.defaultSql) {
 				await checkDefaultExpression(databaseId, fieldInput(next));
 			}
 
-			if (columnSql(fieldInput(field)) !== columnSql(fieldInput(next))) {
-				const source =
-					multiple && !wasMultiple
-						? `CASE WHEN ${column} IS NULL THEN NULL ELSE json_array(${column}) END`
-						: wasMultiple && !multiple
-							? `json_extract(${column}, '$[0]')`
-							: column;
-
-				await rebuildTable(
-					databaseId,
-					collection.name,
-					collectionFields.map((other) =>
-						other.id === field.id
-							? { definition: columnSql(fieldInput(next)), name: other.name, source }
-							: keptColumn(other)
-					)
-				);
-			}
+			await changeColumn(databaseId, collection.name, collectionFields, field, next);
 
 			const [updated] = await this.db
 				.update(fields)

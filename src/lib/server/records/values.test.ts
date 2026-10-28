@@ -4,7 +4,6 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	autoFields,
-	chunks,
 	decodeValue,
 	keyParams,
 	parseIds,
@@ -143,9 +142,8 @@ describe('rows', () => {
 		);
 	});
 
-	it('binds rowid keys as integers and chunks ids', () => {
+	it('binds rowid keys as integers', () => {
 		expect(keyParams('rowid', ['1', 'x', '2'])).toEqual([1, 2]);
 		expect(keyParams('id', ['1', 'x'])).toEqual(['1', 'x']);
-		expect(chunks([1, 2, 3, 4, 5], 2)).toEqual([[1, 2], [3, 4], [5]]);
 	});
 });

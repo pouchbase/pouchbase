@@ -79,7 +79,7 @@ export function protectedWrites(
  * none without `access` (admins, and API rules, which the admin wrote), `null` when the API
  * doesn't show them to `access`, and otherwise its view rule, as for `?include=`.
  */
-export function relatedViewRule(collection: Collection, access: ApiAccess | undefined) {
+function relatedViewRule(collection: Collection, access: ApiAccess | undefined) {
 	if (!access) {
 		return undefined;
 	}

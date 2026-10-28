@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { fieldTypeInfo, isOrphaned } from './field-type-info';
+import { fieldTypeInfo } from './field-type-info';
 
 const rating = {
 	id: 'demo:rating',
@@ -75,8 +75,8 @@ describe('fieldTypeInfo', () => {
 			plugin: { id: 'demo', type: 'rating', name: null },
 			orphaned: true
 		});
-		expect(isOrphaned(field, [])).toBe(true);
-		expect(isOrphaned(field, [rating])).toBe(false);
+		expect(fieldTypeInfo(field, []).orphaned).toBe(true);
+		expect(fieldTypeInfo(field, [rating]).orphaned).toBe(false);
 	});
 
 	it('is never orphaned when the installed types are not known', () => {

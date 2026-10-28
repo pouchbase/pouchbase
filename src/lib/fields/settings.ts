@@ -20,7 +20,7 @@ import { FIELD_TYPES, isAutoType, isPluginFieldType, NOW_DEFAULT } from './types
  *
  * @returns An error message, or `null` when the value is valid.
  */
-export function validateDefaultValue(type: FieldTypeId, value: string): string | null {
+function validateDefaultValue(type: FieldTypeId, value: string): string | null {
 	// A plugin checks the default values of its types itself, when the field is saved.
 	if (isPluginFieldType(type)) {
 		return null;
@@ -62,14 +62,14 @@ export function validateDefaultValue(type: FieldTypeId, value: string): string |
 }
 
 /** Valid `accept` rules, and `maxSize` only when it is below the global upload limit. */
-export function fileOptions(options: FieldOptions): FieldOptions {
+function fileOptions(options: FieldOptions): FieldOptions {
 	const { accept, maxSize } = fileFieldRules(options);
 
 	return maxSize < MAX_FILE_SIZE ? { accept, maxSize } : { accept };
 }
 
 /** What is wrong with a field's settings: which setting, and a message for the form. */
-export type FieldSettingsIssue = {
+type FieldSettingsIssue = {
 	kind: 'generator' | 'list' | 'default' | 'expression';
 	message: string;
 };

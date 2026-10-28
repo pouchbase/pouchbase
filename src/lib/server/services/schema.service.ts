@@ -118,14 +118,19 @@ export class SchemaService extends Service {
 
 	/** One collection as `schemas` has them; `null` when it doesn't exist. */
 	schema(name: string): ResultAsync<SnapshotCollection | null, SchemaError> {
-		return this.schemas().map(
-			(schemas) => schemas.find((collection) => collection.name === name) ?? null
-		);
+		return this.run(async () => {
+			const schemas = await this.must(this.schemas());
+
+			return schemas.find((collection) => collection.name === name) ?? null;
+		}, this.failed);
 	}
 
 	/** An export file of every collection, or of the ones in `names`. */
 	export(names?: string[]): ResultAsync<CollectionExport, SchemaError> {
-		return this.schemas().map((schemas) => exportCollections(schemas, names));
+		return this.run(
+			async () => exportCollections(await this.must(this.schemas()), names),
+			this.failed
+		);
 	}
 
 	/**

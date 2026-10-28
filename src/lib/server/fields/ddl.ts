@@ -16,6 +16,7 @@ import { sqlDefaultSelect } from '#lib/fields/sql-expression.js';
 import { fillComputedColumns } from '../computed';
 import { generateId } from '../crypto';
 import { queryDatabase, tableExists } from '../db/query';
+import { Failure } from '../failure';
 import { db, fields } from '../db';
 
 /**
@@ -32,7 +33,7 @@ function quote(value: string) {
 }
 
 /** SQL literal for a (validated) default value. */
-export function defaultLiteral(type: FieldTypeId, value: string) {
+function defaultLiteral(type: FieldTypeId, value: string) {
 	switch (type) {
 		case 'number':
 			return String(Number(value));
@@ -114,7 +115,7 @@ export function keptColumn(field: Field) {
 }
 
 /** SQLite refused to add a column because the table already has it. */
-export function isDuplicateColumn(error: unknown) {
+function isDuplicateColumn(error: unknown) {
 	const message = error instanceof Error ? error.message : String(error);
 
 	return message.includes('duplicate column name');
@@ -445,4 +446,87 @@ export async function renameColumns(
 			plan.name
 		);
 	}
+}
+
+/**
+ * Refuses settings of a field that would lose data: turning "multiple" off while records hold
+ * more than one value, and removing list items that records use.
+ */
+export async function checkNarrowing(databaseId: string, table: string, field: Field, next: Field) {
+	const wasMultiple = isMultiple(field);
+	const column = `"${field.name}"`;
+
+	if (wasMultiple && !isMultiple(next)) {
+		const [crowded] = await queryDatabase(
+			databaseId,
+			`SELECT 1 FROM "${table}" WHERE json_array_length(${column}) > 1 LIMIT 1`
+		);
+
+		if (crowded) {
+			throw new Failure({ code: 7025, message: 'MULTIPLE_VALUES_IN_USE' });
+		}
+	}
+
+	const removedItems =
+		field.type === 'list'
+			? (field.options.values ?? []).filter((item) => !next.options.values?.includes(item))
+			: [];
+
+	if (!removedItems.length) {
+		return;
+	}
+
+	const placeholders = removedItems.map(() => '?').join(', ');
+	const used = await queryDatabase(
+		databaseId,
+		wasMultiple
+			? `SELECT DISTINCT "item"."value" FROM "${table}", json_each("${table}".${column}) AS "item" WHERE "item"."value" IN (${placeholders})`
+			: `SELECT DISTINCT ${column} FROM "${table}" WHERE ${column} IN (${placeholders})`,
+		removedItems
+	);
+
+	if (used.length) {
+		throw new Failure({
+			code: 7026,
+			message: 'LIST_ITEMS_IN_USE',
+			data: { items: used.map(([item]) => String(item)) }
+		});
+	}
+}
+
+/**
+ * Rebuilds the table when the field's column definition (its DEFAULT or CHECK) changes; records
+ * keep their data. A single value becomes a one-item array when "multiple" is turned on, and the
+ * first item stays when it is turned off (see `checkNarrowing`).
+ */
+export async function changeColumn(
+	databaseId: string,
+	table: string,
+	collectionFields: Field[],
+	field: Field,
+	next: Field
+) {
+	if (columnSql(fieldInput(field)) === columnSql(fieldInput(next))) {
+		return;
+	}
+
+	const column = `"${field.name}"`;
+	const wasMultiple = isMultiple(field);
+	const multiple = isMultiple(next);
+	const source =
+		multiple && !wasMultiple
+			? `CASE WHEN ${column} IS NULL THEN NULL ELSE json_array(${column}) END`
+			: wasMultiple && !multiple
+				? `json_extract(${column}, '$[0]')`
+				: column;
+
+	await rebuildTable(
+		databaseId,
+		table,
+		collectionFields.map((other) =>
+			other.id === field.id
+				? { definition: columnSql(fieldInput(next)), name: other.name, source }
+				: keptColumn(other)
+		)
+	);
 }

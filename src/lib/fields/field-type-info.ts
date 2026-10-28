@@ -93,8 +93,3 @@ export function fieldTypeInfo(
 		orphaned
 	};
 }
-
-/** Whether a field's type is a plugin's type that isn't installed (see `fieldTypeInfo`). */
-export function isOrphaned(field: FieldLike, pluginTypes: readonly PluginFieldTypeLike[]) {
-	return fieldTypeInfo(field, pluginTypes).orphaned;
-}

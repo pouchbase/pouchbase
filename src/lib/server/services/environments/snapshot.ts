@@ -14,7 +14,7 @@ import {
 import { collections, db, fields, functions, functionVersions, plugins } from '../../db';
 import { queryDatabase } from '../../db/query';
 import { unwrap } from '../base.service';
-import { uniqueIndexName } from '../fields.service';
+import { uniqueIndexName } from '../../fields/ddl';
 
 /** Reads the snapshot of this instance: the schema and configuration another instance can apply. */
 

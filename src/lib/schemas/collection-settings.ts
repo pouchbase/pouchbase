@@ -6,8 +6,6 @@ import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 
 import { ruleSyntaxIssue } from './collections';
 
-export { imageEditsSchema } from './images';
-
 export const thumbnailSettingsSchema = z
 	.object({
 		/** Collection name, sent as a hidden field. */

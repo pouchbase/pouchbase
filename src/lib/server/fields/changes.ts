@@ -10,7 +10,7 @@ import { Failure } from '../failure';
  */
 
 /** A field as it will be after the save. */
-export type PlannedField = {
+type PlannedField = {
 	field: Field;
 	name: string;
 	required: boolean;

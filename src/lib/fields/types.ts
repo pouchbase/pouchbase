@@ -169,7 +169,7 @@ export function isPluginFieldType(type: string): type is PluginFieldTypeId {
  * A collection has at most one `id` field; without one, records are identified by SQLite's `rowid`
  * and relation fields can't point to it.
  */
-export const AUTO_FIELD_TYPES = new Set<FieldType>(['id', 'created', 'updated']);
+const AUTO_FIELD_TYPES = new Set<FieldType>(['id', 'created', 'updated']);
 
 export function isAutoType(type: FieldTypeId) {
 	return AUTO_FIELD_TYPES.has(type as FieldType);

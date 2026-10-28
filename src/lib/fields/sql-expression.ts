@@ -23,9 +23,9 @@ export const SQL_DEFAULT_TYPES = new Set<FieldTypeId>([
 ]);
 
 /** Longest expression, in characters. */
-export const MAX_SQL_EXPRESSION_LENGTH = 500;
+const MAX_SQL_EXPRESSION_LENGTH = 500;
 
-export type SqlFunction = {
+type SqlFunction = {
 	/** How it is called, e.g. `datetime(time, ...modifiers)`. */
 	signature: string;
 	description: string;

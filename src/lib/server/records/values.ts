@@ -213,13 +213,6 @@ export function keyParams(key: string, ids: string[]) {
 	return key === 'rowid' ? ids.map(Number).filter(Number.isSafeInteger) : ids;
 }
 
-/** `items` in chunks of at most `size`, e.g. to stay within `MAX_IDS` bound parameters. */
-export function chunks<T>(items: T[], size: number) {
-	return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-		items.slice(index * size, (index + 1) * size)
-	);
-}
-
 /** `?, ?, ?` for these parameters. */
 export function placeholders(params: unknown[]) {
 	return params.map(() => '?').join(', ');

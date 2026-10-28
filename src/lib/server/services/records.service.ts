@@ -3,9 +3,10 @@ import type { SignInMethod } from '#lib/auth/sign-in-methods.js';
 import type { FieldOptions } from '#lib/fields/field-types.js';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
 import type { RealtimeAction } from '#lib/realtime/protocol.js';
-import type { FilterContext, SqlCondition } from '../filter';
+import type { FilterContext } from '../filter';
 import type { ApiAccess } from '../records/access';
 import type { IncludeHost } from '../records/include';
+import type { ApiQuery, ApiQueryParam } from '../records/rules';
 import type { ComputedPreview } from '../records/write';
 import type {
 	ApiRecord,
@@ -20,29 +21,18 @@ import type { CollectionLookupError } from './collections.service';
 import type { Field } from './fields.service';
 import type { ContextError, ServiceError } from './base.service';
 
-import { okAsync } from 'neverthrow';
-
 import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { NOW_DEFAULT } from '#lib/fields/field-types.js';
 import { fileFieldRules } from '#lib/files/accept.js';
 import { FILES_COLLECTION } from '#lib/files/files.js';
-import { FilterError } from '#lib/filter/filter.js';
-import { apiActions } from '#lib/filter/rules.js';
 
 import { computedSpecs, fillComputedColumns } from '../computed';
 import { batchDatabase, queryDatabase, uniqueViolation } from '../db/query';
 import { reasonOf } from '../errors';
-import { ALWAYS, both, compileFilter, compileOrder, compileRule, usesRelations } from '../filter';
+import { ALWAYS } from '../filter';
 import { generateId } from '../crypto';
 import { inBackground } from '../platform/runtime';
-import { pluginMay } from '../plugins/grant';
-import {
-	accessUser,
-	checkUserFields,
-	protectedWrites,
-	relatedCollections,
-	visibleFields
-} from '../records/access';
+import { visibleFields } from '../records/access';
 import {
 	allRelations,
 	CascadeTooLargeFailure,
@@ -60,6 +50,7 @@ import { deserialize } from '../records/plugin-values';
 import { includeRelated } from '../records/include';
 import { includeTree, selectFields, withIncluded } from '../records/query';
 import { relationTarget } from '../records/relations';
+import { compileQuery, filterRelations, guard, queryParam } from '../records/rules';
 import {
 	apiFields,
 	autoFields,
@@ -73,7 +64,6 @@ import {
 import {
 	computeValues,
 	fillSqlDefaults,
-	invalidRecord,
 	previewComputed,
 	readStoredRecord,
 	validateInput
@@ -135,17 +125,6 @@ export type ApiRecordList = {
 	total: number;
 	limit: number;
 	offset: number;
-};
-
-/** The query parameters of the records API that `INVALID_QUERY` can be about. */
-type ApiQueryParam = 'where' | 'order' | 'select' | 'include';
-
-/** A query of the records API: what `apiList` takes besides the page. */
-type ApiQuery = {
-	where?: string | null;
-	order?: string | null;
-	select?: string[] | null;
-	include?: string[] | null;
 };
 
 /** Every error of the records service; callers branch on the codes they handle. */
@@ -249,7 +228,7 @@ export class RecordsService extends Service {
 			const context = await this.context(collectionName);
 			const { collection, fields: collectionFields, databaseId } = context;
 			const { key, created } = autoFields(collectionFields);
-			const rule = await this.guard(context, 'list', access);
+			const rule = await guard(this.host, context, 'list', access);
 			const empty = { items: [], total: 0, limit: options.limit, offset: options.offset };
 
 			// Without fields the collection has no table yet.
@@ -257,7 +236,8 @@ export class RecordsService extends Service {
 				return empty;
 			}
 
-			const { where, sort, tree, selected } = await this.compileQuery(
+			const { where, sort, tree, selected } = await compileQuery(
+				this.host,
 				context,
 				rule,
 				options,
@@ -281,7 +261,7 @@ export class RecordsService extends Service {
 			const items = rows.map((row) => toApiRecord(selected, row));
 
 			await deserialize(this.services.plugins(), collectionFields, items);
-			await includeRelated(this.includeHost, collectionFields, items, tree, access);
+			await includeRelated(this.host, collectionFields, items, tree, access);
 
 			return { ...empty, items, total: Number(total?.[0] ?? 0) };
 		}, this.failed);
@@ -358,10 +338,10 @@ export class RecordsService extends Service {
 	): ResultAsync<void, RecordsError> {
 		return this.run(async () => {
 			const context = await this.context(collectionName);
-			const rule = await this.guard(context, 'view', access);
-			const { tree } = await this.compileQuery(context, rule, query, access);
+			const rule = await guard(this.host, context, 'view', access);
+			const { tree } = await compileQuery(this.host, context, rule, query, access);
 
-			await includeRelated(this.includeHost, context.fields, [], tree, access);
+			await includeRelated(this.host, context.fields, [], tree, access);
 		}, this.failed);
 	}
 
@@ -378,11 +358,11 @@ export class RecordsService extends Service {
 	): ResultAsync<void, RecordsError> {
 		return this.run(async () => {
 			const { fields: collectionFields } = await this.context(collectionName);
-			const tree = this.query('include', () =>
+			const tree = queryParam('include', () =>
 				includeTree(visibleFields(collectionFields, access), expand)
 			);
 
-			await includeRelated(this.includeHost, collectionFields, records, tree, access);
+			await includeRelated(this.host, collectionFields, records, tree, access);
 		}, this.failed);
 	}
 
@@ -450,7 +430,7 @@ export class RecordsService extends Service {
 			async () => {
 				const context = await this.context(collectionName);
 				const { collection, fields: collectionFields, databaseId } = context;
-				const condition = await this.guard(context, 'create', options.access, input);
+				const condition = await guard(this.host, context, 'create', options.access, input);
 
 				if (!collectionFields.length) {
 					this.fail(8012, 'NO_FIELDS');
@@ -552,7 +532,7 @@ export class RecordsService extends Service {
 			async () => {
 				const context = await this.context(collectionName);
 				const { collection, fields: collectionFields, databaseId } = context;
-				const condition = await this.guard(context, 'update', options.access, input);
+				const condition = await guard(this.host, context, 'update', options.access, input);
 
 				if (!collectionFields.length) {
 					this.fail(8003, 'RECORD_NOT_FOUND');
@@ -629,17 +609,17 @@ export class RecordsService extends Service {
 		ids: string[],
 		options: { access?: ApiAccess } = {}
 	): ResultAsync<{ deleted: number }, RecordsError> {
-		const unique = [...new Set(ids)].slice(0, MAX_IDS);
-
-		if (!unique.length) {
-			return okAsync({ deleted: 0 });
-		}
-
 		return this.run(
 			async () => {
+				const unique = [...new Set(ids)].slice(0, MAX_IDS);
+
+				if (!unique.length) {
+					return { deleted: 0 };
+				}
+
 				const context = await this.context(collectionName);
 				const { collection, fields: collectionFields, databaseId } = context;
-				const condition = await this.guard(context, 'delete', options.access);
+				const condition = await guard(this.host, context, 'delete', options.access);
 				const { key } = autoFields(collectionFields);
 				const params = keyParams(key, unique);
 
@@ -770,38 +750,39 @@ export class RecordsService extends Service {
 
 	/**
 	 * Sends the realtime events of records that another service wrote directly, such as sign-ups
-	 * and uploads. Best effort: it never fails, so callers run it with `inBackground()`.
+	 * and uploads. Best effort: it never fails (a problem is logged), so callers run it with
+	 * `inBackground()`.
 	 */
 	announceStored(
 		collectionName: string,
 		action: 'create' | 'update',
 		ids: string[]
-	): ResultAsync<void, never> {
+	): ResultAsync<void, RecordsError> {
 		return this.run(async () => {
-			const {
-				collection,
-				fields: collectionFields,
-				databaseId
-			} = await this.context(collectionName);
-			const { key } = autoFields(collectionFields);
-			const params = keyParams(key, ids);
+			try {
+				const {
+					collection,
+					fields: collectionFields,
+					databaseId
+				} = await this.context(collectionName);
+				const { key } = autoFields(collectionFields);
+				const params = keyParams(key, ids);
 
-			if (!collectionFields.length || !params.length) {
-				return;
+				if (!collectionFields.length || !params.length) {
+					return;
+				}
+
+				const rows = await queryDatabase(
+					databaseId,
+					`SELECT ${returning(key, collectionFields)} FROM "${collection.name}" WHERE "${key}" IN (${placeholders(params)})`,
+					params
+				);
+
+				this.announce(collection.name, action, collectionFields, rows);
+			} catch (error) {
+				console.error('[realtime] could not read the changed records', error);
 			}
-
-			const rows = await queryDatabase(
-				databaseId,
-				`SELECT ${returning(key, collectionFields)} FROM "${collection.name}" WHERE "${key}" IN (${placeholders(params)})`,
-				params
-			);
-
-			this.announce(collection.name, action, collectionFields, rows);
-		}, this.failed).orElse((failure) => {
-			console.error('[realtime] could not read the changed records', failure);
-
-			return okAsync(undefined);
-		});
+		}, this.failed);
 	}
 
 	/**
@@ -814,7 +795,7 @@ export class RecordsService extends Service {
 		access?: ApiAccess
 	): ResultAsync<FilterContext['relations'], ServiceError<6000, 'COLLECTIONS_FAILED'>> {
 		return this.run(
-			() => this.relationsFor(texts, access),
+			() => filterRelations(this.host, texts, access),
 			(error) => this.error(6000, 'COLLECTIONS_FAILED', error)
 		);
 	}
@@ -870,7 +851,7 @@ export class RecordsService extends Service {
 		}: ApiReadOptions & { access?: ApiAccess; checkRule?: boolean }
 	): Promise<ApiRecord | null> {
 		const { collection, fields: collectionFields, databaseId } = context;
-		const rule = checkRule ? await this.guard(context, 'view', access) : ALWAYS;
+		const rule = checkRule ? await guard(this.host, context, 'view', access) : ALWAYS;
 		const readable = visibleFields(collectionFields, access);
 		const { key } = autoFields(collectionFields);
 
@@ -878,8 +859,8 @@ export class RecordsService extends Service {
 			return null;
 		}
 
-		const tree = this.query('include', () => includeTree(readable, include));
-		const selected = this.query('select', () => selectFields(readable, withIncluded(select, tree)));
+		const tree = queryParam('include', () => includeTree(readable, include));
+		const selected = queryParam('select', () => selectFields(readable, withIncluded(select, tree)));
 		const [row] = await queryDatabase(
 			databaseId,
 			`SELECT ${selected.map((field) => `"${field.name}"`).join(', ')} FROM "${collection.name}" WHERE "${key}" = ? AND (${rule.sql})`,
@@ -893,7 +874,7 @@ export class RecordsService extends Service {
 		const record = toApiRecord(selected, row);
 
 		await deserialize(this.services.plugins(), collectionFields, [record]);
-		await includeRelated(this.includeHost, collectionFields, [record], tree, access);
+		await includeRelated(this.host, collectionFields, [record], tree, access);
 
 		return record;
 	}
@@ -917,155 +898,11 @@ export class RecordsService extends Service {
 		return record ?? this.fail(8003, 'RECORD_NOT_FOUND');
 	}
 
-	/**
-	 * The parts of a query of the records API: the condition (the rule and `where`), the
-	 * `ORDER BY` terms, the include tree and the fields to select, for what `access` may read.
-	 */
-	private async compileQuery(
-		context: RecordContext,
-		rule: SqlCondition,
-		query: ApiQuery,
-		access: ApiAccess | undefined
-	) {
-		const { collection, fields: collectionFields } = context;
-		const readable = visibleFields(collectionFields, access);
-		const relations = await this.relationsFor([query.where], access);
-		const userFields = await this.userFieldsOf(query.where, access);
-		const where = this.query('where', () => {
-			if (userFields) {
-				checkUserFields(query.where, userFields);
-			}
-
-			return query.where?.trim()
-				? both(
-						rule,
-						compileFilter(query.where, readable, {
-							user: accessUser(access),
-							table: collection.name,
-							relations
-						})
-					)
-				: rule;
-		});
-		const sort = this.query('order', () => compileOrder(query.order ?? '', readable));
-		const tree = this.query('include', () => includeTree(readable, query.include ?? undefined));
-		const selected = this.query('select', () =>
-			selectFields(readable, withIncluded(query.select ?? undefined, tree))
-		);
-
-		return { where, sort, tree, selected };
-	}
-
-	/** Runs `compile` for a query parameter; a `FilterError` becomes an `INVALID_QUERY`. */
-	private query<T>(param: ApiQueryParam, compile: () => T): T {
-		try {
-			return compile();
-		} catch (error) {
-			return this.fail(8015, 'INVALID_QUERY', {
-				data: {
-					param,
-					message: error instanceof FilterError ? error.message : `Invalid ${param}`
-				}
-			});
-		}
-	}
-
-	/**
-	 * The SQL condition of the collection's API rule for `action`, for a request with `access`;
-	 * without `access` (the dashboard), every record. Fails when the API doesn't offer the action
-	 * for this collection, when the rule is locked or invalid, or when `input` writes a protected
-	 * field.
-	 */
-	private async guard(
-		context: RecordContext,
-		action: ApiRuleAction,
-		access: ApiAccess | undefined,
-		input?: RecordInput
-	): Promise<SqlCondition> {
-		const { collection, fields: collectionFields } = context;
-
-		if (!access) {
-			return ALWAYS;
-		}
-
-		if (!apiActions(collection).includes(action)) {
-			this.fail(8013, 'ACTION_NOT_AVAILABLE');
-		}
-
-		if ('plugin' in access && !pluginMay(access.plugin, action, collection.name)) {
-			this.fail(8014, 'RULE_LOCKED');
-		}
-
-		const written = protectedWrites(collection, collectionFields, access, input);
-
-		if (written.length) {
-			throw invalidRecord(
-				Object.fromEntries(
-					written.map((name) => [name, "Can't be changed through the records API"])
-				)
-			);
-		}
-
-		if ('plugin' in access) {
-			return ALWAYS;
-		}
-
-		const rule = collection.settings.rules?.[action];
-		// The rule's own paths through relations see every related record.
-		const relations = await this.relationsFor([rule], undefined);
-		let condition: SqlCondition | null;
-
-		try {
-			condition = compileRule(rule, apiFields(collectionFields), {
-				user: access.user,
-				input,
-				table: collection.name,
-				relations
-			});
-		} catch (error) {
-			return this.fail(8016, 'INVALID_RULE', {
-				data: { action, message: error instanceof Error ? error.message : String(error) }
-			});
-		}
-
-		return condition ?? this.fail(8014, 'RULE_LOCKED');
-	}
-
-	/** See `filterRelations()`. */
-	private async relationsFor(
-		texts: (string | null | undefined)[],
-		access: ApiAccess | undefined
-	): Promise<FilterContext['relations']> {
-		if (!usesRelations(texts)) {
-			return undefined;
-		}
-
-		const all = await this.must(this.services.collections().listWithFields());
-
-		return relatedCollections(all, access);
-	}
-
-	/**
-	 * The fields of `users` that `access` may read through `$user` in a condition of its own, when
-	 * `text` uses `$user` and `access` is an app user; `null` otherwise (nothing to check).
-	 */
-	private async userFieldsOf(text: string | null | undefined, access: ApiAccess | undefined) {
-		if (!access || !('user' in access) || !text?.includes('$user.')) {
-			return null;
-		}
-
-		const { fields: userFields } = await this.context(USERS_COLLECTION);
-
-		return visibleFields(userFields, access);
-	}
-
-	/** What `includeRelated()` needs from this service. */
-	private get includeHost(): IncludeHost {
+	/** What the rule checks (`records/rules.ts`) and `includeRelated()` need from this service. */
+	private get host(): IncludeHost {
 		return {
 			context: (name) => this.context(name),
-			collectionById: (id) => this.must(this.services.collections().getById(id)),
-			guard: (context, action, access) => this.guard(context, action, access),
-			query: (param, compile) => this.query(param, compile),
+			collections: this.services.collections(),
 			plugins: this.services.plugins()
 		};
 	}

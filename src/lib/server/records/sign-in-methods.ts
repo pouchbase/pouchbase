@@ -4,7 +4,7 @@ import { batchDatabase } from '../db/query';
 import { placeholders } from './values';
 
 /** Label and logo of a sign-in provider, by provider id. */
-export type ProviderLabels = Map<string, { label: string; iconUrl: string | null }>;
+type ProviderLabels = Map<string, { label: string; iconUrl: string | null }>;
 
 /**
  * Linked OAuth accounts and passwords of these users, read from the internal `_external_auths`

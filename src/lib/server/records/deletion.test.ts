@@ -5,7 +5,13 @@ import type { RecordContext } from './values';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../db/query', () => ({ batchDatabase: vi.fn() }));
+vi.mock('../db/query', () => ({
+	batchDatabase: vi.fn(),
+	chunks: (items: unknown[], size: number) =>
+		Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+			items.slice(index * size, (index + 1) * size)
+		)
+}));
 vi.mock('../db', () => ({ db: {}, collections: {}, fields: {} }));
 vi.mock('../services/files.service', () => ({
 	parseThumbnailList: (value: unknown) => (typeof value === 'string' ? JSON.parse(value) : []),

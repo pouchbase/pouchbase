@@ -186,10 +186,3 @@ export function chunks<T>(items: readonly T[], size: number): T[][] {
 
 	return groups;
 }
-
-/** `items` in chunks of at most `size`, e.g. to keep a statement within D1's bound parameters. */
-export function chunks<T>(items: readonly T[], size: number): T[][] {
-	return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-		items.slice(index * size, (index + 1) * size)
-	);
-}

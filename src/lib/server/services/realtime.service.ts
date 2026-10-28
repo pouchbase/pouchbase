@@ -49,7 +49,6 @@ type SubscriptionParam = 'where' | 'select' | 'include';
 export type RealtimeError =
 	| ContextError
 	| CollectionLookupError
-	| ServiceError<11006, 'INVALID_TOKEN'>
 	| ErrorOf<ReturnType<AuthService['verifyToken']>>
 	| ErrorOf<ReturnType<ApiKeysService['verify']>>
 	| ServiceError<22000, 'PUBLISH_FAILED'>

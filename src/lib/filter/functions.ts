@@ -2,7 +2,7 @@
  * Functions a condition can call (`contains(title, "svelte")`, `year(published_at) == 2026`).
  * Shared between the parser, which checks names, arguments and where a call may stand, the
  * suggestions of the condition editor and the docs; the server compiles each one to SQL
- * (`src/lib/server/filter.ts`).
+ * (`src/lib/server/filter/compile.ts`).
  *
  * Dates are in UTC. A date argument can be a Date field (ISO 8601 text), a Created or Updated
  * field (milliseconds), `now()`, `today()`, another date function or a string such as

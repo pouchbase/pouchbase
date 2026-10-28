@@ -6,9 +6,9 @@ import { asc, inArray } from 'drizzle-orm';
 
 import { isRelationType } from '#lib/fields/field-types.js';
 
-import { batchDatabase } from '../db/query';
+import { batchDatabase, chunks } from '../db/query';
 import { collections, db, fields } from '../db';
-import { chunks, MAX_IDS, parseIds, placeholders } from './values';
+import { MAX_IDS, parseIds, placeholders } from './values';
 
 /**
  * The collections that relation fields point to, and the labels the grid shows for related
@@ -19,7 +19,7 @@ import { chunks, MAX_IDS, parseIds, placeholders } from './values';
  * The collection a relation field points to, the field used as the label of its records, and
  * its `id` and first `created` field. Without an `id` field its records can't be linked.
  */
-export type RelationTarget = {
+type RelationTarget = {
 	collection: Collection;
 	label: string | null;
 	id: string | null;

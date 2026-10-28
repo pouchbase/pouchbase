@@ -7,10 +7,10 @@ import { eq } from 'drizzle-orm';
 import { FILES_COLLECTION } from '#lib/files/files.js';
 import { relationOnDelete } from '#lib/fields/field-types.js';
 
-import { batchDatabase } from '../db/query';
+import { batchDatabase, chunks } from '../db/query';
 import { collections, db, fields } from '../db';
 import { parseThumbnailList, storageKeys } from '../services/files.service';
-import { autoFields, chunks, keyParams, MAX_IDS, placeholders, returning } from './values';
+import { autoFields, keyParams, MAX_IDS, placeholders, returning } from './values';
 
 /**
  * What deleting records does to the records that link to them. Relation fields follow their
@@ -19,7 +19,7 @@ import { autoFields, chunks, keyParams, MAX_IDS, placeholders, returning } from 
  */
 
 /** Most records one delete may cascade to through relation fields. */
-export const MAX_CASCADE = 1000;
+const MAX_CASCADE = 1000;
 
 /** A relation field, the name of the collection it belongs to, and what deleting does to it. */
 export type Relation = { collection: string; field: Field; onDelete: RelationOnDelete };
