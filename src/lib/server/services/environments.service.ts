@@ -37,6 +37,7 @@ import {
 	plugins
 } from '../db';
 import { queryDatabase } from '../db/query';
+import { reasonOf } from '../errors';
 import { Service } from './base.service';
 import { uniqueIndexName } from './fields.service';
 
@@ -132,10 +133,6 @@ const MAX_ATTEMPTS = 3;
 
 /** A step that can't run; the message is shown to the user. */
 class StepError extends Error {}
-
-function reason(error: unknown) {
-	return error instanceof Error ? error.message : String(error);
-}
 
 /** A service error as the error message of a step, e.g. `COLLECTION_IN_USE (6009)`. */
 function describe(error: ServiceError<number, string>) {
@@ -382,7 +379,7 @@ export class EnvironmentsService extends Service {
 					})(),
 					(error): StepFailed => ({
 						...this.error(20011, 'STEP_FAILED', error),
-						data: { done, reason: reason(error) }
+						data: { done, reason: reasonOf(error) ?? String(error) }
 					})
 				);
 			});
@@ -716,11 +713,13 @@ export class EnvironmentsService extends Service {
 			const attempts = row.attempts + 1;
 			const failed = attempts >= MAX_ATTEMPTS;
 
-			console.warn(`[environments] deployment ${row.id} step ${row.done}: ${reason(error)}`);
+			console.warn(
+				`[environments] deployment ${row.id} step ${row.done}: ${reasonOf(error) ?? String(error)}`
+			);
 
 			await release({
 				attempts,
-				error: reason(error),
+				error: reasonOf(error) ?? String(error),
 				...(failed && { status: 'failed' as const, finishedAt: new Date() })
 			});
 		}
@@ -729,7 +728,7 @@ export class EnvironmentsService extends Service {
 	}
 
 	/** The value of a service result; throws a `StepError` with the service error otherwise. */
-	private async must<T>(result: ResultAsync<T, ServiceError<number, string>>) {
+	private async step<T>(result: ResultAsync<T, ServiceError<number, string>>) {
 		const settled = await result;
 
 		if (settled.isErr()) {
@@ -741,7 +740,7 @@ export class EnvironmentsService extends Service {
 
 	/** The collection by id: names change during a plan, ids don't. */
 	private collection(id: string) {
-		return this.must(this.services.collections().getById(id));
+		return this.step(this.services.collections().getById(id));
 	}
 
 	private async requireCollection(id: string, name: string) {
@@ -761,7 +760,7 @@ export class EnvironmentsService extends Service {
 
 	/** Every field of the collection as `updateAll` takes them, in `order` (others after them). */
 	private async fieldChanges(collectionId: string, order: string[] = []): Promise<FieldChange[]> {
-		const current = await this.must(this.services.fields().list(collectionId));
+		const current = await this.step(this.services.fields().list(collectionId));
 		const rank = (id: string) => {
 			const index = order.indexOf(id);
 			return index === -1 ? order.length : index;
@@ -780,7 +779,7 @@ export class EnvironmentsService extends Service {
 	}
 
 	private createField(collectionName: string, field: SnapshotField) {
-		return this.must(
+		return this.step(
 			this.services.fields().create(collectionName, {
 				id: field.id,
 				name: field.name,
@@ -822,7 +821,7 @@ export class EnvironmentsService extends Service {
 				]);
 
 				if (collection && field) {
-					await this.must(services.fields().delete(collection.name, field.name));
+					await this.step(services.fields().delete(collection.name, field.name));
 				}
 
 				return;
@@ -832,7 +831,7 @@ export class EnvironmentsService extends Service {
 				const collection = await this.collection(step.collectionId);
 
 				if (collection) {
-					await this.must(services.collections().delete(collection.name));
+					await this.step(services.collections().delete(collection.name));
 				}
 
 				return;
@@ -842,7 +841,7 @@ export class EnvironmentsService extends Service {
 				const collection = await this.requireCollection(step.collectionId, step.from);
 
 				if (collection.name !== step.to) {
-					await this.must(services.collections().rename(collection.name, step.to));
+					await this.step(services.collections().rename(collection.name, step.to));
 				}
 
 				return;
@@ -850,7 +849,7 @@ export class EnvironmentsService extends Service {
 
 			case 'collection.create': {
 				if (!(await this.collection(step.collectionId))) {
-					await this.must(services.collections().create(step.collection, step.collectionId));
+					await this.step(services.collections().create(step.collection, step.collectionId));
 				}
 
 				return;
@@ -863,7 +862,7 @@ export class EnvironmentsService extends Service {
 				if (step.changes.includes('type')) {
 					// SQLite can't convert a column: it is dropped and created again, with the same id.
 					if (field && field.type !== step.field.type) {
-						await this.must(services.fields().delete(collection.name, field.name));
+						await this.step(services.fields().delete(collection.name, field.name));
 					}
 
 					if (!field || field.type !== step.field.type) {
@@ -892,11 +891,11 @@ export class EnvironmentsService extends Service {
 							: change
 					);
 
-					await this.must(services.fields().updateAll(collection.name, changes));
+					await this.step(services.fields().updateAll(collection.name, changes));
 				}
 
 				if (step.changes.includes('defaultValue') || step.changes.includes('options')) {
-					await this.must(
+					await this.step(
 						step.field.type === 'computed'
 							? services
 									.fields()
@@ -925,14 +924,14 @@ export class EnvironmentsService extends Service {
 				const collection = await this.requireCollection(step.collectionId, step.collection);
 				const changes = await this.fieldChanges(collection.id, step.fieldIds);
 
-				await this.must(services.fields().updateAll(collection.name, changes));
+				await this.step(services.fields().updateAll(collection.name, changes));
 
 				return;
 			}
 
 			case 'index.create': {
 				const collection = await this.requireCollection(step.collectionId, step.collection);
-				const existing = await this.must(services.indexes().list(collection.name));
+				const existing = await this.step(services.indexes().list(collection.name));
 				const exists = existing.some(
 					(index) =>
 						!index.managedBy &&
@@ -941,7 +940,7 @@ export class EnvironmentsService extends Service {
 				);
 
 				if (!exists) {
-					await this.must(
+					await this.step(
 						services
 							.indexes()
 							.create(collection.name, { columns: step.columns, unique: step.unique })
@@ -954,7 +953,7 @@ export class EnvironmentsService extends Service {
 			case 'collection.settings': {
 				const collection = await this.requireCollection(step.collectionId, step.collection);
 
-				await this.must(
+				await this.step(
 					services.collections().updateSettings(collection.name, {
 						thumbnails: step.settings.thumbnails,
 						rules: step.settings.rules
@@ -965,10 +964,10 @@ export class EnvironmentsService extends Service {
 			}
 
 			case 'function.delete': {
-				const fn = await this.must(services.functions().get(step.name));
+				const fn = await this.step(services.functions().get(step.name));
 
 				if (fn) {
-					await this.must(services.functions().delete(fn.id));
+					await this.step(services.functions().delete(fn.id));
 				}
 
 				return;
@@ -977,10 +976,10 @@ export class EnvironmentsService extends Service {
 			case 'function.create':
 			case 'function.update': {
 				const { fn } = step;
-				let existing = await this.must(services.functions().get(fn.name));
+				let existing = await this.step(services.functions().get(fn.name));
 
 				if (!existing) {
-					const created = await this.must(
+					const created = await this.step(
 						services.functions().create({
 							name: fn.name,
 							description: fn.description,
@@ -995,7 +994,7 @@ export class EnvironmentsService extends Service {
 					existing.description !== fn.description ||
 					existing.requireAuth !== fn.requireAuth
 				) {
-					await this.must(
+					await this.step(
 						services
 							.functions()
 							.update(existing.id, { description: fn.description, requireAuth: fn.requireAuth })
@@ -1006,7 +1005,7 @@ export class EnvironmentsService extends Service {
 					fn.code &&
 					(fn.code.source !== existing.source || fn.code.language !== existing.language)
 				) {
-					await this.must(
+					await this.step(
 						services.functions().deploy(existing.id, {
 							language: fn.code.language,
 							source: fn.code.source,
@@ -1019,22 +1018,22 @@ export class EnvironmentsService extends Service {
 			}
 
 			case 'plugin.remove': {
-				await this.must(services.plugins().uninstall(step.id));
+				await this.step(services.plugins().uninstall(step.id));
 				return;
 			}
 
 			case 'plugin.install': {
-				await this.must(services.plugins().install(step.plugin.id, step.plugin.version));
+				await this.step(services.plugins().install(step.plugin.id, step.plugin.version));
 				return;
 			}
 
 			case 'setting.set': {
-				await this.must(services.settings().set(step.key, step.to));
+				await this.step(services.settings().set(step.key, step.to));
 				return;
 			}
 
 			case 'oauth.update': {
-				const current = await this.must(services.oauthProviders().credentials(step.provider));
+				const current = await this.step(services.oauthProviders().credentials(step.provider));
 
 				// No plugin on this instance contributes the provider (the plan warned about it).
 				if (!current) {
@@ -1043,7 +1042,7 @@ export class EnvironmentsService extends Service {
 				}
 
 				// The secret is never published: without one on this instance, the provider stays off.
-				await this.must(
+				await this.step(
 					services.oauthProviders().update(step.provider, {
 						enabled: step.enabled && !!current?.clientSecret,
 						clientId: step.clientId

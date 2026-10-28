@@ -15,7 +15,7 @@ import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
 import { generateRecordId } from '../crypto';
 import { canProcess, editImage, thumbnail, type EncodedImage, type ImageEdits } from '../images';
 import { Service } from './base.service';
-import { inBackground } from './realtime.service';
+import { inBackground } from '../platform/runtime';
 
 /** Fields every file has; they are managed by this service and can't be renamed or deleted. */
 const FILE_FIELDS: CreateFieldInput[] = [

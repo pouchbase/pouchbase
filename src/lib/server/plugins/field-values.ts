@@ -20,16 +20,12 @@ export function isFieldValue(value: unknown): value is FieldValue {
 	);
 }
 
-/** Whether any of `types` has one of `hooks`; without `fieldHandlers` (older plugins), always. */
+/** Whether any of `types` has one of `hooks`. */
 export function hasHooks(
-	handlers: Record<string, FieldHandlerInfo> | undefined,
+	handlers: Record<string, FieldHandlerInfo>,
 	types: readonly string[],
 	hooks: readonly (keyof FieldHandlerInfo)[]
 ): boolean {
-	if (!handlers) {
-		return true;
-	}
-
 	return types.some((type) => {
 		const handler = Object.hasOwn(handlers, type) ? handlers[type] : undefined;
 

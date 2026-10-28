@@ -3,7 +3,8 @@ import type { ServiceError } from '#lib/server/services/base.service.js';
 import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { command, form, getRequestEvent, query } from '$app/server';
+import { command, form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { getEnvironment } from '#lib/remote/settings.remote.js';
 import {
@@ -18,16 +19,6 @@ import { fail } from '#lib/server/errors.js';
 const STEP_BUDGET = 20 * 1000;
 
 const directionSchema = z.enum(['publish', 'pull']);
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Turns the errors of a publish or pull into responses the page can show. */
 function remoteFailure(failure: ServiceError<number, string>): never {

@@ -185,8 +185,8 @@ export const describeResultSchema = z.object({
 	authProviders: z.record(z.string(), providerConfigSchema),
 	fields: z.array(z.string()),
 	routes: z.array(z.string()),
-	/** By field type; missing from plugins described before field hooks ran. */
-	fieldHandlers: z.record(z.string(), fieldHandlerSchema).optional()
+	/** By field type. */
+	fieldHandlers: z.record(z.string(), fieldHandlerSchema)
 });
 
 export type DescribeResult = z.output<typeof describeResultSchema>;

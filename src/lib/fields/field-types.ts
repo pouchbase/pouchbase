@@ -313,6 +313,17 @@ export function isRelationType(type: FieldTypeId) {
 	return type === 'relation' || type === 'file';
 }
 
+/** Whether the field stores a JSON array: a relation, file or list that allows multiple values. */
+export function isMultiple(field: {
+	type: FieldTypeId;
+	options?: Pick<FieldOptions, 'multiple'> | null;
+}): boolean {
+	return (
+		(field.type === 'relation' || field.type === 'file' || field.type === 'list') &&
+		!!field.options?.multiple
+	);
+}
+
 /** Most items a list field can have. */
 export const MAX_LIST_VALUES = 200;
 

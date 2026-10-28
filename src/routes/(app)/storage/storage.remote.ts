@@ -1,19 +1,10 @@
 import { error, invalid } from '@sveltejs/kit';
 
-import { command, form, getRequestEvent, query } from '$app/server';
+import { command, form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { storageSettingsSchema } from '#lib/schemas/storage.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Where uploaded files are stored. The S3 secret key is never included. */
 export const getStorageSettings = query(async () => {

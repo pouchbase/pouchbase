@@ -338,25 +338,15 @@ function settingValues(values) {
 
 let client = null;
 
-// ctx.pouch: the JS SDK with the plugin's key; one per isolate. Without the bindings (a Worker
-// deployed before plugins had them), every request fails until the plugin is updated.
+// ctx.pouch: the JS SDK with the plugin's key; one per isolate.
 function pouch(env) {
 	if (!client) {
-		let origin = null;
+		const origin = new URL(env.POUCHBASE_URL).origin;
 
-		try {
-			origin = new URL(env?.POUCHBASE_URL ?? '').origin;
-		} catch {}
-
-		client =
-			origin && env?.POUCHBASE_API_KEY
-				? new Pouchbase(origin, {
-						fetch: originFetch(origin),
-						headers: { authorization: 'Bearer ' + env.POUCHBASE_API_KEY }
-					})
-				: new Pouchbase('https://pouchbase.invalid', {
-						fetch: () => Promise.reject(new Error('ctx.pouch is not set up: update the plugin in Pouchbase'))
-					});
+		client = new Pouchbase(origin, {
+			fetch: originFetch(origin),
+			headers: { authorization: 'Bearer ' + env.POUCHBASE_API_KEY }
+		});
 	}
 
 	return client;

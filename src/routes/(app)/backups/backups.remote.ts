@@ -1,7 +1,8 @@
 import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { command, form, getRequestEvent, query } from '$app/server';
+import { command, form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import {
 	backupDestinationSchema,
@@ -14,16 +15,6 @@ import { fail } from '#lib/server/errors.js';
 
 /** How long one call of `advanceBackups` may run steps, so the page shows progress regularly. */
 const STEP_BUDGET = 8 * 1000;
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Destinations, schedules, backups and the latest restore. Secret keys are never included. */
 export const getBackups = query(async () => {

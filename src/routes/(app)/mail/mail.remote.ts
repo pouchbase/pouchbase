@@ -3,7 +3,8 @@ import type { FilesService, StoredFile } from '#lib/server/services/files.servic
 import { error, invalid, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { command, form, getRequestEvent, query } from '$app/server';
+import { command, form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { fileUrl } from '#lib/files/files.js';
 import { previewThumbnail } from '#lib/files/thumbnails.js';
@@ -17,16 +18,6 @@ import {
 } from '#lib/schemas/mail-templates.js';
 import { mailSettingsSchema, testMailSchema } from '#lib/schemas/mail.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** How many images the image picker shows. */
 const MAIL_IMAGES_LIMIT = 60;

@@ -24,6 +24,7 @@ import {
 	ID_GENERATORS,
 	idGenerator,
 	isAutoType,
+	isMultiple,
 	isPluginFieldType,
 	isReservedFieldName,
 	NOW_DEFAULT,
@@ -48,7 +49,7 @@ import {
 	type ComputedSpec
 } from '../computed';
 import { generateId } from '../crypto';
-import { queryDatabase, tableExists } from '../db/query';
+import { isUniqueViolation, queryDatabase, tableExists } from '../db/query';
 import { collections, fields } from '../db';
 import { Service } from './base.service';
 
@@ -94,18 +95,8 @@ function listOptions(options: FieldOptions): FieldOptions | null {
 	return { values, multiple: options.multiple ?? false };
 }
 
-/** Whether the field stores a JSON array: a relation or list that allows multiple values. */
-function isMultiple(field: { type: FieldTypeId; options: FieldOptions }) {
-	return (field.type === 'relation' || field.type === 'list') && !!field.options.multiple;
-}
-
 /** Error for a computed field whose script or values failed, with a message for the form. */
 type ComputeFailedError = ServiceError<7016, 'COMPUTE_FAILED'> & { data: { message: string } };
-
-function isUniqueViolation(error: unknown) {
-	const message = error instanceof Error ? error.message : String(error);
-	return message.includes('UNIQUE constraint failed');
-}
 
 /** SQLite refused to add a column because the table already has it. */
 function isDuplicateColumn(error: unknown) {
@@ -114,7 +105,7 @@ function isDuplicateColumn(error: unknown) {
 }
 
 /** Columns a computed field's script can read: everything except blobs, which can be large. */
-function readableColumns(collectionFields: Field[]) {
+export function readableColumns(collectionFields: Field[]) {
 	return collectionFields.filter((field) => field.type !== 'blob').map((field) => field.name);
 }
 

@@ -2,23 +2,14 @@ import { error, invalid } from '@sveltejs/kit';
 import { formatCompileIssue } from '@pouchbasejs/plugin-sdk';
 import { z } from 'zod';
 
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { pluginIdSchema, pluginSettingsSchema, searchPluginsSchema } from '#lib/schemas/plugins.js';
 import { listPluginFieldTypes, listPluginPages } from '#lib/remote/plugins.remote.js';
 import { fail } from '#lib/server/errors.js';
 
 import { listCollections } from '../collections.remote';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /**
  * Plugins in the registry. A registry that can't be reached is not an error of the page: it comes

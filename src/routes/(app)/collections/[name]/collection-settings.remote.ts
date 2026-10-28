@@ -1,23 +1,14 @@
 import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { splitThumbnailSizes } from '#lib/files/thumbnails.js';
 import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 import { apiRulesSchema, thumbnailSettingsSchema } from '#lib/schemas/collection-settings.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Settings of a collection; which sections apply depends on the collection. */
 export const getCollectionSettings = query(z.string(), async (collection) => {

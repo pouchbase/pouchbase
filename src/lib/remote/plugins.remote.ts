@@ -1,7 +1,8 @@
 import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { getRequestEvent, query } from '$app/server';
+import { query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { fail } from '#lib/server/errors.js';
 
@@ -10,16 +11,6 @@ import { fail } from '#lib/server/errors.js';
  * sidebar, the page a `/plugins/<id>/<path>` URL opens, and the field types for the field
  * settings and the record form.
  */
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** The pages of the installed and built-in plugins that the sidebar links to. */
 export const listPluginPages = query(async () => {

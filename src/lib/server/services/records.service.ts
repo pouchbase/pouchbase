@@ -15,6 +15,7 @@ import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
 import {
 	idGenerator,
 	isAutoType,
+	isMultiple,
 	isPluginFieldType,
 	isRelationType,
 	NOW_DEFAULT,
@@ -22,11 +23,11 @@ import {
 } from '#lib/fields/field-types.js';
 import { sqlDefaultSelect } from '#lib/fields/sql-expression.js';
 import { fileFieldRules } from '#lib/files/accept.js';
-import { FilterError } from '#lib/filter/filter.js';
+import { FilterError, MAX_RELATION_DEPTH } from '#lib/filter/filter.js';
 import { apiActions, protectedApiFields } from '#lib/filter/rules.js';
 
 import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from '../computed';
-import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
+import { batchDatabase, queryDatabase, queryObjects, uniqueViolation } from '../db/query';
 import { ALWAYS, both, compileFilter, compileOrder, compileRule, usesRelations } from '../filter';
 import { checkUserFields, visibleFields } from '../hidden-fields';
 import { generateId } from '../crypto';
@@ -40,8 +41,9 @@ import {
 } from '../plugin-fields';
 import { USERS_COLLECTION } from './auth.service';
 import { FILES_COLLECTION } from '#lib/files/files.js';
+import { readableColumns } from './fields.service';
 import { parseThumbnailList, storageKeys } from './files.service';
-import { inBackground } from './realtime.service';
+import { inBackground } from '../platform/runtime';
 import { collections, fields } from '../db';
 import { Service } from './base.service';
 
@@ -234,8 +236,6 @@ const contexts = new Map<string, RecordContext>();
 const MAX_IDS = 90;
 /** Most records one delete may cascade to through relation fields. */
 const MAX_CASCADE = 1000;
-/** How deep `expand` follows relations: `a.b.c`. */
-const MAX_INCLUDE_DEPTH = 3;
 /** Field types whose value makes a good label for a related record, in order of preference. */
 const LABEL_TYPES = new Set(['text', 'email', 'url']);
 
@@ -359,17 +359,6 @@ function parseValue(
 		default:
 			return { value: text };
 	}
-}
-
-/** Column SQLite reports in `UNIQUE constraint failed: <table>.<column>`, if any. */
-function uniqueViolation(error: unknown) {
-	const message = error instanceof Error ? error.message : String(error);
-	return message.match(/UNIQUE constraint failed: [^.\s]+\.([a-z0-9_]+)/)?.[1] ?? null;
-}
-
-/** Columns a computed field's script can read: everything except blobs, which can be large. */
-function readableColumns(collectionFields: Field[]) {
-	return collectionFields.filter((field) => field.type !== 'blob').map((field) => field.name);
 }
 
 /**
@@ -508,14 +497,6 @@ export function relatedCollections(
 	};
 }
 
-/** Whether a field holds a JSON array of values. */
-function isMultiple(field: Field) {
-	return (
-		(field.type === 'relation' || field.type === 'file' || field.type === 'list') &&
-		!!field.options.multiple
-	);
-}
-
 /** A stored value as the records API returns it (see `ApiRecord`). */
 function decodeValue(field: Field, value: unknown): unknown {
 	if (value === null || value === undefined) {
@@ -555,7 +536,7 @@ function selectFields(readable: Field[], names: string[] | undefined) {
 
 /**
  * `?include=author,comments.author` as a tree of field names. Throws a `FilterError` for a path
- * that is empty or deeper than `MAX_INCLUDE_DEPTH`.
+ * that is empty or deeper than `MAX_RELATION_DEPTH`.
  */
 function parseInclude(paths: string[] | undefined): IncludeTree {
 	const tree: IncludeTree = new Map();
@@ -567,9 +548,9 @@ function parseInclude(paths: string[] | undefined): IncludeTree {
 			throw new FilterError(`Invalid path \`${path}\``);
 		}
 
-		if (names.length > MAX_INCLUDE_DEPTH) {
+		if (names.length > MAX_RELATION_DEPTH) {
 			throw new FilterError(
-				`\`${path}\` is too deep: relations can be included ${MAX_INCLUDE_DEPTH} levels deep`
+				`\`${path}\` is too deep: relations can be included ${MAX_RELATION_DEPTH} levels deep`
 			);
 		}
 

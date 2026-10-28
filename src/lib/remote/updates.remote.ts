@@ -1,19 +1,10 @@
 import { error } from '@sveltejs/kit';
 
-import { command, getRequestEvent, query } from '$app/server';
+import { command, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { version } from '../../../package.json';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** The running version, the latest release and how this instance updates. */
 export const getUpdateStatus = query(async () => {

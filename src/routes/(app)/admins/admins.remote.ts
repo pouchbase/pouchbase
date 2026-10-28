@@ -1,19 +1,10 @@
-import { error, invalid } from '@sveltejs/kit';
+import { invalid } from '@sveltejs/kit';
 
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { createAdminSchema } from '#lib/schemas/admins.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** The admin users that can log in to Pouchbase. Password hashes are never included. */
 export const getAdmins = query(async () => {

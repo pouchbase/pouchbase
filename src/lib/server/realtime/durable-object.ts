@@ -184,16 +184,6 @@ export function realtimeHub(handler: Handler) {
 				CREATE INDEX IF NOT EXISTS subscriptions_record ON subscriptions (record);
 			`);
 
-			// Hubs created before `expand` existed have a table without it.
-			const columns = ctx.storage.sql
-				.exec<Row>('PRAGMA table_info(subscriptions)')
-				.toArray()
-				.map((column) => String(column.name));
-
-			if (!columns.includes('expand')) {
-				ctx.storage.sql.exec('ALTER TABLE subscriptions ADD COLUMN expand TEXT');
-			}
-
 			// Answered by the runtime, without waking the object.
 			ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING_FRAME, PONG_FRAME));
 		}

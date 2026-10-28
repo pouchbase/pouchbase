@@ -243,10 +243,6 @@ type TransferFailed = ServiceError<16012, 'TRANSFER_FAILED'> & { data: { reason:
 /** A failure of another service inside a step, kept as an error so the step can be retried. */
 class StepError extends Error {}
 
-function reason(error: unknown) {
-	return error instanceof Error ? error.message : String(error);
-}
-
 function randomSuffix(length: number) {
 	const bytes = crypto.getRandomValues(new Uint8Array(length));
 	return Array.from(bytes, (byte) => NAME_ALPHABET[byte % NAME_ALPHABET.length]).join('');
@@ -336,7 +332,7 @@ function archiveStream(
 			await write(writable, tarEnd());
 			await writable.close();
 		} catch (error) {
-			console.warn(`[backups] download failed: ${reason(error)}`);
+			console.warn(`[backups] download failed: ${reasonOf(error) ?? String(error)}`);
 			await Promise.all(files.map((file) => file.body.cancel().catch(() => undefined)));
 			await writable.abort(error).catch(() => undefined);
 		}
@@ -684,7 +680,7 @@ export class BackupsService extends Service {
 
 			return fromPromise(this.removeBackup(row.backup, row.destination), (error): DeleteFailed => ({
 				...this.error(16006, 'DELETE_FAILED', error),
-				data: { reason: reason(error) }
+				data: { reason: reasonOf(error) ?? String(error) }
 			}));
 		});
 	}
@@ -933,7 +929,7 @@ export class BackupsService extends Service {
 
 			return fromPromise(this.importBackups(destination), (error): DiscoverFailed => ({
 				...this.error(16007, 'DISCOVER_FAILED', error),
-				data: { reason: reason(error) }
+				data: { reason: reasonOf(error) ?? String(error) }
 			}));
 		});
 	}
@@ -1096,7 +1092,7 @@ export class BackupsService extends Service {
 	private transfer<T>(run: () => Promise<T>): ResultAsync<T, TransferFailed> {
 		return fromPromise(run(), (error): TransferFailed => ({
 			...this.error(16012, 'TRANSFER_FAILED', error),
-			data: { reason: reason(error) }
+			data: { reason: reasonOf(error) ?? String(error) }
 		}));
 	}
 
@@ -1136,7 +1132,7 @@ export class BackupsService extends Service {
 			})(),
 			(error): ConnectionFailed => ({
 				...this.error(16002, 'CONNECTION_FAILED', error),
-				data: { reason: reason(error) }
+				data: { reason: reasonOf(error) ?? String(error) }
 			})
 		);
 	}
@@ -1153,7 +1149,7 @@ export class BackupsService extends Service {
 	}
 
 	/** Unwraps the result of another service inside a step. */
-	private async must<T>(result: ResultAsync<T, { message: string }>): Promise<T> {
+	private async step<T>(result: ResultAsync<T, { message: string }>): Promise<T> {
 		const value = await result;
 
 		if (value.isErr()) {
@@ -1192,9 +1188,9 @@ export class BackupsService extends Service {
 			return;
 		}
 
-		await this.must(this.start(schedule.destinationId, schedule.includeFiles, schedule.id)).catch(
+		await this.step(this.start(schedule.destinationId, schedule.includeFiles, schedule.id)).catch(
 			(error: unknown) => {
-				console.warn(`[backups] scheduled backup not started: ${reason(error)}`);
+				console.warn(`[backups] scheduled backup not started: ${reasonOf(error) ?? String(error)}`);
 			}
 		);
 	}
@@ -1223,7 +1219,7 @@ export class BackupsService extends Service {
 		}
 
 		// No backups while a restore runs (it may be waiting for its lock).
-		if (await this.must(this.restoring())) {
+		if (await this.step(this.restoring())) {
 			return false;
 		}
 
@@ -1281,13 +1277,15 @@ export class BackupsService extends Service {
 			const attempts = backup.attempts + 1;
 			const failed = attempts >= MAX_ATTEMPTS;
 
-			console.warn(`[backups] backup ${backup.id} (${state.step}): ${reason(error)}`);
+			console.warn(
+				`[backups] backup ${backup.id} (${state.step}): ${reasonOf(error) ?? String(error)}`
+			);
 
 			await this.db
 				.update(backups)
 				.set({
 					attempts,
-					error: reason(error),
+					error: reasonOf(error) ?? String(error),
 					lockedUntil: null,
 					...(failed && { status: 'failed' as const, finishedAt: new Date() })
 				})
@@ -1306,7 +1304,7 @@ export class BackupsService extends Service {
 			const databaseId =
 				state.database === 'system'
 					? await getDatabaseId()
-					: (await this.must(this.services.database().requireApp())).id;
+					: (await this.step(this.services.database().requireApp())).id;
 
 			if (!databaseId) {
 				throw new StepError('The system database is missing');
@@ -1382,7 +1380,7 @@ export class BackupsService extends Service {
 		target: ObjectStore,
 		cursor: string | null
 	): Promise<{ state: BackupState; files: number }> {
-		const scan = await this.must(this.services.files().scan(cursor, FILES_PER_STEP));
+		const scan = await this.step(this.services.files().scan(cursor, FILES_PER_STEP));
 		const keys = scan.files.flatMap((file) => storageKeys(file));
 
 		const copied = new Set(
@@ -1414,7 +1412,7 @@ export class BackupsService extends Service {
 			}
 
 			for (const key of missing) {
-				const object = await this.must(storage.get(key));
+				const object = await this.step(storage.get(key));
 
 				// Gone from the storage; nothing to back up.
 				if (!object?.body) {
@@ -1585,7 +1583,9 @@ export class BackupsService extends Service {
 			const attempts = restore.attempts + 1;
 			const failed = attempts >= MAX_ATTEMPTS;
 
-			console.warn(`[backups] restore ${restore.id} (${state.step}): ${reason(error)}`);
+			console.warn(
+				`[backups] restore ${restore.id} (${state.step}): ${reasonOf(error) ?? String(error)}`
+			);
 
 			if (failed && 'database' in state) {
 				await this.discardSpare(state.database);
@@ -1595,7 +1595,7 @@ export class BackupsService extends Service {
 				.update(backupRestores)
 				.set({
 					attempts,
-					error: reason(error),
+					error: reasonOf(error) ?? String(error),
 					lockedUntil: null,
 					...(failed && { status: 'failed' as const, finishedAt: new Date() })
 				})
@@ -1623,7 +1623,7 @@ export class BackupsService extends Service {
 				throw new StepError(`The backup in ${backup.key} is incomplete`);
 			}
 
-			const database = await this.must(this.services.database().createSpare());
+			const database = await this.step(this.services.database().createSpare());
 
 			return {
 				state:
@@ -1769,7 +1769,7 @@ export class BackupsService extends Service {
 		}
 
 		const dump = await this.download(source, destination, `${backup.key}/system.sql`);
-		const replaced = await this.must(this.services.database().requireApp());
+		const replaced = await this.step(this.services.database().requireApp());
 		const retire = { id: replaced.id, at: Date.now() };
 		const next: RestoreState = restore.includeFiles
 			? { step: 'files', cursor: null, retire }
@@ -1850,7 +1850,7 @@ export class BackupsService extends Service {
 		// The restored database may be older than this version, and the files collection may differ.
 		// `remigrate` also makes this isolate use the new app database right away.
 		forgetFilesCollection();
-		await this.must(this.services.database().remigrate());
+		await this.step(this.services.database().remigrate());
 	}
 
 	/** Copies the files of the restored app database back from the destination. */
@@ -1859,7 +1859,7 @@ export class BackupsService extends Service {
 		source: ObjectStore,
 		cursor: string | null
 	): Promise<{ state: RestoreState; files: number; done?: boolean }> {
-		const scan = await this.must(this.services.files().scan(cursor, OBJECTS_PER_STEP));
+		const scan = await this.step(this.services.files().scan(cursor, OBJECTS_PER_STEP));
 		const storage = this.services.storage();
 		let objects = 0;
 		let handled = 0;
@@ -1885,7 +1885,7 @@ export class BackupsService extends Service {
 					continue;
 				}
 
-				await this.must(
+				await this.step(
 					storage.put(
 						key,
 						await object.arrayBuffer(),

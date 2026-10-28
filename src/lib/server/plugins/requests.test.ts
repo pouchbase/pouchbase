@@ -63,7 +63,6 @@ describe('field values', () => {
 		expect(hasHooks(handlers, ['rating'], ['validate', 'serialize'])).toBe(true);
 		expect(hasHooks(handlers, ['rating', 'color'], ['deserialize'])).toBe(false);
 		expect(hasHooks(handlers, ['unknown'], ['validate'])).toBe(false);
-		expect(hasHooks(undefined, ['color'], ['deserialize'])).toBe(true);
 	});
 
 	it('stores values as they are without hooks', () => {

@@ -2,6 +2,7 @@ import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { command, form, getRequestEvent, query, type RemoteFormInvalidField } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { describeFileTypes, matchesFileTypes } from '#lib/files/accept.js';
@@ -21,16 +22,6 @@ import {
 	type SaveRecordInput
 } from '#lib/schemas/records.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 export const listRecords = query(listRecordsSchema, async ({ collection, page, sort, order }) => {
 	const result = await getRequestEvent()

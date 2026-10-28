@@ -516,9 +516,6 @@ const appliedEmbedded = new Set<string>();
 /** Logos and other images in `ui/`; the only plugin files served to browsers. */
 const ASSET_PATH = /^ui\/(?:[\w-]+\/)*[\w.-]+\.svg$/;
 
-/** Files of a bundle that `compileUi` turns into `plugin_modules`. */
-const UI_MODULE_FILE = /\.(?:svelte|js|css)$/;
-
 export class PluginsService extends Service {
 	private readonly registry = createRegistryClient({ url: registryUrl() });
 
@@ -1116,8 +1113,7 @@ export class PluginsService extends Service {
 
 	/**
 	 * The compiled UI of an installed plugin; `null` when it isn't installed or is built in (the
-	 * dashboard has the components of built-in plugins already). A plugin installed before its UI
-	 * was compiled on install is compiled now, from its stored bundle.
+	 * dashboard has the components of built-in plugins already).
 	 */
 	modules(pluginId: string): ResultAsync<PluginModules | null, ListFailed | LoadModulesFailed> {
 		return fromPromise(
@@ -1130,7 +1126,7 @@ export class PluginsService extends Service {
 
 			return fromPromise(
 				(async () => {
-					let rows = await this.db
+					const rows = await this.db
 						.select({
 							path: pluginModules.path,
 							code: pluginModules.code,
@@ -1140,10 +1136,6 @@ export class PluginsService extends Service {
 						.where(
 							and(eq(pluginModules.pluginId, pluginId), eq(pluginModules.version, row.version))
 						);
-
-					if (!rows.length) {
-						rows = await this.compileStored(row.manifest);
-					}
 
 					const result: PluginModules = { version: row.version, modules: {}, css: [] };
 
@@ -1750,7 +1742,7 @@ export class PluginsService extends Service {
 				fromPromise(this.capabilities(source, saved), (error) => this.listFailed(error)).map(
 					(capabilities) =>
 						hasHooks(
-							capabilities?.fieldHandlers,
+							capabilities?.fieldHandlers ?? {},
 							items.map((item) => item.type),
 							hooks
 						)
@@ -1771,41 +1763,6 @@ export class PluginsService extends Service {
 		return fromPromise(compileUi(files), (error) =>
 			failed([{ path: UI_DIR, message: reason(error) }], error)
 		).andThen((ui) => (ui.issues.length ? errAsync(failed(ui.issues)) : okAsync(ui)));
-	}
-
-	/**
-	 * Compiles the UI of an installed plugin from its stored bundle and stores the modules; for
-	 * plugins installed before the UI was compiled on install. Throws when it doesn't compile.
-	 */
-	private async compileStored(
-		manifest: PluginManifest
-	): Promise<{ path: string; code: string; imports: string[] }[]> {
-		const files = (await this.storedFiles(manifest.id)) ?? {};
-
-		if (
-			!Object.keys(files).some((path) => path.startsWith(`${UI_DIR}/`) && UI_MODULE_FILE.test(path))
-		) {
-			return [];
-		}
-
-		const ui = await compileUi(files);
-
-		if (ui.issues.length) {
-			throw new Error(ui.issues.map(formatCompileIssue).join('\n'));
-		}
-
-		const rows = moduleRows(manifest, ui, new Date());
-
-		if (rows.length) {
-			await this.db.batch([
-				this.db.delete(pluginModules).where(eq(pluginModules.pluginId, manifest.id)),
-				...chunks(rows, MODULE_ROWS_PER_INSERT).map((chunk) =>
-					this.db.insert(pluginModules).values(chunk)
-				)
-			]);
-		}
-
-		return rows.map((row) => ({ path: row.path, code: row.code, imports: row.imports }));
 	}
 
 	/**

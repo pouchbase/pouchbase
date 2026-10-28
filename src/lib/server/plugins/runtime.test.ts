@@ -167,8 +167,8 @@ describe('dispatch of field calls', () => {
 			plain: { validate: false, serialize: false, deserialize: false }
 		});
 		expect(
-			describeResultSchema.parse({ authProviders: {}, fields: [], routes: [] }).fieldHandlers
-		).toBeUndefined();
+			describeResultSchema.safeParse({ authProviders: {}, fields: [], routes: [] }).success
+		).toBe(false);
 	});
 });
 

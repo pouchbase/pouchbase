@@ -10,7 +10,7 @@ import { asc, inArray } from 'drizzle-orm';
 import { fromPromise, okAsync } from 'neverthrow';
 
 import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
-import { isAutoType, isRelationType } from '#lib/fields/field-types.js';
+import { isAutoType, isMultiple, isRelationType } from '#lib/fields/field-types.js';
 import { fieldValueType } from '#lib/fields/value-types.js';
 
 import { generateToken, hashToken } from '../crypto';
@@ -25,14 +25,6 @@ function pascalCase(collection: string) {
 		.filter(Boolean)
 		.map((part) => part[0].toUpperCase() + part.slice(1))
 		.join('');
-}
-
-/** Whether the API returns an array for the field, `[]` when empty. */
-function isMultiple(field: Field) {
-	return (
-		(field.type === 'relation' || field.type === 'file' || field.type === 'list') &&
-		!!field.options.multiple
-	);
 }
 
 /** What the declarations need to know of the plugin field types. */
@@ -329,7 +321,7 @@ export class TypesService extends Service {
 								const handlers = capabilities.get(type.pluginId)?.fieldHandlers;
 								const own = splitPluginFieldType(type.id)?.type ?? type.type;
 
-								return !handlers || (Object.hasOwn(handlers, own) && handlers[own].deserialize);
+								return !!handlers && Object.hasOwn(handlers, own) && handlers[own].deserialize;
 							})
 							.map((type) => type.id)
 					);

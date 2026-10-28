@@ -22,7 +22,6 @@ import { apiActions } from '#lib/filter/rules.js';
 import { batchDatabase } from '../db/query';
 import { compileFilter, compileRule, usesRelations } from '../filter';
 import { authorizationChecks } from '../realtime/authorize';
-import { background } from '../platform/runtime';
 import { publish } from '../realtime/broker';
 import { API_KEY_PREFIX } from './api-keys.service';
 import { Service } from './base.service';
@@ -64,20 +63,6 @@ function apiAccess(subject: Subject): ApiAccess | undefined {
 /** The fields the records API reads and filters on: all but blobs. */
 function readableFields(collectionFields: Field[]) {
 	return collectionFields.filter((field) => field.type !== 'blob');
-}
-
-/**
- * Lets a publish finish after the response and logs a failure: saving a record never waits for,
- * or fails because of, its realtime event.
- */
-export function inBackground(result: ResultAsync<void, unknown>) {
-	background(
-		Promise.resolve(
-			result.mapErr((failure) => {
-				console.error('[realtime] publish failed', failure);
-			})
-		)
-	);
 }
 
 /**

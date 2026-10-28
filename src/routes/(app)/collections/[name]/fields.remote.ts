@@ -1,6 +1,7 @@
 import { error, invalid } from '@sveltejs/kit';
 
-import { command, form, getRequestEvent } from '$app/server';
+import { command, form } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { isPluginFieldType } from '#lib/fields/field-types.js';
 import {
@@ -16,16 +17,6 @@ import {
 	updateFieldsSchema
 } from '#lib/schemas/fields.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Why a default value was refused; a plugin says why for its own types. */
 function defaultValueMessage(failure: { data?: unknown }) {

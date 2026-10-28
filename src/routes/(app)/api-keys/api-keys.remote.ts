@@ -1,19 +1,10 @@
 import { error } from '@sveltejs/kit';
 
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { apiKeyIdSchema, apiKeySchema } from '#lib/schemas/api-keys.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 /** Every API key, newest first; the keys of functions too. */
 export const getApiKeys = query(async () => {

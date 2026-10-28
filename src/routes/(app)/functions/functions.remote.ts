@@ -1,7 +1,8 @@
 import { error, invalid, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { command, form, getRequestEvent, query } from '$app/server';
+import { command, form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import {
 	createFunctionSchema,
@@ -16,16 +17,6 @@ import {
 	testFunctionSchema
 } from '#lib/schemas/functions.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 const NO_SUBDOMAIN =
 	'The Cloudflare account has no workers.dev subdomain yet. Open Workers & Pages in the Cloudflare dashboard once to choose one, then try again.';

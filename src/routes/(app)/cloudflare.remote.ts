@@ -7,10 +7,10 @@ import type {
 	WorkerInfo
 } from '#lib/cloudflare/types.js';
 
-import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { USAGE_RANGES } from '#lib/cloudflare/limits.js';
 import { cloudflarePlanSchema } from '#lib/schemas/cloudflare.js';
@@ -20,16 +20,6 @@ import { fail } from '#lib/server/errors.js';
  * Data for the Cloudflare overview on the dashboard. Each section has its own query, so one that
  * can't load (a missing token permission, for example) never takes the others down with it.
  */
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 const UNAVAILABLE: SectionResult<never> = {
 	ok: false,

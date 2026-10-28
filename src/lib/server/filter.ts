@@ -8,6 +8,7 @@ import type {
 import type { Field } from './services/fields.service';
 
 import { FilterError, filterValues, MAX_RELATION_DEPTH, parseFilter } from '#lib/filter/filter.js';
+import { isMultiple } from '#lib/fields/field-types.js';
 import { normalizeUnit } from '#lib/filter/functions.js';
 
 /**
@@ -190,13 +191,6 @@ function column(scope: Scope, name: string) {
 /** The items of a JSON array (multiple relations, files and lists); a single value is one item. */
 function itemsOf(sql: string) {
 	return `json_each(CASE WHEN json_valid(${sql}) AND json_type(${sql}) = 'array' THEN ${sql} ELSE json_array(${sql}) END)`;
-}
-
-function isMultiple(field: FilterSchemaField) {
-	return (
-		(field.type === 'relation' || field.type === 'file' || field.type === 'list') &&
-		!!field.options?.multiple
-	);
 }
 
 /** One step through a relation: the collection it points to, its alias and its view rule. */

@@ -18,7 +18,7 @@ import {
 	deletePublishToken,
 	listPublishTokens
 } from '#lib/server/publish-tokens.js';
-import { listOwnPlugins, publishVersion, RegistryFailure } from '#lib/server/registry.js';
+import { listOwnPlugins, publishVersion, RegistryFailure } from '#lib/server/registry/index.js';
 import { currentUser, endSession, isVerified, startSession } from '#lib/server/session.js';
 
 /** Only paths on this site, so a sign-in link can't send people elsewhere. */

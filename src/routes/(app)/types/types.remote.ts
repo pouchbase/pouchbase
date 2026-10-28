@@ -1,21 +1,10 @@
-import { error } from '@sveltejs/kit';
-
-import { form, getRequestEvent, query } from '$app/server';
+import { form, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const event = getRequestEvent();
-
-	if (!event.locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return event;
-}
 
 /** The TypeScript types of every collection, and the token of `GET /api/types`. */
 export const getTypes = query(async () => {
-	const { locals } = requireUser();
+	const locals = requireUser();
 
 	const [code, token] = await Promise.all([
 		locals.services.types().generate(),
@@ -34,7 +23,7 @@ export const getTypes = query(async () => {
 });
 
 export const regenerateTypesToken = form(async () => {
-	const { locals } = requireUser();
+	const locals = requireUser();
 
 	const result = await locals.services.types().regenerateToken();
 

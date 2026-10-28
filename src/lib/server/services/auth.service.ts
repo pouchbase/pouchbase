@@ -2,7 +2,7 @@ import type { ErrorOf, ServiceError } from './base.service';
 import type { CollectionsService } from './collections.service';
 import type { DatabaseService } from './database.service';
 import type { FilesService } from './files.service';
-import type { CreateFieldInput, FieldsService } from './fields.service';
+import type { CreateFieldInput } from './fields.service';
 import type { MailTemplatesService } from './mail-templates.service';
 import type { OAuthProvider } from '#lib/auth/oauth-providers.js';
 import type { OAuthCredentials } from '../oauth';
@@ -23,11 +23,11 @@ import {
 
 import { batchDatabase, queryDatabase, queryObjects } from '../db/query';
 import { generateRecordId, generateToken, hashPassword, verifyPassword } from '../crypto';
-import { fields, oauthRequests } from '../db';
+import { oauthRequests } from '../db';
 import { authorizationUrl, exchangeCode, randomToken } from '../oauth';
 import { parseProfile } from '../plugins/runtime';
 import { Service } from './base.service';
-import { inBackground } from './realtime.service';
+import { inBackground } from '../platform/runtime';
 
 /** The built-in collection app users are stored in. */
 export { USERS_COLLECTION } from '#lib/auth/users.js';
@@ -58,12 +58,6 @@ function authFields(): CreateFieldInput[] {
 		}
 	];
 }
-
-/**
- * Auth fields of earlier versions that have been replaced. Users sign in with their email, so
- * `username` is gone too.
- */
-const OUTDATED_AUTH_FIELDS = ['avatar_url', 'username'];
 
 const TOKEN_ISSUER = 'pouchbase';
 const TOKEN_AUDIENCE = USERS_COLLECTION;
@@ -115,7 +109,6 @@ type InvalidInputError = ServiceError<11025, 'INVALID_INPUT'> & { data: { issues
 type EnsureUsersError =
 	| ErrorOf<ReturnType<FilesService['ensureFilesCollection']>>
 	| ErrorOf<ReturnType<CollectionsService['ensureSystem']>>
-	| ErrorOf<ReturnType<FieldsService['delete']>>
 	| ErrorOf<ReturnType<DatabaseService['requireApp']>>
 	| ServiceError<11000, 'AUTH_SETUP_FAILED'>;
 
@@ -157,65 +150,7 @@ export class AuthService extends Service {
 		return this.services
 			.files()
 			.ensureFilesCollection()
-			.andThen((filesCollection) =>
-				this.services
-					.collections()
-					.ensureSystem(USERS_COLLECTION, authFields())
-					.map((collection) => ({ collection, filesCollection }))
-			)
-			.andThen(({ collection, filesCollection }) =>
-				this.services
-					.fields()
-					.list(collection.id)
-					.andThen((existing) => {
-						let chain: ResultAsync<void, EnsureUsersError> = okAsync(undefined);
-
-						for (const field of existing.filter((candidate) =>
-							OUTDATED_AUTH_FIELDS.includes(candidate.name)
-						)) {
-							// A field that computed fields still use stays, as an ordinary field the admin can
-							// remove once those are gone.
-							chain = chain.andThen(() =>
-								this.services
-									.fields()
-									.delete(USERS_COLLECTION, field.name, { allowSystem: true })
-									.orElse((failure) =>
-										failure.code === 7012
-											? fromPromise(
-													this.db
-														.update(fields)
-														.set({ system: false })
-														.where(eq(fields.id, field.id)),
-													(error) => this.error(11000, 'AUTH_SETUP_FAILED', error)
-												).map(() => undefined)
-											: errAsync(failure)
-									)
-							);
-						}
-
-						// Earlier versions stored the avatar as a relation to `files`, then as a file field
-						// with `accept: 'images'`. All hold one file id in a TEXT column, so only the field
-						// definition changes.
-						const avatar = existing.find((candidate) => candidate.name === 'avatar');
-
-						if (avatar && (avatar.type === 'relation' || !Array.isArray(avatar.options.accept))) {
-							chain = chain.andThen(() =>
-								fromPromise(
-									this.db
-										.update(fields)
-										.set({
-											type: 'file',
-											options: { collectionId: filesCollection.id, accept: ['image/*'] }
-										})
-										.where(eq(fields.id, avatar.id)),
-									(error) => this.error(11000, 'AUTH_SETUP_FAILED', error)
-								).map(() => undefined)
-							);
-						}
-
-						return chain;
-					})
-			)
+			.andThen(() => this.services.collections().ensureSystem(USERS_COLLECTION, authFields()))
 			.andThen(() => this.services.database().requireApp())
 			.andThen((appDatabase) =>
 				fromPromise(

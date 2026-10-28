@@ -2,19 +2,10 @@ import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { command, form, getRequestEvent, query } from '$app/server';
+import { requireUser } from '#lib/server/remote.js';
 
 import { createIndexSchema, deleteIndexSchema, updateIndexSchema } from '#lib/schemas/indexes.js';
 import { fail } from '#lib/server/errors.js';
-
-function requireUser() {
-	const { locals } = getRequestEvent();
-
-	if (!locals.user) {
-		error(401, 'Not logged in');
-	}
-
-	return locals;
-}
 
 export const listIndexes = query(z.string(), async (collectionName) => {
 	const result = await getRequestEvent().locals.services.indexes().list(collectionName);

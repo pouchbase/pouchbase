@@ -90,6 +90,20 @@ function runBatch(databaseId: string, statements: Statement[]): Promise<QueryRes
 	);
 }
 
+/** Whether SQLite refused a write because of a `UNIQUE` constraint or index. */
+export function isUniqueViolation(error: unknown) {
+	const message = error instanceof Error ? error.message : String(error);
+
+	return message.includes('UNIQUE constraint failed');
+}
+
+/** Column SQLite reports in `UNIQUE constraint failed: <table>.<column>`, if any. */
+export function uniqueViolation(error: unknown) {
+	const message = error instanceof Error ? error.message : String(error);
+
+	return message.match(/UNIQUE constraint failed: [^.\s]+\.([a-z0-9_]+)/)?.[1] ?? null;
+}
+
 /** Runs a single statement on any database and returns the rows as arrays. */
 export async function queryDatabase(databaseId: string, sql: string, params: unknown[] = []) {
 	return (await runQuery(databaseId, sql, params)).rows;

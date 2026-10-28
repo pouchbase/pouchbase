@@ -27,20 +27,10 @@ const CACHE_LIMIT = 1000;
 /** Validated sessions by token hash. */
 const cache = new Map<string, { user: SessionUser; expiresAt: number; validatedAt: number }>();
 
+/** Full: start over; entries are only good for `CACHE_TTL` anyway (checked on read). */
 function cacheSession(id: string, user: SessionUser, expiresAt: number) {
 	if (cache.size >= CACHE_LIMIT) {
-		const now = Date.now();
-
-		for (const [key, entry] of cache) {
-			if (now - entry.validatedAt >= CACHE_TTL) {
-				cache.delete(key);
-			}
-		}
-
-		// Still full: drop the oldest entry (a Map iterates in insertion order).
-		if (cache.size >= CACHE_LIMIT) {
-			cache.delete(cache.keys().next().value!);
-		}
+		cache.clear();
 	}
 
 	cache.set(id, { user, expiresAt, validatedAt: Date.now() });
