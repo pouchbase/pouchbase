@@ -1,5 +1,51 @@
 # pouchbase-site
 
+## 0.7.0
+
+### Minor Changes
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Split the docs into tabs for the platform, the JS SDK, the REST API and plugins, each with a sidebar of its own, under `/docs/platform`, `/docs/sdk`, `/docs/api` and `/docs/plugins`; the platform pages describe the dashboard and concepts, the SDK pages the TypeScript calls and the REST API pages every endpoint with cURL examples, responses and status codes, and a new API keys page explains the scopes
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Accept plugin bundles of up to 25 MiB in the registry instead of 1 MiB.
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Serve the docs for AI assistants: `/llms.txt`, `/llms-full.txt` and every docs page as Markdown at its URL plus `.md`.
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document every component of `@pouchbasejs/ui` in the docs, with a live preview, its source and its props, and link to them from the plugin docs and from code samples that import them.
+
+### Patch Changes
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Move the account pages to `/account/login` and `/account/register`, and document the renamed auth methods and endpoints.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document that every API key acts as an admin and that a client with an `apiKey` uses it on every call, without scopes or `pouch.asService()`; the site reads its key from `POUCHBASE_API_KEY` instead of `POUCHBASE_SERVICE_KEY`
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Split the collections docs into pages for records, filters, access rules, files, managing collections and the REST API, with example responses, a field type reference, the `where` forms and the conditions they become, rules for common cases, and the functions of conditions, including the date functions
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document sending emails of your own HTML with `pouch.mail.send()` and `POST /api/mail/send`, and the generated `MailTemplates` types.
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Group the docs sidebar into collapsible sections (installation, realtime, plugin topics and UI component categories) that open for the current page, scroll it on its own, open it from a menu button on small screens, and group the UI components overview by category.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Tighten the docs and bring them in line with the current app, SDK and plugin SDK.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - The filter and access rule docs use `&&`/`AND`, `||`/`OR` and `!`/`NOT`
+
+- [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document hidden fields: who sees them, how they work in access rules, filters and `/api/auth/me`, and their place in the schema API and the generated types
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document `ctx.pouch`, a plugin's own collections and `permissions.collections` on a new Collections page of the plugin docs, and serve `permissions.collections` from the plugin registry.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Explain in the plugin docs that components can use Tailwind classes with the dashboard's design tokens, call a field type's read-only component its preview, and document a page's `order`.
+
+- [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Rewrite the plugin docs for building plugins with one `definePlugin({ ... })` in `plugin.ts` instead of by convention, split into an overview and focused pages (project structure, field types, pages, components and icons, routes, sign-in providers, settings, testing and debugging, publishing, security and limits, the CLI) with previous and next links, and list what a plugin adds in the registry; the pages docs cover a page's `layout`.
+
+- [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document realtime with an API key: a client with an `apiKey` connects as an admin, and the protocol docs cover the key as the `auth` token and the `4401` close code
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Move the live updates docs to their own Realtime section, with an overview, subscriptions and the protocol, and document `subscribe()` and `unsubscribe()`
+
+- [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Document downloading the TypeScript types with an API key.
+- Updated dependencies [[`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`540ea55`](https://github.com/pouchbase/pouchbase/commit/540ea55886916318645a396babd378cd7d995176), [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0), [`6263212`](https://github.com/pouchbase/pouchbase/commit/626321289ded92e8d326d7aeacc3ccb5e19b8140), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`908eb96`](https://github.com/pouchbase/pouchbase/commit/908eb966c2c4b83c8e4efce10c72ecd1c64da9c6), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38), [`ac9aa28`](https://github.com/pouchbase/pouchbase/commit/ac9aa28a36e533556ff3a59e8043933d0f5e0f38)]:
+  - @pouchbasejs/plugin-sdk@0.4.0
+  - @pouchbasejs/js-sdk@0.8.0
+  - @pouchbasejs/ui@0.2.0
+
 ## 0.6.0
 
 ### Minor Changes
