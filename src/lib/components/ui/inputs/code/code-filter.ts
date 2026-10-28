@@ -50,6 +50,45 @@ export type Diagnostic = { message: string; start: number; end: number };
 /** Monaco id of the condition language of API rules and `?where=` (see `#lib/filter/filter.ts`). */
 export const FILTER_LANGUAGE = 'pouchbase-filter';
 
+type ThemeRule = MonacoApi.editor.ITokenThemeRule;
+
+/**
+ * Colors of the condition language's tokens, for the light and dark editor themes: `AND`/`&&`
+ * stand out from the comparisons, fields from `$user`, and lowercase `and` is marked as wrong.
+ */
+export const FILTER_RULES: { light: ThemeRule[]; dark: ThemeRule[] } = {
+	light: [
+		{ token: 'filter-logical', foreground: 'db2777', fontStyle: 'bold' },
+		{ token: 'filter-compare', foreground: '52525b' },
+		{ token: 'filter-field', foreground: '1d4ed8' },
+		{ token: 'filter-variable', foreground: '7c3aed', fontStyle: 'bold' },
+		{ token: 'filter-member', foreground: '7c3aed' },
+		{ token: 'filter-function', foreground: 'a16207' },
+		{ token: 'filter-string', foreground: '15803d' },
+		{ token: 'filter-number', foreground: 'c2410c' },
+		{ token: 'filter-constant', foreground: '0f766e', fontStyle: 'bold' },
+		{ token: 'filter-delimiter', foreground: '71717a' },
+		{ token: `delimiter.parenthesis.${FILTER_LANGUAGE}`, foreground: '71717a' },
+		{ token: 'filter-comment', foreground: 'a1a1aa', fontStyle: 'italic' },
+		{ token: 'filter-invalid', foreground: 'dc2626', fontStyle: 'underline' }
+	],
+	dark: [
+		{ token: 'filter-logical', foreground: 'f472b6', fontStyle: 'bold' },
+		{ token: 'filter-compare', foreground: 'd4d4d8' },
+		{ token: 'filter-field', foreground: '93c5fd' },
+		{ token: 'filter-variable', foreground: 'c4b5fd', fontStyle: 'bold' },
+		{ token: 'filter-member', foreground: 'c4b5fd' },
+		{ token: 'filter-function', foreground: 'fcd34d' },
+		{ token: 'filter-string', foreground: '86efac' },
+		{ token: 'filter-number', foreground: 'fdba74' },
+		{ token: 'filter-constant', foreground: '5eead4', fontStyle: 'bold' },
+		{ token: 'filter-delimiter', foreground: 'a1a1aa' },
+		{ token: `delimiter.parenthesis.${FILTER_LANGUAGE}`, foreground: 'a1a1aa' },
+		{ token: 'filter-comment', foreground: '71717a', fontStyle: 'italic' },
+		{ token: 'filter-invalid', foreground: 'f87171', fontStyle: 'underline' }
+	]
+};
+
 let registered = false;
 
 /** Registers the condition language (highlighting, brackets, comments) once. */
@@ -69,22 +108,31 @@ export function registerFilterLanguage(monaco: Monaco) {
 		],
 		wordPattern: /\$?[\w.]+/
 	});
+	// Token names start with `filter-`, so the theme's colors for them (`code-root.svelte`) don't
+	// change other languages.
 	monaco.languages.setMonarchTokensProvider(FILTER_LANGUAGE, {
 		tokenizer: {
 			root: [
-				[/#.*$/, 'comment'],
-				// `$user.*` and `$input.*`.
-				[/[$][\w.]*/, 'variable'],
-				[/\b(true|false|null)\b/, 'keyword'],
-				[/-?\d+(\.\d+)?/, 'number'],
-				[/"([^"\\]|\\.)*"?/, 'string'],
-				[/'([^'\\]|\\.)*'?/, 'string'],
-				[/\b(and|or|not)\b/, 'keyword'],
+				[/#.*$/, 'filter-comment'],
+				// `$user` and `$input`, and the field after them.
+				[/(\$\w*)((?:\.\w*)*)/, ['filter-variable', 'filter-member']],
+				[/\b(AND|OR|NOT)\b/, 'filter-logical'],
+				[/&&|\|\||!(?!=)/, 'filter-logical'],
+				[/\b(true|false|null)\b/, 'filter-constant'],
+				[/-?\d+(\.\d+)?\b/, 'filter-number'],
+				[/"([^"\\]|\\.)*"?/, 'filter-string'],
+				[/'([^'\\]|\\.)*'?/, 'filter-string'],
 				// `contains(`, `now(` and `any(`; a name without `(` is a field.
-				[/[a-z]\w*(?=\s*\()/, 'predefined'],
-				[/==|!=|>=|<=|>|</, 'operator'],
-				[/[(),]/, '@brackets'],
-				[/[a-z][\w]*/, 'identifier']
+				[/[a-z]\w*(?=\s*\()/, 'filter-function'],
+				[/==|!=|>=|<=|>|</, 'filter-compare'],
+				[/[()]/, '@brackets'],
+				[/,/, 'filter-delimiter'],
+				// Lowercase `and`, `or` and `not` are mistakes; the diagnostics say what to write.
+				[/\b(and|or|not)\b/, 'filter-invalid'],
+				// A field, or a path through relations (`post.author.role`).
+				[/[a-z]\w*(\.\w*)*/, 'filter-field'],
+				[/\s+/, 'white'],
+				[/[A-Za-z_]\w*|./, 'filter-invalid']
 			]
 		}
 	});
@@ -212,10 +260,17 @@ export function registerFilterCompletions(
 					...fields.map((name) => field(name, name.name, 'field of this collection')),
 					...variables,
 					...functions,
-					...['and', 'or', 'not', 'true', 'false', 'null'].map((label) => ({
-						label,
+					...[
+						{ label: 'AND', detail: 'Both conditions hold; also &&' },
+						{ label: 'OR', detail: 'Either condition holds; also ||' },
+						{ label: 'NOT', detail: 'The condition does not hold; also !' },
+						{ label: 'true' },
+						{ label: 'false' },
+						{ label: 'null', detail: 'Empty; also matches ""' }
+					].map((keyword) => ({
+						...keyword,
 						kind: CompletionItemKind.Keyword,
-						insertText: label,
+						insertText: keyword.label,
 						range
 					}))
 				]

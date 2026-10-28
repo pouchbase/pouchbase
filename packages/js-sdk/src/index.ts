@@ -30,10 +30,17 @@ export type { FileUrlOptions } from './services/files.js';
 export { FunctionsService } from './services/functions.js';
 export type { InvokeOptions } from './services/functions.js';
 export { MailService } from './services/mail.js';
-export type { SendMailOptions } from './services/mail.js';
+export type { CustomMail, SendCustomMailOptions, SendMailOptions } from './services/mail.js';
 export { CollectionClient } from './services/db.js';
 export { RealtimeService } from './services/realtime.js';
-export type { SubscribeOptions } from './services/realtime.js';
+export type {
+	SubscribeOptions,
+	Topic,
+	TopicCollection,
+	TopicOutput,
+	TopicRecord,
+	TopicRelations
+} from './services/realtime.js';
 export { RealtimeConnection } from './realtime/connection.js';
 export type {
 	ConnectionState,
@@ -79,6 +86,7 @@ export { KNOWN_OAUTH_PROVIDERS } from './types.js';
 export type {
 	AuthResult,
 	DefaultCollections,
+	DefaultMailTemplates,
 	Issues,
 	KnownOAuthProvider,
 	OAuthProvider,

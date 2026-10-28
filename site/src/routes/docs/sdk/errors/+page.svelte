@@ -44,9 +44,9 @@
 	<h2 id="pouchbase-error">PouchbaseError</h2>
 
 	<p>
-		A request that fails, gets a status other than 2xx or can't be read throws a
-		<Code.Root>PouchbaseError</Code.Root>. <Code.Root>isPouchbaseError(error, kind?)</Code.Root> checks
-		for one, optionally of one kind, and narrows its type:
+		Every failed request (no response, or a status other than 2xx) throws a
+		<Code.Root>PouchbaseError</Code.Root>. <Code.Root>isPouchbaseError(error, kind?)</Code.Root>
+		checks for one, optionally of one kind, and narrows its type:
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -60,22 +60,18 @@
 	<DocsTable head={['Kind', 'Status', 'When']} rows={kinds} />
 
 	<p>
-		What each kind means for records is on <a href="{resolve('/docs/sdk/records')}#errors"
-			>Records</a
-		>, and the responses behind them on the
+		See also <a href="{resolve('/docs/sdk/records')}#errors">Records</a> and the
 		<a href={resolve('/docs/api/introduction')}>REST API</a> pages.
 	</p>
 
 	<h2 id="without-try-catch">Without try/catch</h2>
 
 	<p>
-		Every call of <Code.Root>pouch.db</Code.Root> returns a request that you can await, which throws,
-		or end with <Code.Root>.safe()</Code.Root>, which never throws: it returns
-		<Code.Root>{'{ ok: true, data }'}</Code.Root> or <Code.Root>{'{ ok: false, error }'}</Code.Root
-		>. On <Code.Root>insert()</Code.Root> and <Code.Root>patch()</Code.Root>, <Code.Root
-			>issues</Code.Root
-		>
-		is typed by the fields of the collection, which suits forms.
+		The calls of <Code.Root>pouch.db</Code.Root> (all but <Code.Root>iterate()</Code.Root>) also
+		have <Code.Root>.safe()</Code.Root>, which returns <Code.Root>{'{ ok: true, data }'}</Code.Root>
+		or <Code.Root>{'{ ok: false, error }'}</Code.Root> instead of throwing. On
+		<Code.Root>insert()</Code.Root> and <Code.Root>patch()</Code.Root>, <Code.Root>issues</Code.Root
+		> is typed by the fields of the collection, which suits forms.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

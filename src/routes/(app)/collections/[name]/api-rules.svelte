@@ -146,7 +146,7 @@
 		['Only the author', 'author == $user.id'],
 		['Signed-in users', '$user.id != null'],
 		['Verified users', '$user.verified == true'],
-		['Published, or your own', 'status == "published" or author == $user.id'],
+		['Published, or your own', 'status == "published" || author == $user.id'],
 		['Only as yourself (create)', '$input.author == $user.id'],
 		['Any of a multiple relation', 'any(editors) == $user.id'],
 		['A field of a related record', 'author.role == "admin"'],
@@ -216,8 +216,9 @@
 			<Collapsible.Content class="flex flex-col gap-4 pt-3 text-sm text-zinc-600">
 				<p>
 					A custom rule is a condition: a request is only allowed for records that match it. Combine
-					comparisons with <code class="font-mono">and</code> and
-					<code class="font-mono">or</code>, group them with parentheses, and start a comment with
+					comparisons with <code class="font-mono">&amp;&amp;</code> (or
+					<code class="font-mono">AND</code>) and <code class="font-mono">||</code> (or
+					<code class="font-mono">OR</code>), group them with parentheses, and start a comment with
 					<code class="font-mono">#</code>. The editor suggests fields and functions as you type.
 				</p>
 
@@ -263,7 +264,7 @@
 							</Table.Cell>
 						</Table.Row>
 						<Table.Row>
-							<Table.Cell class="font-mono whitespace-nowrap">not</Table.Cell>
+							<Table.Cell class="font-mono whitespace-nowrap">! or NOT</Table.Cell>
 							<Table.Cell>The opposite of a condition</Table.Cell>
 						</Table.Row>
 						<Table.Row>

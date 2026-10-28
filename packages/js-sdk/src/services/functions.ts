@@ -1,4 +1,4 @@
-import type { Pouchbase, RequestOptions } from '../client.js';
+import type { PouchbaseClient, RequestOptions } from '../client.js';
 
 /** Options for `pouch.functions.invoke()`. */
 export type InvokeOptions = {
@@ -19,9 +19,9 @@ export type InvokeOptions = {
  * function knows who calls it; functions that require sign-in answer `401` without one.
  */
 export class FunctionsService {
-	readonly #pouch: Pouchbase<object>;
+	readonly #pouch: PouchbaseClient;
 
-	constructor(pouch: Pouchbase<object>) {
+	constructor(pouch: PouchbaseClient) {
 		this.#pouch = pouch;
 	}
 

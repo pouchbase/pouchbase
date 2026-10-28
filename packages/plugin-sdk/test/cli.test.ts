@@ -589,7 +589,7 @@ describe('discoverProject', () => {
 			'views/settings.svelte': '<h1>Settings</h1>\n',
 			'plugin.ts': pluginFile(
 				"import Report from './views/report.svelte';\nimport Settings from './views/settings.svelte';\n",
-				"{ pages: { settings: { title: 'Plugin settings', navigation: false, component: Settings }, 'reports/monthly-report': { component: Report } } }"
+				"{ pages: { settings: { title: 'Plugin settings', navigation: false, component: Settings }, 'reports/monthly-report': { layout: 'full', component: Report } } }"
 			)
 		});
 
@@ -606,7 +606,8 @@ describe('discoverProject', () => {
 				path: 'reports/monthly-report',
 				title: 'Monthly report',
 				component: 'ui/views/report.svelte',
-				navigation: true
+				navigation: true,
+				layout: 'full'
 			}
 		]);
 	});

@@ -1,10 +1,10 @@
 import type { RequestHandler } from './$types';
 
-import { json, preflight, requestServiceKey } from '#lib/server/api.js';
+import { json, preflight, requestApiKey } from '#lib/server/api.js';
 import { readJsonObject } from '#lib/server/api-body.js';
 import { collectionExportSchema } from '#lib/schemas/collections.js';
 
-import { errorResponse, flag, invalidBody, planBody, PURPOSE } from '../responses';
+import { errorResponse, flag, invalidBody, planBody } from '../responses';
 
 /**
  * Imports an export file (the body): creates its collections and changes existing ones (matched
@@ -13,7 +13,7 @@ import { errorResponse, flag, invalidBody, planBody, PURPOSE } from '../response
  * `?force=true` (`409` with the plan otherwise) → `{ applied, plan: { steps, warnings } }`.
  */
 export const POST: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;

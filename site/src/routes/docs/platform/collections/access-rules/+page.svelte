@@ -26,10 +26,11 @@
 		['Everyone', '(empty)', 'Anyone, also without signing in'],
 		['Signed-in users', '$user.id != null', 'Any request with a valid token'],
 		[
-			'Owner',
+			'Owner (author)',
 			'author == $user.id',
-			'The user in a relation field to users; any(editors) == $user.id for a multiple one, id == $user.id in users itself'
+			'The user in a relation to users; any(editors) == $user.id for a multiple one'
 		],
+		['The user themselves', 'id == $user.id', 'In users: each user only their own record'],
 		['Custom rule', 'a condition', 'Only for records that match it']
 	];
 
@@ -56,13 +57,16 @@
 	const setups = [
 		[
 			'Blog',
-			'list, view: status == "published" or author == $user.id · create: author == $user.id · update, delete: Owner'
+			'list, view: status == "published" || author == $user.id · create: author == $user.id · update, delete: Owner (author)'
 		],
-		['Private notes', 'Every action: Owner (author == $user.id)'],
-		['Comments', 'list, view: Everyone · create: author == $user.id · update, delete: Owner'],
+		['Private notes', 'Every action: Owner (author)'],
+		[
+			'Comments',
+			'list, view: Everyone · create: author == $user.id · update, delete: Owner (author)'
+		],
 		[
 			'Users',
-			'list, view, update: Owner (id == $user.id), with role as a hidden field · delete: Admins only'
+			'list, view, update: The user themselves, with role as a hidden field · delete: Admins only'
 		],
 		['Read-only catalog', 'list, view: Everyone · create, update, delete: Admins only']
 	];
@@ -97,13 +101,12 @@
 	<h2 id="rules">A rule per action</h2>
 
 	<p>
-		Every collection has an access rule (API rule) for each action of the records API:
-		<strong>list and search</strong>, <strong>view</strong>, <strong>create</strong>,
-		<strong>update</strong> and <strong>delete</strong>. Set them with the <strong>API</strong>
-		button of the collection, under <strong>Access rules</strong>, or in the <Code.Root
-			>rules</Code.Root
-		> of the <a href={resolve('/docs/sdk/schema')}>schema API</a>. The rules apply to every call of
-		the SDK and the REST API, to included relations and to
+		Every collection has an access rule (API rule) for <strong>list and search</strong>,
+		<strong>view</strong>, <strong>create</strong>, <strong>update</strong> and
+		<strong>delete</strong>. Set them under <strong>API → Access rules</strong> of the collection,
+		or in the <Code.Root>rules</Code.Root> of the
+		<a href={resolve('/docs/sdk/schema')}>schema API</a>. They apply to every call of the SDK and
+		the REST API, to included relations and to
 		<a href={resolve('/docs/platform/realtime')}>realtime</a> events, which follow the view rule.
 	</p>
 
@@ -113,24 +116,21 @@
 			<Callout.Title>Private by default</Callout.Title>
 			<Callout.Description>
 				A new collection has every rule set to Admins only, so nothing is reachable through the API
-				until you open it up, one action at a time.
+				until you open it up.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
 
 	<h2 id="presets">Presets</h2>
 
-	<p>Each rule is one of these presets, or a condition of your own:</p>
-
 	<DocsTable head={['Rule', 'Condition', 'Who may']} rows={presets} code={0} />
 
 	<p>
-		A custom rule is a <a href={resolve('/docs/platform/collections/filters')}>condition</a>, in the
-		same syntax as <Code.Root>where</Code.Root>, which can also use the signed-in user (<Code.Root
+		A custom rule is a <a href={resolve('/docs/platform/collections/filters')}>condition</a> in the
+		syntax of <Code.Root>where</Code.Root>, which can also use the signed-in user (<Code.Root
 			>$user</Code.Root
 		>) and, in create and update rules, what is sent (<Code.Root>$input</Code.Root>). The editor
-		suggests fields as you type and underlines mistakes. A request with an invalid or expired token
-		is refused with <Code.Root>unauthorized</Code.Root>, not treated as signed out.
+		suggests fields and underlines mistakes.
 	</p>
 
 	<h2 id="how-rules-apply">How each rule applies</h2>
@@ -140,19 +140,18 @@
 	<DocsTable head={['Action', 'The rule sees', 'When it doesn’t match']} rows={actions} code={0} />
 
 	<p>
-		Hidden records look as if they don't exist, so a user can't find out which ids are taken. The
-		rules are independent: a view rule doesn't limit what the list rule shows, so give list and view
-		the same rule unless you mean otherwise.
+		Records a rule hides look as if they don't exist, so users can't find out which ids are taken.
+		The rules are independent: a view rule doesn't limit the list rule, so give both the same rule
+		unless you mean otherwise.
 	</p>
 
 	<h2 id="checking-what-is-written">Checking what is written</h2>
 
 	<p>
-		In a create rule, the fields are those of the new record, so
-		<Code.Root>author == $user.id</Code.Root> only lets users create posts with themselves as the author.
-		In an update rule they are the stored record, so the same rule only lets authors change their own
-		posts, but not what they change it to. That is what <Code.Root>$input</Code.Root> is for: it holds
-		the values sent with the request, and <Code.Root>null</Code.Root> for fields that weren't sent.
+		In a create rule, <Code.Root>author == $user.id</Code.Root> checks the new record, so users can only
+		create posts as themselves. In an update rule it checks the stored record, so it limits whose posts
+		change, not what they change to. For that, <Code.Root>$input</Code.Root> holds the values sent, and
+		<Code.Root>null</Code.Root> for fields that weren't sent:
 	</p>
 
 	<CodeBlock.Root title="Update rule">
@@ -160,20 +159,19 @@
 	</CodeBlock.Root>
 
 	<p>
-		This lets authors change their posts, but not give them to someone else: the author may only be
-		left out or set to themselves. In the same way,
+		Authors can change their posts but not give them away. In the same way,
 		<Code.Root>$input.featured == null</Code.Root> keeps a field for admins only.
 	</p>
 
 	<h2 id="recipes">Recipes</h2>
 
-	<p>The rules of a blog where users write their own posts, one per action:</p>
+	<p>A blog where users write their own posts:</p>
 
 	<CodeBlock.Root title="Rules of posts">
 		<CodeBlock.Source code={data.code.ruleRecipes} />
 	</CodeBlock.Root>
 
-	<p>And common setups, per collection:</p>
+	<p>Common setups:</p>
 
 	<DocsTable head={['Collection', 'Rules']} rows={setups} code={0} />
 
@@ -181,11 +179,11 @@
 
 	<p>
 		In a rule, <Code.Root>$user</Code.Root> has every field of <Code.Root>users</Code.Root>,
-		including the ones you add and
+		including
 		<a href="{resolve('/docs/platform/collections')}#hidden-fields">hidden fields</a>. For roles,
-		add a <Code.Root>role</Code.Root> list to users, make it hidden, and use it in rules:
+		add a hidden <Code.Root>role</Code.Root> list to users and use it in rules:
 		<Code.Root>$user.role == "editor"</Code.Root>, or
-		<Code.Root>author == $user.id or $user.role == "admin"</Code.Root>.
+		<Code.Root>author == $user.id || $user.role == "admin"</Code.Root>.
 	</p>
 
 	<Callout.Root variant="warning">
@@ -194,10 +192,8 @@
 			<Callout.Title>Don't let users give themselves a role</Callout.Title>
 			<Callout.Description>
 				With an update rule of <Code.Root>id == $user.id</Code.Root> on users, users can change every
-				field of their own record that isn't hidden. A hidden role can only be set by admins, service
-				keys and plugins; a role that isn't hidden needs <Code.Root
-					>and $input.role == null</Code.Root
-				> in the update rule.
+				field of their own record that isn't hidden. Make the role hidden, or add
+				<Code.Root>&amp;&amp; $input.role == null</Code.Root> to the update rule.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
@@ -205,10 +201,9 @@
 	<h2 id="denied-requests">Denied requests</h2>
 
 	<p>
-		A request that a rule doesn't allow fails with one of these responses. The
-		<a href={resolve('/docs/sdk/errors')}>JS SDK</a> throws them as a
-		<Code.Root>PouchbaseError</Code.Root>, except that <Code.Root>find()</Code.Root> returns
-		<Code.Root>null</Code.Root> for a hidden record; the
+		The <a href={resolve('/docs/sdk/errors')}>JS SDK</a> throws these as a
+		<Code.Root>PouchbaseError</Code.Root> (except <Code.Root>find()</Code.Root>, which returns
+		<Code.Root>null</Code.Root>); the
 		<a href="{resolve('/docs/api/introduction')}#errors">REST API</a> answers with the status and a
 		<Code.Root>message</Code.Root>.
 	</p>
@@ -219,25 +214,10 @@
 
 	<p>
 		The rules don't apply to admins in the dashboard, nor to server-side code with an
-		<a href={resolve('/docs/platform/api-keys')}>API key</a> with the <strong>service</strong>
-		scope, such as a back-end that writes what users may not. With the JS SDK, that code calls the records
-		through
-		<a href={resolve('/docs/sdk/api-keys')}><Code.Root>pouch.asService()</Code.Root></a>.
-	</p>
-
-	<Callout.Root variant="error">
-		<Callout.Icon><Icon.Root icon="lucide:key-round" /></Callout.Icon>
-		<Callout.Body>
-			<Callout.Title>Never put a service key in a browser</Callout.Title>
-			<Callout.Description>
-				Anyone who has the key can read and write every record. Keep it in the environment of your
-				server, and use the user's token in code that runs in the browser.
-			</Callout.Description>
-		</Callout.Body>
-	</Callout.Root>
-
-	<p>
-		<a href={resolve('/docs/plugins/collections')}>Plugins</a> don't follow the rules either: they reach
-		the collections they list in their permissions.
+		<a href={resolve('/docs/platform/api-keys')}>API key</a> (in the JS SDK, a client with an
+		<a href="{resolve('/docs/sdk/api-keys')}#admin-access"><Code.Root>apiKey</Code.Root></a>). Keep
+		keys out of the browser: anyone with one can read and write every record.
+		<a href={resolve('/docs/plugins/collections')}>Plugins</a> skip the rules too, for their own collections
+		and those in their permissions.
 	</p>
 </DocsPage>

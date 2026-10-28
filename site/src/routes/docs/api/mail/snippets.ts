@@ -13,6 +13,19 @@ curl -X POST https://pouchbase.example.com/api/mail/send \\
 	}'`
 );
 
+export const sendCustom = snippet(
+	'bash',
+	`
+curl -X POST https://pouchbase.example.com/api/mail/send \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
+	-H "Content-Type: application/json" \\
+	-d '{
+		"subject": "Your order has shipped",
+		"html": "<p>Hi Ada, your order <strong>#1042</strong> is on its way.</p>",
+		"to": "ada@example.com"
+	}'`
+);
+
 export const sent = snippet(
 	'json',
 	`

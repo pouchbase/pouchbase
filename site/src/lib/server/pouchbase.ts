@@ -1,7 +1,7 @@
 import { createClient } from '@pouchbasejs/js-sdk';
 import type { Pouchbase, RecordOf } from '@pouchbasejs/js-sdk';
 
-import { POUCHBASE_SERVICE_KEY } from '$app/env/private';
+import { POUCHBASE_API_KEY } from '$app/env/private';
 import { POUCHBASE_URL } from '$app/env/public';
 
 import type { Schema as GeneratedSchema } from './pouchbase.types';
@@ -9,7 +9,7 @@ import type { Schema as GeneratedSchema } from './pouchbase.types';
 /**
  * The Pouchbase instance behind the site: accounts are its `users`, and the plugin registry keeps
  * its data in four collections whose API rules are all Admins only. The site writes and reads
- * them with a service key (`service()`), after checking who may do what itself. See the README for
+ * them with an API key (`admin()`), which acts as an admin, after checking who may do what itself. See the README for
  * how to set up the collections.
  *
  * The types of the collections are generated into `pouchbase.types.ts` by `pnpm types`; run it
@@ -69,7 +69,7 @@ export function pouchbase(token?: string): Pouchbase<Schema> {
 	return pouch;
 }
 
-/** A client with the service key: API rules don't apply to it. Server-side only. */
-export function service(): Pouchbase<Schema> {
-	return createClient<Schema>(POUCHBASE_URL ?? '', { apiKey: POUCHBASE_SERVICE_KEY }).asService();
+/** A client with the API key, which acts as an admin: API rules don't apply to it. Server-side only. */
+export function admin(): Pouchbase<Schema> {
+	return createClient<Schema>(POUCHBASE_URL ?? '', { apiKey: POUCHBASE_API_KEY });
 }

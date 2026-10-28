@@ -84,7 +84,7 @@ export const uiComponents: UiComponent[] = [
 		description:
 			'A small label for a status, a type or a count, which can also be a link or a button.',
 		about: [
-			'A badge is a `<span>`. With `href` it becomes a link, e.g. to a related record, and with `onclick` a button; both get a hover and a focus style.'
+			'A `<span>`, a link with `href` or a button with `onclick`; links and buttons get a hover and a focus style.'
 		],
 		parts: [
 			{
@@ -112,8 +112,7 @@ export const uiComponents: UiComponent[] = [
 			{
 				id: 'interactive',
 				title: 'Icons, links and buttons',
-				description:
-					'Icons inside a badge are sized to fit. A badge with `href` or `onclick` reacts to hover and focus.'
+				description: 'Icons inside a badge are sized to fit.'
 			}
 		]
 	},
@@ -126,8 +125,8 @@ export const uiComponents: UiComponent[] = [
 		description:
 			'A button or a link that looks like one, with variants, icon sizes and a busy state.',
 		about: [
-			'Built on the `Button` of bits-ui: with `href` it renders an `<a>`, otherwise a `<button type="button">`, so it never submits a form by accident; pass `type="submit"` for one that should.',
-			"When `onclick` returns a promise, the button shows a spinner and blocks clicks until it settles. Pass `loading` for work the button doesn't start itself."
+			'Built on the `Button` of bits-ui: an `<a>` with `href`, otherwise a `<button type="button">`, which never submits a form unless you pass `type="submit"`.',
+			"When `onclick` returns a promise, the button shows a spinner and blocks clicks until it settles; pass `loading` for work it doesn't start itself."
 		],
 		parts: [
 			{
@@ -296,9 +295,9 @@ export const uiComponents: UiComponent[] = [
 		description:
 			'An Iconify icon, or an SVG file drawn in the text color, at the size of the text.',
 		about: [
-			'`icon` is an Iconify name such as `lucide:plus`. In an app, the `iconify` Vite plugin of `@pouchbasejs/ui/vite` bundles the icons it finds in the sources, so the name has to appear literally, as in `icon="lucide:plus"`, and can\'t be put together at runtime. See [setup](/docs/ui#setup).',
-			"`src` is the URL of an SVG, such as a `data:` URL or a plugin's icon. It is drawn as a mask in `currentColor`, so only its shape counts, and wins over `icon`. In a plugin, prefer `src`: names the dashboard doesn't bundle itself are fetched from the Iconify API.",
-			'Icons are `1em` square and take the color of the text. They are decorative and hidden from assistive technology, unless you give them a `label`.'
+			'`icon` is an Iconify name such as `lucide:plus`. In an app, the `iconify` Vite plugin bundles the icons it finds in the sources, so the name must appear literally (see [setup](/docs/ui#setup)).',
+			"`src` is the URL of an SVG, such as a `data:` URL or a plugin's icon, drawn as a mask in `currentColor` so only its shape counts; it wins over `icon`. In a plugin, prefer `src`: names the dashboard doesn't bundle are fetched from the Iconify API.",
+			'Icons are `1em` square in the text color, and hidden from assistive technology unless they have a `label`.'
 		],
 		parts: [
 			{
@@ -516,7 +515,7 @@ export const uiComponents: UiComponent[] = [
 		entry: 'segmented',
 		description: 'A row of options of which one is always active, such as a view or a period.',
 		about: [
-			'One item is always active: clicking it again keeps it. The indicator slides to the item you pick, before the parent has updated `value`.'
+			'Clicking the active item keeps it active. The indicator slides to the picked item before the parent updates `value`.'
 		],
 		parts: [
 			{
@@ -567,7 +566,7 @@ export const uiComponents: UiComponent[] = [
 		description:
 			'A dropdown to pick one value from a list, with icons, images, descriptions and groups.',
 		about: [
-			'Built on the `Select` of bits-ui, so it works with the keyboard and type-ahead. With `name`, a hidden input submits the value with a form. Long lists scroll.'
+			'Built on the `Select` of bits-ui, with keyboard support and type-ahead. With `name`, a hidden input submits the value with a form.'
 		],
 		parts: [
 			{
@@ -761,7 +760,7 @@ export const uiComponents: UiComponent[] = [
 		parts: [
 			{
 				name: 'Root',
-				description: 'A `<textarea>`, at least six lines high.',
+				description: 'A `<textarea>`, at least `6rem` high.',
 				element: '<textarea>',
 				props: [
 					{ name: 'value', type: 'string', description: 'Bindable: the value.' },

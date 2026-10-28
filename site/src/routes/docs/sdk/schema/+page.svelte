@@ -24,7 +24,8 @@
 		[
 			'import(file, { dryRun, force, removeMissing })',
 			'Applies an export file and returns the plan'
-		]
+		],
+		['types()', 'The generated TypeScript types, as text (see TypeScript types)']
 	];
 </script>
 
@@ -36,9 +37,8 @@
 	<h2 id="create-a-collection">Create a collection</h2>
 
 	<p>
-		<Code.Root>pouch.schema</Code.Root> manages collections from code, for example in a deploy script.
-		It needs an <a href={resolve('/docs/sdk/api-keys')}>API key</a> with the
-		<strong>service</strong> scope.
+		<Code.Root>pouch.schema</Code.Root> manages collections from code, for example in a deploy script,
+		and needs an <a href={resolve('/docs/sdk/api-keys')}>API key</a>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -48,13 +48,12 @@
 	<p>
 		Fields are
 		<Code.Root>{'{ name, type, required, unique, hidden, defaultValue, options }'}</Code.Root>, with
-		the type as its id (<Code.Root>text</Code.Root>, <Code.Root>rich_text</Code.Root>,
-		<Code.Root>relation</Code.Root>, …; see
-		<a href="{resolve('/docs/platform/collections')}#field-types">field types</a>). A relation
-		points to a collection by its id, in <Code.Root>options.collectionId</Code.Root>.
-		<Code.Root>rules</Code.Root> takes a condition per action, <Code.Root>''</Code.Root> for everyone
-		and <Code.Root>null</Code.Root> for admins only; see
-		<a href={resolve('/docs/platform/collections/access-rules')}>Access rules</a>.
+		a
+		<a href="{resolve('/docs/platform/collections')}#field-types">field type</a> id as
+		<Code.Root>type</Code.Root>. A relation points to a collection by id, in
+		<Code.Root>options.collectionId</Code.Root>. <Code.Root>rules</Code.Root> takes a condition per action,
+		<Code.Root>''</Code.Root> for everyone and <Code.Root>null</Code.Root> for admins only (see
+		<a href={resolve('/docs/platform/collections/access-rules')}>Access rules</a>).
 	</p>
 
 	<DocsTable head={['Method', 'Does']} rows={methods} />
@@ -64,8 +63,8 @@
 	<p>
 		<Code.Root>update()</Code.Root> changes only the parts you pass. <Code.Root>fields</Code.Root> and
 		<Code.Root>indexes</Code.Root> are the whole list, so the ones you leave out are deleted;
-		<Code.Root>rules</Code.Root> keeps the actions you leave out. Changes that remove fields or data throw
-		a <Code.Root>conflict</Code.Root> (409) unless you pass <Code.Root>force: true</Code.Root>.
+		<Code.Root>rules</Code.Root> keeps the actions you leave out. Changes that remove fields or data fail
+		with <Code.Root>conflict</Code.Root> unless you pass <Code.Root>force: true</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -75,12 +74,10 @@
 	<h2 id="export-and-import">Export and import</h2>
 
 	<p>
-		An export file holds collections with their fields, indexes and rules, without records, like the
-		export in the dashboard (see
+		An export file holds collections without records, as in the dashboard (see
 		<a href={resolve('/docs/platform/collections/schema')}>Export and import</a>). An import creates
-		the collections of the file and changes existing ones to match it; other collections stay unless
-		you pass <Code.Root>removeMissing: true</Code.Root>. <Code.Root>dryRun: true</Code.Root> only returns
-		the plan, and changes that remove data need <Code.Root>force: true</Code.Root>.
+		and changes collections to match it; others stay unless you pass
+		<Code.Root>removeMissing: true</Code.Root>. <Code.Root>dryRun: true</Code.Root> only returns the plan.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -88,7 +85,6 @@
 	</CodeBlock.Root>
 
 	<p>
-		The endpoints behind <Code.Root>pouch.schema</Code.Root> are on
-		<a href={resolve('/docs/api/schema')}>Schema and types</a> in the REST API docs.
+		The endpoints are on <a href={resolve('/docs/api/schema')}>Schema and types</a> in the REST API docs.
 	</p>
 </DocsPage>

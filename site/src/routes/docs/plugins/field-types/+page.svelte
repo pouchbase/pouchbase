@@ -25,24 +25,15 @@
 	<p>
 		A field type is a <Code.Root>defineField(...)</Code.Root> in <Code.Root>fields</Code.Root> of
 		<Code.Root>definePlugin</Code.Root>; its key is the type, so <Code.Root>color</Code.Root> is
-		<Code.Root>&lt;plugin&gt;:color</Code.Root>:
+		<Code.Root>&lt;plugin&gt;:color</Code.Root>. The templates keep each type in a folder of its
+		own, but any file works:
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
 		<CodeBlock.Source code={data.code.fieldPlugin} />
 	</CodeBlock.Root>
 
-	<p>
-		The templates keep each type in a folder of its own, such as <Code.Root>fields/color/</Code.Root
-		>, but any file works.
-	</p>
-
 	<h2 id="the-server-side">The server side</h2>
-
-	<p>
-		<Code.Root>field.ts</Code.Root> default-exports <Code.Root>defineField(...)</Code.Root>, which
-		names the components it imports:
-	</p>
 
 	<CodeBlock.Root title="fields/color/field.ts">
 		<CodeBlock.Source code={data.code.field} />
@@ -54,43 +45,37 @@
 			a type.
 		</li>
 		<li>
-			<Code.Root>column</Code.Root> is the SQLite column type: <Code.Root>TEXT</Code.Root>,
-			<Code.Root>INTEGER</Code.Root>, <Code.Root>REAL</Code.Root> or <Code.Root>BLOB</Code.Root>. It
-			is fixed when a field is created; changing it later only affects new fields.
+			<Code.Root>column</Code.Root> is the SQLite column type. Each field keeps the column it was created
+			with; changing it only affects new fields.
 		</li>
 		<li>
-			<Code.Root>input</Code.Root> (required) and <Code.Root>preview</Code.Root> (optional) are Svelte
-			components, imported like modules; <Code.Root>icon</Code.Root> is an Iconify name or an imported
-			<Code.Root>.svg</Code.Root> file (see
+			<Code.Root>input</Code.Root> (required) and <Code.Root>preview</Code.Root> are Svelte components;
+			<Code.Root>icon</Code.Root> is an Iconify name or an imported <Code.Root>.svg</Code.Root> file (see
 			<a href="{resolve('/docs/plugins/components')}#icons">Icons</a>).
 		</li>
 		<li>
-			<Code.Root>validate(value, options, ctx)</Code.Root> checks a value before it is saved. Values from
-			the record form are strings, but the API may send any JSON, so accept both.
+			<Code.Root>validate(value, options, ctx)</Code.Root> checks a value before it is saved;
+			<Code.Root>options</Code.Root> are the field's options. Values from the record form are strings,
+			but the API may send any JSON, so accept both.
 		</li>
 		<li>
 			<Code.Root>serialize(value, ctx)</Code.Root> turns a valid value into what is stored;
 			<Code.Root>deserialize(value, ctx)</Code.Root> turns the stored value into what the API returns.
 		</li>
 		<li>
-			All hooks are optional. Empty values are stored as <Code.Root>null</Code.Root> without calling the
-			plugin, and a field's default value goes through <Code.Root>validate</Code.Root> and
-			<Code.Root>serialize</Code.Root> too.
-		</li>
-		<li>
-			The CLI reads the label, description, column, components and icon by running
-			<Code.Root>plugin.ts</Code.Root> in Node.js, so keep the top level of
-			<Code.Root>field.ts</Code.Root> free of anything only a Worker has. The hooks run in the plugin's
-			<a href="{resolve('/docs/plugins/routes')}#server-code">Worker</a>.
+			All hooks are optional and run in the plugin's
+			<a href="{resolve('/docs/plugins/routes')}#server-code">Worker</a>. Empty values are stored as
+			<Code.Root>null</Code.Root> without calling them; a field's default value goes through
+			<Code.Root>validate</Code.Root> and <Code.Root>serialize</Code.Root> too.
 		</li>
 	</ul>
 
 	<h2 id="the-input">The input</h2>
 
 	<p>
-		The <Code.Root>input</Code.Root> component gets <Code.Root>FieldInputProps</Code.Root> and must submit
-		the value with a form control named <Code.Root>name</Code.Root>. Use a hidden
-		<Code.Root>&lt;input&gt;</Code.Root> when something else edits it:
+		The input gets <Code.Root>FieldInputProps</Code.Root> and submits the value with a form control named
+		<Code.Root>name</Code.Root>; use a hidden <Code.Root>&lt;input&gt;</Code.Root> when something else
+		edits it:
 	</p>
 
 	<CodeBlock.Root title="fields/color/input.svelte">
@@ -98,17 +83,16 @@
 	</CodeBlock.Root>
 
 	<p>
-		<a href={resolve('/docs/plugins/ui/[component=slug]', { component: 'input' })}>Input</a> comes
-		from
-		<Code.Root>@pouchbasejs/ui</Code.Root>, so the input looks like the dashboard's own; see
-		<a href={resolve('/docs/plugins/ui')}>UI components</a> for the others.
+		<a href={resolve('/docs/plugins/ui/[component=slug]', { component: 'input' })}>Input</a> from
+		<a href={resolve('/docs/plugins/ui')}><Code.Root>@pouchbasejs/ui</Code.Root></a> makes it look like
+		the dashboard's own.
 	</p>
 
 	<h2 id="the-preview">The preview</h2>
 
 	<p>
-		The <Code.Root>preview</Code.Root> component shows the value, read-only, in the records grid. It gets
-		<Code.Root>FieldPreviewProps</Code.Root>; without one, the grid shows the value as text.
+		The preview gets <Code.Root>FieldPreviewProps</Code.Root> and shows the value, read-only, in the records
+		grid; without one, the grid shows it as text.
 	</p>
 
 	<CodeBlock.Root title="fields/color/preview.svelte">
@@ -134,14 +118,10 @@
 	</Callout.Root>
 
 	<ul>
+		<li>Never rename a field type once people use it: fields of the old name become read-only.</li>
 		<li>
-			Never rename a field type once people use it: the fields of the old name become read-only, as
-			if the plugin were removed.
-		</li>
-		<li>
-			Changing <Code.Root>serialize</Code.Root> only affects values saved from then on. Stored values
-			are never rewritten, so <Code.Root>deserialize</Code.Root> and the preview must keep reading the
-			old form.
+			Stored values are never rewritten, so after changing <Code.Root>serialize</Code.Root>,
+			<Code.Root>deserialize</Code.Root> and the preview must still read the old form.
 		</li>
 	</ul>
 </DocsPage>

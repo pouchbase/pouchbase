@@ -15,9 +15,9 @@ export const variables = defineEnvVars({
 		public: true,
 		schema: required
 	},
-	POUCHBASE_SERVICE_KEY: {
+	POUCHBASE_API_KEY: {
 		description:
-			'API key (`pbk_…`) with the service scope from that instance (System → API keys), so the registry can write plugins, versions and publish tokens',
+			'API key (`pbk_…`) of that instance (System → API keys), so the registry can write plugins, versions and publish tokens',
 		schema: required
 	}
 });

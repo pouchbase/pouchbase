@@ -101,6 +101,18 @@ describe('pouch.realtime', () => {
 		expect(events).toEqual([{ action: 'update', record: { id: 'p1' }, at: 5 }]);
 	});
 
+	it('authenticates with the API key instead of the token when the client has one', () => {
+		const pouch = new Pouchbase('https://pouch.example.com', {
+			apiKey: 'pbk_secret',
+			webSocket: FakeSocket
+		});
+
+		pouch.session.begin({ token: 'token-1', userId: 'ada' });
+		pouch.realtime.subscribe('posts', () => undefined);
+		last().open();
+		expect(last().messages()).toEqual([{ type: 'auth', token: 'pbk_secret' }]);
+	});
+
 	it('sends where objects and include', () => {
 		const pouch = client();
 

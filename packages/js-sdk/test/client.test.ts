@@ -10,7 +10,14 @@ import {
 	isTokenValid
 } from '../src/index.js';
 import type { SessionStorage } from '../src/index.js';
-import type { JsonValue, KnownOAuthProvider, OAuthProvider, Page, User } from '../src/index.js';
+import type {
+	JsonValue,
+	KnownOAuthProvider,
+	OAuthProvider,
+	Page,
+	Topic,
+	User
+} from '../src/index.js';
 import { compileOrderBy, compileWhere } from '../src/query.js';
 
 type Call = { url: string; init: RequestInit };
@@ -85,7 +92,7 @@ describe('Pouchbase', () => {
 		expect(error.status).toBe(0);
 	});
 
-	it('sends the API key instead of the token from a service client', async () => {
+	it('sends the API key instead of the token when the client has one', async () => {
 		const { fetch, calls } = mockFetch([200, { id: 'p1', title: 'Hi' }]);
 		const pouch = new Pouchbase('https://pouch.example.com', {
 			fetch,
@@ -93,10 +100,9 @@ describe('Pouchbase', () => {
 			session: signedIn(token(60))
 		});
 
-		await pouch.asService().db.$collection('posts').patch('p1', { title: 'Hi' });
+		await pouch.db.$collection('posts').patch('p1', { title: 'Hi' });
 
 		expect(new Headers(calls[0]!.init.headers).get('Authorization')).toBe('Bearer pbk_secret');
-		expect(() => new Pouchbase('https://pouch.example.com').asService()).toThrow(PouchbaseError);
 	});
 });
 
@@ -401,9 +407,9 @@ describe('db', () => {
 		expect(new URL(calls[0]!.url).pathname).toBe('/api/db/posts');
 		expect(query(calls[0]?.url)).toEqual({
 			where:
-				'status == "published" and views >= 10 and views < 100 and ' +
-				'contains(title, "say \\"hi\\"") and any(tags) == "news" and ' +
-				'(published == true or status == null)',
+				'status == "published" && views >= 10 && views < 100 && ' +
+				'contains(title, "say \\"hi\\"") && any(tags) == "news" && ' +
+				'(published == true || status == null)',
 			order: 'created_at:desc,title:asc',
 			select: 'id,title',
 			limit: '10',
@@ -438,15 +444,15 @@ describe('db', () => {
 				d: { not: null }
 			})
 		).toBe(
-			'a == 1 and a != 2 and a > 3 and a >= 4 and a < 5 and a <= 6 and ' +
-				'contains(b, "x") and not contains(b, "y") and starts_with(b, "p") and ' +
-				'ends_with(b, "s") and c == null and d != null'
+			'a == 1 && a != 2 && a > 3 && a >= 4 && a < 5 && a <= 6 && ' +
+				'contains(b, "x") && !contains(b, "y") && starts_with(b, "p") && ' +
+				'ends_with(b, "s") && c == null && d != null'
 		);
 	});
 
 	it('compiles in, notIn, has, isEmpty and groups', () => {
 		expect(compileWhere({ status: { in: ['a', 'b'] }, views: { notIn: [1, 2] } })).toBe(
-			'(status == "a" or status == "b") and views != 1 and views != 2'
+			'(status == "a" || status == "b") && views != 1 && views != 2'
 		);
 		expect(compileWhere({ status: { in: [] } })).toBe('1 == 0');
 		expect(compileWhere({ editors: { has: 'u1' } })).toBe('any(editors) == "u1"');
@@ -455,7 +461,7 @@ describe('db', () => {
 		expect(compileWhere({ $or: [] })).toBe('1 == 0');
 		expect(compileWhere({ $or: [{}, { a: 1 }] })).toBe('');
 		expect(compileWhere({ $and: [{ a: 1 }, { $or: [{ b: true }, { c: 'x' }] }] })).toBe(
-			'(a == 1 and (b == true or c == "x"))'
+			'(a == 1 && (b == true || c == "x"))'
 		);
 		expect(compileWhere({ created: { gt: new Date(0) } })).toBe(
 			'created > "1970-01-01T00:00:00.000Z"'
@@ -466,7 +472,7 @@ describe('db', () => {
 	});
 
 	it('refuses field names that could change the condition', () => {
-		expect(() => compileWhere({ 'title == "x" or id': 'y' })).toThrow(TypeError);
+		expect(() => compileWhere({ 'title == "x" || id': 'y' })).toThrow(TypeError);
 		expect(() => compileOrderBy({ 'id:desc,x': 'asc' })).toThrow(TypeError);
 	});
 
@@ -479,10 +485,10 @@ describe('db', () => {
 		const search = 'a"b\\c';
 
 		expect(
-			compileWhere(condition`author == $user.id or contains(title, ${search}) and n > ${5}`)
-		).toBe('author == $user.id or contains(title, "a\\"b\\\\c") and n > 5');
-		expect(compileWhere(condition`published == ${true} and deleted == ${null}`)).toBe(
-			'published == true and deleted == null'
+			compileWhere(condition`author == $user.id || contains(title, ${search}) && n > ${5}`)
+		).toBe('author == $user.id || contains(title, "a\\"b\\\\c") && n > 5');
+		expect(compileWhere(condition`published == ${true} && deleted == ${null}`)).toBe(
+			'published == true && deleted == null'
 		);
 	});
 
@@ -662,6 +668,43 @@ describe('db', () => {
 			void pouch.db.posts.find('p1', { include: { comments: { include: { post: true } } } });
 		}).toBeFunction();
 	});
+
+	it('types realtime topics by the schema', () => {
+		const pouch = createClient<Schema>('https://pouch.example.com');
+
+		expectTypeOf<Parameters<typeof pouch.realtime.subscribe>[0]>().toExtend<string>();
+		expectTypeOf<'posts' | 'comments/c1'>().toExtend<Topic<Schema>>();
+
+		// Only type-checked, never run.
+		expectTypeOf(() => {
+			pouch.realtime.subscribe('posts', (event) => {
+				expectTypeOf(event.record).toEqualTypeOf<PostsRecord>();
+			});
+			pouch.realtime.subscribe(
+				'posts/p1',
+				(event) => {
+					expectTypeOf(event.record).toEqualTypeOf<{
+						id: string;
+						title: string;
+						author: UsersRecord | null;
+					}>();
+				},
+				{ where: { status: 'published' }, select: ['id', 'title'], include: { author: true } }
+			);
+			pouch.realtime.subscribe('drafts', (event) => {
+				expectTypeOf(event.record).toEqualTypeOf<Record<string, unknown>>();
+			});
+			pouch.realtime.subscribe('posts' as string, (event) => {
+				expectTypeOf(event.record).toEqualTypeOf<Record<string, unknown>>();
+			});
+			// @ts-expect-error: `nope` is not a field of posts.
+			pouch.realtime.subscribe('posts', () => {}, { select: ['nope'] });
+			// @ts-expect-error: `status` is a string.
+			pouch.realtime.subscribe('posts', () => {}, { where: { status: 5 } });
+			// @ts-expect-error: `title` is not a relation.
+			pouch.realtime.subscribe('posts', () => {}, { include: { title: true } });
+		}).toBeFunction();
+	});
 });
 
 describe('tokens', () => {
@@ -698,6 +741,19 @@ describe('types', () => {
 		expect(error).toBeInstanceOf(PouchbaseError);
 		expect(error.status).toBe(401);
 		expect(error.message).toBe('Invalid token');
+	});
+
+	it('throws for a web page instead of the types', async () => {
+		const fetch = vi.fn(
+			async () =>
+				new Response('<!doctype html><html></html>', {
+					headers: { 'Content-Type': 'text/html' }
+				})
+		) as unknown as typeof globalThis.fetch;
+		const error = await fetchTypes('https://pouch.example.com', { fetch }).catch((e) => e);
+
+		expect(error).toBeInstanceOf(PouchbaseError);
+		expect(error.message).toMatch(/web page instead of the types/);
 	});
 
 	it('types me() with the users record of the collections', () => {

@@ -38,8 +38,8 @@
 			Run <Code.Root>pnpm cf:whoami</Code.Root> to check that they point to the right account.
 		</li>
 		<li>
-			Build and deploy the Worker. <Code.Root>--secrets-file .env</Code.Root> stores the variables from
-			<Code.Root>.env</Code.Root> as Worker secrets in the same step.
+			Build and deploy. <Code.Root>--secrets-file .env</Code.Root> stores the variables from
+			<Code.Root>.env</Code.Root> as Worker secrets.
 		</li>
 		<li>Open the Worker URL that Wrangler prints.</li>
 	</ol>
@@ -60,23 +60,24 @@
 	</CodeBlock.Root>
 
 	<p>
-		After the installation, the Worker adds a D1 binding for each database to itself, so queries
-		stay inside Cloudflare's network.
+		After the installation, the Worker adds a D1 binding per database to itself, so queries stay
+		inside Cloudflare's network. To run a second instance on the same account, deploy it under its
+		own name: <Code.Root
+			>pnpm wrangler deploy --name shop --var POUCHBASE_INSTANCE:shop --secrets-file .env</Code.Root
+		>.
 	</p>
 
 	<h2 id="updating">Updating</h2>
 
 	<p>
-		The quickest way to update is <strong>Update now</strong> in the admin interface: the bottom of the
-		sidebar shows when a new version is out, and Pouchbase deploys it to its own Worker, keeping its databases
-		and secrets.
+		When a new version is out, the bottom of the sidebar says so, and <strong>Update now</strong>
+		deploys it to the Worker, keeping its bindings, secrets and variables.
 	</p>
 
 	<p>
-		To update from your machine instead, pull the new version, then build and deploy again. Database
-		migrations run automatically on the first request after a deploy. Secrets stay on the Worker
-		across deploys; pass
-		<Code.Root>--secrets-file .env</Code.Root> again only when you change them.
+		Or build and deploy again from your machine. Migrations run on the first request after a deploy.
+		Secrets stay on the Worker; pass <Code.Root>--secrets-file .env</Code.Root> again only when you change
+		them.
 	</p>
 
 	<CodeBlock.Root title="Terminal">

@@ -1,16 +1,5 @@
 import { snippet } from '#lib/highlight.js';
 
-export const quickStart = snippet(
-	'typescript',
-	`
-const subscription = pouch.db.posts.subscribe((event) => {
-	console.log(event.action, event.record); // 'create' | 'update' | 'delete'
-});
-
-// Later, when you no longer need the changes
-subscription.unsubscribe();`
-);
-
 export const subscribe = snippet(
 	'typescript',
 	`
@@ -22,11 +11,11 @@ const subscription = pouch.db.posts.subscribe(
 	{
 		where: { status: 'published' },
 		select: ['id', 'title'],
-		onError: (error) => console.error(error) // a subscription that fails later
+		onError: (error) => console.error(error) // fails later, e.g. after a reconnect
 	}
 );
 
-await subscription.ready; // rejects with \`forbidden\`, \`not_found\` or \`invalid\`
+await subscription.ready; // rejects with forbidden, not_found, invalid or unauthorized
 subscription.unsubscribe();`
 );
 
@@ -39,16 +28,19 @@ pouch.db.posts.subscribe((event) => console.log(event.record), { id: postId });`
 export const subscribeTopic = snippet(
 	'typescript',
 	`
-pouch.realtime.subscribe('posts', (event) => console.log(event));
-pouch.realtime.subscribe('posts/<id>', (event) => console.log(event));`
+pouch.realtime.subscribe('posts', (event) => console.log(event.record.title), {
+	where: { status: 'published' }
+});
+pouch.realtime.subscribe(\`posts/\${postId}\`, (event) => console.log(event.record));`
 );
 
 export const state = snippet(
 	'typescript',
 	`
-const stop = pouch.realtime.onState((collection, state) => {
-	// 'connecting' | 'open' | 'closed', e.g. show a connection indicator while open
+const off = pouch.realtime.onState((collection, state) => {
+	// state: 'connecting' | 'open' | 'closed', e.g. for a connection indicator
 });
+off(); // removes the listener
 
 // Ends every subscription and closes every connection
 pouch.realtime.disconnect();`

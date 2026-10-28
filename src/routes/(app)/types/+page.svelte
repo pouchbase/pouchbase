@@ -46,8 +46,8 @@
 			<div class="flex flex-col gap-1">
 				<Page.Title>Types</Page.Title>
 				<Page.Description>
-					TypeScript types of your collections, for the JavaScript SDK:
-					<span class="font-mono">createClient&lt;Schema&gt;(url)</span>.
+					TypeScript types of your collections and email templates, for the JavaScript SDK:
+					<span class="font-mono">createClient&lt;Schema, MailTemplates&gt;(url)</span>.
 				</Page.Description>
 			</div>
 		</Page.Header>

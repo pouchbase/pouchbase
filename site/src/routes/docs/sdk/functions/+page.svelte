@@ -31,10 +31,9 @@
 	<h2 id="call-a-function">Call a function</h2>
 
 	<p>
-		<Code.Root>pouch.functions.invoke(name, options)</Code.Root> calls the function at
-		<Code.Root>/api/functions/&lt;name&gt;</Code.Root>, with the token of the signed-in user, so the
-		function knows who calls it. Write and deploy functions in the dashboard; see
-		<a href={resolve('/docs/platform/functions')}>Functions</a> in the platform docs.
+		<Code.Root>invoke()</Code.Root> calls <Code.Root>/api/functions/&lt;name&gt;</Code.Root> with the
+		signed-in user's token, so the function knows who calls it. See
+		<a href={resolve('/docs/platform/functions')}>Functions</a> to write them.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -44,18 +43,15 @@
 	<DocsTable head={['Option', 'Meaning']} rows={options} />
 
 	<p>
-		It returns the body of the answer: parsed JSON, the text when it isn't JSON, or
-		<Code.Root>null</Code.Root> for an empty body. Pass the type of the answer, as in
-		<Code.Root>invoke&lt;{'{ message: string }'}&gt;()</Code.Root>; the SDK doesn't check it.
+		It returns parsed JSON, the text when the body isn't JSON, or <Code.Root>null</Code.Root> for an empty
+		body. The type you pass is not checked.
 	</p>
 
 	<h2 id="errors">Errors</h2>
 
 	<p>
 		An answer that isn't 2xx throws a <a href={resolve('/docs/sdk/errors')}>PouchbaseError</a>, with
-		the function's <Code.Root>message</Code.Root> when it answers JSON with one. A function that requires
-		sign-in answers <Code.Root>unauthorized</Code.Root> without a valid token, and a function that doesn't
-		exist <Code.Root>not_found</Code.Root>.
+		the function's <Code.Root>message</Code.Root> when it answers JSON with one.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

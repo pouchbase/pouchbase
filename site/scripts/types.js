@@ -1,6 +1,6 @@
 /**
  * Generates `src/lib/server/pouchbase.types.ts`, the types of the instance's collections, with the
- * same `POUCHBASE_URL` and `POUCHBASE_SERVICE_KEY` as `pnpm dev`: `.env.development.local` on top
+ * same `POUCHBASE_URL` and `POUCHBASE_API_KEY` as `pnpm dev`: `.env.development.local` on top
  * of `.env`. Run it with `pnpm types` after changing the collections.
  *
  * It sends the request itself, as `pouch.schema.types()` of the SDK does: in this workspace the SDK
@@ -19,10 +19,10 @@ for (const file of ['.env.development.local', '.env']) {
 	}
 }
 
-const { POUCHBASE_URL: url, POUCHBASE_SERVICE_KEY: apiKey } = process.env;
+const { POUCHBASE_URL: url, POUCHBASE_API_KEY: apiKey } = process.env;
 
 if (!url || !apiKey) {
-	console.error('Set POUCHBASE_URL and POUCHBASE_SERVICE_KEY, e.g. in .env (see .env.example).');
+	console.error('Set POUCHBASE_URL and POUCHBASE_API_KEY, e.g. in .env (see .env.example).');
 	process.exit(1);
 }
 

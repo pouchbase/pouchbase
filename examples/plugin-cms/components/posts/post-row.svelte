@@ -14,7 +14,7 @@
 
 	let { post, siteUrl, onaction }: Props = $props();
 
-	const href = $derived(pageHref(post.id));
+	const href = $derived(pageHref(`edit/${post.id}`));
 	const trashed = $derived(post.status === 'trash');
 
 	/** "— Draft" after the title, as in the WordPress list; nothing for a published post. */

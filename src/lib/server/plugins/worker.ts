@@ -25,7 +25,7 @@ import { CALL_TIMEOUT, EMPTY_CALL_CONTEXT, PluginCallError, routeRequestHeaders 
  * - `PLUGIN_MODULE`: the plugin's bundled `server.js`.
  *
  * The Worker's bindings are the secret (`POUCHBASE_PLUGIN_SECRET`), the URL of Pouchbase
- * (`POUCHBASE_URL`) and the plugin's API key (`POUCHBASE_API_KEY`, scope `plugin`). The plugin
+ * (`POUCHBASE_URL`) and the plugin's API key (`POUCHBASE_API_KEY`). The plugin
  * gets no `env`: the entry code builds `ctx.pouch` from the URL and the key, with a `fetch` that
  * only reaches that origin, and the records API decides what the key may do. A call is
  * `{ call, context }` as JSON; the answer is `{ ok: true, value }` or `{ ok: false, error }`.

@@ -47,22 +47,22 @@ Sign-ins return `{ token, user_id }`; the token is a JWT (HS256, 7 days) sent as
 | `POST /api/db/<collection>?select&include`                                                             | `pouch.db.<name>.insert()`                                                       |
 | `PATCH /api/db/<collection>/<id>?select&include`                                                       | `pouch.db.<name>.patch()`                                                        |
 | `DELETE /api/db/<collection>/<id>` (`204`)                                                             | `pouch.db.<name>.remove()`                                                       |
-| `GET /api/realtime?collection=<name>` (WebSocket; protocol mirrored in `src/realtime/protocol.ts`)     | `pouch.realtime.subscribe()`, `pouch.db.<name>.subscribe()`                      |
+| `GET /api/realtime?collection=<name>` (WebSocket; protocol mirrored in `src/realtime/protocol.ts`)     | `pouch.realtime.subscribe()`, `pouch.db.<name>.subscribe()`; with `apiKey` the key is the `auth` token |
 | `GET /api/files/<id>?size&download` (`size`: `WxH`, `WxH:top`, `WxH:bottom`, `WxH:fit`, `Wx0`, `0xH`)  | `pouch.files.url()`                                                              |
 | `<method> /api/functions/<name>/<path>`                                                                | `pouch.functions.invoke()`                                                       |
-| `POST /api/mail/send` (API key as `Bearer pbk_…`)                                                      | `pouch.mail.send()` (needs `apiKey`)                                             |
+| `POST /api/mail/send` (API key as `Bearer pbk_…`; `{ template, to, variables }` or `{ subject, html, text, to }`) | `pouch.mail.send(template \| { subject, html, text }, { to, variables })` (needs `apiKey`) |
 | `GET /api/plugins/<id>/assets/ui/<file>.svg` (public image, not JSON)                                  | not wrapped: used as an image URL                                                |
-| Records API with a `service` API key (`Bearer pbk_…`; API rules skipped, other keys `403`)             | `pouch.asService().db.<name>…` (needs `apiKey`)                                  |
-| `GET /api/schema` (service API key)                                                                    | `pouch.schema.list()` (needs `apiKey`)                                           |
-| `GET /api/schema/<name>` (service API key)                                                             | `pouch.schema.find()`                                                            |
+| Records API with an API key (`Bearer pbk_…`; API rules skipped)                                        | `pouch.db.<name>…` on a client with `apiKey`                                     |
+| `GET /api/schema` (API key)                                                                    | `pouch.schema.list()` (needs `apiKey`)                                           |
+| `GET /api/schema/<name>` (API key)                                                             | `pouch.schema.find()`                                                            |
 | `POST /api/schema` (`201`)                                                                             | `pouch.schema.create()`                                                          |
 | `PATCH /api/schema/<name>?force`                                                                       | `pouch.schema.update()`                                                          |
 | `DELETE /api/schema/<name>` (`204`)                                                                    | `pouch.schema.remove()`                                                          |
 | `GET /api/schema/export?collections=a,b` (`{ format: 2, exportedAt, collections, related }`)           | `pouch.schema.export()`                                                          |
 | `POST /api/schema/import?removeMissing&force&dryRun`                                                   | `pouch.schema.import()`                                                          |
-| `GET /api/types?token=…` or with a service API key (text, not JSON)                                    | `fetchTypes()`, `pouch.schema.types()`, `pouchbase types`                        |
+| `GET /api/types?token=…` or with an API key (text, not JSON)                                    | `fetchTypes()`, `pouch.schema.types()`, `pouchbase types`                        |
 
-Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(field, "x")`, `starts_with()`, `ends_with()`, `lower()`, `now()` and `date_add()` (the list is in `../../src/lib/filter/functions.ts`), `any(field) == value`, `not`, `and`, `or` and `$user.<field>`; `src/query.ts` compiles `where` objects to them (`contains`, `notContains`, `startsWith` and `endsWith` become function calls). `order` is `created_at:desc,title:asc`.
+Conditions (`where`, API rules) use `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(field, "x")`, `starts_with()`, `ends_with()`, `lower()`, `now()` and `date_add()` (the list is in `../../src/lib/filter/functions.ts`), `any(field) == value`, `&&` (or `AND`), `||` (or `OR`), `!` (or `NOT`) and `$user.<field>`; `src/query.ts` compiles `where` objects to them (`contains`, `notContains`, `startsWith` and `endsWith` become function calls). `order` is `created_at:desc,title:asc`.
 
 ## Code style
 

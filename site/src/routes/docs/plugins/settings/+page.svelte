@@ -15,7 +15,7 @@
 	const settingKeys = [
 		{
 			key: 'key',
-			about: 'How the code reads it. Lowercase letters, numbers and underscores; unique.'
+			about: 'Lowercase letters, numbers and underscores; unique.'
 		},
 		{ key: 'label', about: 'Its name in the settings form.' },
 		{ key: 'description', about: 'One sentence under the field (optional).' },
@@ -26,12 +26,11 @@
 		},
 		{
 			key: 'required',
-			about:
-				'The dashboard marks the plugin “Needs settings” until an admin saves it. Default false.'
+			about: 'The dashboard marks the plugin “Needs settings” until an admin saves it.'
 		},
 		{
 			key: 'default',
-			about: 'Used while nothing is saved. A secret has no default.'
+			about: 'Used while nothing is saved, of the setting’s type. Not for secret.'
 		}
 	];
 </script>
@@ -44,12 +43,9 @@
 	<h2 id="define-settings">Define settings</h2>
 
 	<p>
-		Settings are the <Code.Root>settings</Code.Root> list of
-		<Code.Root>definePlugin(&#123; … &#125;)</Code.Root> in <Code.Root>plugin.ts</Code.Root>, next
-		to what else the plugin adds; Pouchbase builds the settings form from it. They are code, so
-		<Code.Root>pouchbase-plugin.json</Code.Root> can't have them. The <Code.Root>Register</Code.Root
-		> block at the end types <Code.Root>ctx.settings</Code.Root>
-		everywhere in the plugin.
+		Settings are the <Code.Root>settings</Code.Root> list of <Code.Root>definePlugin</Code.Root>;
+		Pouchbase builds the settings form from it. The <Code.Root>Register</Code.Root> block types
+		<Code.Root>ctx.settings</Code.Root> everywhere in the plugin.
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
@@ -74,8 +70,7 @@
 	</Table.Root>
 
 	<p>
-		<Code.Root>add setting</Code.Root> writes one for you, creating <Code.Root>plugin.ts</Code.Root> when
-		needed:
+		<Code.Root>add setting</Code.Root> writes one for you:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -85,10 +80,9 @@
 	<h2 id="read-settings">Read settings</h2>
 
 	<p>
-		<Code.Root>ctx.settings.get(key)</Code.Root> returns a promise of the saved value, else the default,
-		else <Code.Root>null</Code.Root>. A <Code.Root>number</Code.Root> setting gives a number, a <Code.Root
-			>boolean</Code.Root
-		> a boolean, the others a string.
+		<Code.Root>ctx.settings.get(key)</Code.Root> resolves to the saved value, else the default, else
+		<Code.Root>null</Code.Root>: a number for a <Code.Root>number</Code.Root> setting, a boolean for a
+		<Code.Root>boolean</Code.Root>, else a string.
 	</p>
 
 	<CodeBlock.Root title="routes/status.ts">
@@ -97,16 +91,10 @@
 
 	<ul>
 		<li>
-			Only a setting with a default is never <Code.Root>null</Code.Root>. A required setting without
-			one is <Code.Root>null</Code.Root> until an admin saves it, so handle that.
+			Only a setting with a default is never <Code.Root>null</Code.Root>; a required one without a
+			default is <Code.Root>null</Code.Root> until an admin saves it.
 		</li>
-		<li>
-			Settings aren't copied between instances, such as from staging to production, since they may
-			hold secrets.
-		</li>
-		<li>
-			Renaming or removing a setting loses its saved value: the new key starts empty, or at its
-			default.
-		</li>
+		<li>Settings aren't copied between environments, such as from staging to production.</li>
+		<li>Renaming or removing a setting loses its saved value.</li>
 	</ul>
 </DocsPage>

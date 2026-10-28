@@ -6,8 +6,8 @@ import { checkFilter, parseFilter } from './filter';
 import { ownerRule, SIGNED_IN_RULE } from './rules';
 
 describe('parseFilter', () => {
-	it('parses comparisons, and, or and parentheses', () => {
-		expect(parseFilter('status == "published" and (views > 10 or author == $user.id)')).toEqual({
+	it('parses comparisons, AND, || and parentheses', () => {
+		expect(parseFilter('status == "published" AND (views > 10 || author == $user.id)')).toEqual({
 			kind: 'and',
 			left: {
 				kind: 'compare',
@@ -33,8 +33,8 @@ describe('parseFilter', () => {
 		});
 	});
 
-	it('parses functions, not, any() and the variables', () => {
-		expect(parseFilter('not contains(title, "x")')).toMatchObject({
+	it('parses functions, !, any() and the variables', () => {
+		expect(parseFilter('!contains(title, "x")')).toMatchObject({
 			kind: 'not',
 			expression: {
 				kind: 'call',
@@ -66,14 +66,19 @@ describe('parseFilter', () => {
 		expect(parseFilter('round(views, 1) == 4.5')).toMatchObject({
 			left: { name: 'round', args: [{ name: 'views' }, { value: 1 }] }
 		});
-		expect(parseFilter('not a == 1 and b == 2')).toMatchObject({
+		expect(parseFilter('NOT a == 1 && b == 2')).toMatchObject({
 			kind: 'and',
 			left: { kind: 'not' }
+		});
+		expect(parseFilter('!(a == 1) OR a != 2')).toMatchObject({
+			kind: 'or',
+			left: { kind: 'not' },
+			right: { operator: '!=' }
 		});
 	});
 
 	it('takes fields named like functions', () => {
-		expect(parseFilter('date == "x" and count > 1')).toMatchObject({
+		expect(parseFilter('date == "x" && count > 1')).toMatchObject({
 			left: { left: { kind: 'field', name: 'date' } },
 			right: { left: { kind: 'field', name: 'count' } }
 		});
@@ -85,24 +90,26 @@ describe('parseFilter', () => {
 
 	it.each([
 		['status = "x"', 'Use `==` to compare'],
-		['a == 1 && b == 2', 'Use `and` to combine conditions'],
-		['a == 1 || b == 2', 'Use `or` to combine conditions'],
+		['a == 1 and b == 2', 'Use `&&` or `AND` to combine conditions'],
+		['a == 1 or b == 2', 'Use `||` or `OR` to combine conditions'],
+		['not a == 1', 'Use `!` or `NOT` to negate a condition'],
+		['a == 1 & b == 2', 'Use `&&` to combine conditions'],
+		['a == 1 | b == 2', 'Use `||` to combine conditions'],
 		['author == @request.auth.id', 'Unexpected character `@`'],
 		['$request.id == 1', 'Unknown variable `$request.id`; use $user.<field> or $input.<field>'],
 		['any($user.id) == 1', '`any()` takes a field of this collection'],
 		['any(a) == any(b)', 'Use `any()` once per comparison'],
 		['published_at <= $now', 'Use `now()` for the current date and time'],
-		['title contains "x"', 'Use `contains(text, search)` or `not contains(text, search)`'],
-		['title not contains "x"', 'Use `contains(text, search)` or `not contains(text, search)`'],
+		['title contains "x"', 'Use `contains(text, search)` or `!contains(text, search)`'],
+		['title NOT contains "x"', 'Use `contains(text, search)` or `!contains(text, search)`'],
 		['nope(title) == 1', 'Unknown function `nope()`'],
 		['contains(title)', 'Call it as `contains(text, search)`'],
 		['round(a, 1, 2) == 1', 'Call it as `round(number, digits?)`'],
 		['date_add(now(), 1, "fortnight") > a', 'The unit of `date_add()` is one of "years"'],
 		['start_of(now(), unit) > a', 'The unit of `start_of()` is one of "year"'],
-		['contains(a, "x") == true', '`contains()` is a condition of its own; use `not` to negate it'],
+		['contains(a, "x") == true', '`contains()` is a condition of its own; use `!` to negate it'],
 		['lower(a)', 'Compare `lower()` with a value, e.g. `lower(status) == "draft"`'],
-		['!contains(a, "x")', 'Use `not` to negate a condition'],
-		['a == 1 b == 2', 'Expected `and` or `or` between conditions'],
+		['a == 1 b == 2', 'Expected `&&` or `||` between conditions'],
 		['', 'The condition is empty']
 	])('rejects %j', (text, message) => {
 		expect(() => parseFilter(text)).toThrow(message);

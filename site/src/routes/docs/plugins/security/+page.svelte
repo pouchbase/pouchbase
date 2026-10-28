@@ -20,7 +20,7 @@
 		{ limit: 'Pages', value: '20 per plugin.' },
 		{ limit: 'Sign-in providers', value: '10 per plugin.' },
 		{ limit: 'Settings', value: '30 per plugin; keys of at most 63 characters.' },
-		{ limit: 'Plugin id', value: 'At most 64 characters.' },
+		{ limit: 'Plugin id', value: '3 to 64 characters.' },
 		{ limit: 'Field type name', value: 'At most 32 characters.' },
 		{ limit: 'Icons', value: 'At most 32 KiB each, plain SVG.' },
 		{
@@ -51,48 +51,51 @@
 		<li>
 			<strong>Routes are public.</strong> Anyone can call <Code.Root
 				>/api/plugins/&lt;id&gt;/…</Code.Root
-			>, from any origin: responses carry <Code.Root>Access-Control-Allow-Origin: *</Code.Root> unless
-			the plugin sets its own CORS headers. Check <Code.Root>ctx.admin</Code.Root> or
-			<Code.Root>ctx.user</Code.Root> yourself.
+			>, from any origin (<Code.Root>Access-Control-Allow-Origin: *</Code.Root> unless the plugin sets
+			its own CORS headers). Check <Code.Root>ctx.admin</Code.Root> or <Code.Root
+				>ctx.user</Code.Root
+			>
+			yourself.
 		</li>
 		<li>
 			<strong><Code.Root>ctx.admin</Code.Root></strong> needs an admin's session <em>and</em> a
 			same-origin request, as <Code.Root>api.fetch</Code.Root> from a page makes, so another site can't
-			act as the admin. The admin's cookie never reaches the plugin.
+			act as the admin. The cookie never reaches the plugin.
 		</li>
 		<li>
 			<strong><Code.Root>ctx.user</Code.Root></strong> comes from the bearer token. An invalid token
 			gets a <Code.Root>401</Code.Root> before the plugin runs; API keys are not users.
 		</li>
 		<li>
-			<strong>Responses are sandboxed.</strong> Pouchbase adds
-			<Code.Root>Content-Security-Policy: sandbox</Code.Root> and <Code.Root>nosniff</Code.Root>, so
-			HTML or SVG from a plugin runs no scripts on the dashboard's origin.
+			<strong>Responses are sandboxed</strong> with <Code.Root
+				>Content-Security-Policy: sandbox</Code.Root
+			>
+			and <Code.Root>nosniff</Code.Root>, so HTML or SVG from a plugin runs no scripts on the
+			dashboard's origin.
 		</li>
 		<li>
-			<strong>Network.</strong> Server code only reaches the HTTPS hosts in
-			<Code.Root>permissions.network</Code.Root>, through <Code.Root>fetch</Code.Root> and
-			<Code.Root>WebSocket</Code.Root>, and redirects aren't followed. Other Workers APIs, such as
-			<Code.Root>cloudflare:sockets</Code.Root>, aren't available.
+			<strong>Network.</strong>
+			<Code.Root>fetch</Code.Root> and <Code.Root>WebSocket</Code.Root>
+			only reach the HTTPS hosts in <Code.Root>permissions.network</Code.Root>, without following
+			redirects. The server code can't import anything, so other Workers APIs, such as
+			<Code.Root>cloudflare:sockets</Code.Root>, are out of reach.
 		</li>
 		<li>
 			<strong>Data only through the records API.</strong> The plugin's Worker has no bindings to the
-			database, the storage or Pouchbase's secrets. <Code.Root>ctx.pouch</Code.Root> reaches the records
-			API with a key of the plugin's own, and only for the plugin's own collections and those in <Code.Root
-				>permissions.collections</Code.Root
-			>, which the admin sees before installing (see
-			<a href={resolve('/docs/plugins/collections')}>Collections</a>). The collections' API rules
-			don't apply to the plugin, so it checks <Code.Root>ctx.user</Code.Root> itself before acting for
-			a user. The key is renewed with every install and update and removed with the plugin.
+			database, the storage or Pouchbase's secrets. <Code.Root>ctx.pouch</Code.Root> uses a key of the
+			plugin's own, renewed with every install and update, that only reaches the plugin's collections
+			and those in <Code.Root>permissions.collections</Code.Root>, which the admin sees before
+			installing (see <a href={resolve('/docs/plugins/collections')}>Collections</a>). API rules
+			don't apply to it, so check <Code.Root>ctx.user</Code.Root> before acting for a user.
 		</li>
 		<li>
-			<strong>Settings reach the Worker in plain text</strong>, secrets included, because the plugin
-			needs them. A <Code.Root>secret</Code.Root> is only hidden in the dashboard.
+			<strong>Settings reach the Worker in plain text</strong>, secrets included: a
+			<Code.Root>secret</Code.Root> is only hidden in the dashboard.
 		</li>
 		<li>
 			<strong>Components run with the admin's privileges</strong> in the dashboard. Pouchbase compiles
-			them itself and links only the provided modules, but a component can do anything the admin can.
-			Install only plugins you trust.
+			them itself and links only the provided modules, but a component can do anything the admin can:
+			install only plugins you trust.
 		</li>
 	</ul>
 
@@ -116,11 +119,11 @@
 	</Table.Root>
 
 	<p>
-		Plugin Workers also follow the limits of your Cloudflare Workers plan, such as the CPU time per
-		request and the number of Workers per account. On Pouchbase hosted on Workers, installing a
-		plugin with many or large components can take more CPU time than the Free plan allows; see
+		Plugin Workers also follow the
 		<a href="https://developers.cloudflare.com/workers/platform/limits/"
-			>Cloudflare's Workers limits</a
-		>.
+			>limits of your Workers plan</a
+		>, such as the size of the server code (3 MB compressed on Free, 10 MB on Paid), the CPU time
+		per request and the number of Workers per account. On Pouchbase hosted on Workers, installing a
+		plugin with many or large components can take more CPU time than the Free plan allows.
 	</p>
 </DocsPage>

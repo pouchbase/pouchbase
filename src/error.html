@@ -4,8 +4,42 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Error %sveltekit.status% · Pouchbase</title>
-		<!-- Shown when the error page itself fails, so it can't use the app's styles or components. -->
+		<!--
+			Shown when the error page itself fails (or a hook throws), so it can't use the app's styles
+			or components. Follows the theme picked in the dashboard (the `pouchbase-theme` cookie,
+			see `hooks/theme.ts`) or else the system, with the colours of `@pouchbasejs/ui/theme.css`.
+		-->
+		<script>
+			const theme = document.cookie.match(/(?:^|; )pouchbase-theme=(light|dark)(?:;|$)/)?.[1];
+
+			if (theme) {
+				document.documentElement.setAttribute('data-theme', theme);
+			}
+		</script>
 		<style>
+			:root {
+				color-scheme: light;
+				--background: #fff;
+				--foreground: #18181b;
+				--muted: #71717a;
+				--secondary: #52525b;
+			}
+			:root[data-theme='dark'] {
+				color-scheme: dark;
+				--background: #111114;
+				--foreground: #eeeef0;
+				--muted: #8b8b95;
+				--secondary: #a7a7b0;
+			}
+			@media (prefers-color-scheme: dark) {
+				:root:not([data-theme='light']) {
+					color-scheme: dark;
+					--background: #111114;
+					--foreground: #eeeef0;
+					--muted: #8b8b95;
+					--secondary: #a7a7b0;
+				}
+			}
 			body {
 				margin: 0;
 				min-height: 100svh;
@@ -14,8 +48,8 @@
 				justify-content: center;
 				padding: 3rem 1rem;
 				box-sizing: border-box;
-				background: #fff;
-				color: #18181b;
+				background: var(--background);
+				color: var(--foreground);
 				font-family: ui-sans-serif, system-ui, sans-serif;
 			}
 			main {
@@ -29,7 +63,7 @@
 				margin: 0;
 				font-family: ui-monospace, monospace;
 				font-size: 0.75rem;
-				color: #71717a;
+				color: var(--muted);
 			}
 			h1 {
 				margin: 0;
@@ -39,15 +73,15 @@
 			p {
 				margin: 0;
 				font-size: 0.875rem;
-				color: #52525b;
+				color: var(--secondary);
 			}
 			a {
 				align-self: flex-start;
 				margin-top: 0.5rem;
 				padding: 0.375rem 0.75rem;
 				border-radius: 0.375rem;
-				background: #18181b;
-				color: #fff;
+				background: var(--foreground);
+				color: var(--background);
 				font-size: 0.875rem;
 				text-decoration: none;
 			}

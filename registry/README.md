@@ -19,12 +19,12 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 3. Under **System → Environments**, set **This instance** to **Development**.
 4. Link the live registry: on `https://api.pouchbase.io`, under **System → Environments → Deploy tokens**, create a token; here, under **Linked instance**, link `https://api.pouchbase.io` with it.
 5. **Pull** from the linked instance. That creates the `plugins`, `plugin_versions` and `publish_tokens` collections with their fields, indexes and API rules, and takes over the auth and mail settings that travel with a snapshot.
-6. Set up what doesn't travel: mail credentials (or mark test accounts verified in the dashboard, since the site only lets verified accounts in), and under **System → API keys** a key with the **service** scope.
+6. Set up what doesn't travel: mail credentials (or mark test accounts verified in the dashboard, since the site only lets verified accounts in), and under **System → API keys** an API key.
 7. Point the site's dev server at this instance in `site/.env.development.local` (`pnpm dev` reads it on top of `site/.env`; builds and deploys don't):
 
    ```sh
    POUCHBASE_URL=http://localhost:5175
-   POUCHBASE_SERVICE_KEY=pbk_…   # the service key from step 6
+   POUCHBASE_API_KEY=pbk_…   # the API key from step 6
    ```
 
 ## Use it
@@ -43,7 +43,7 @@ The registry API is served by the site (`site/src/routes/v1`), which keeps its d
 
 ## Sync schema changes
 
-1. Change the collections here (dashboard, or `pouch.schema` with the service key) and the site code that uses them, and test them locally.
+1. Change the collections here (dashboard, or `pouch.schema` with the API key) and the site code that uses them, and test them locally.
 2. Under **System → Environments**, **Publish** to the linked instance. The plan lists every change first; changes that delete fields or data need a confirmation.
 3. Publish before the site version that needs the change is deployed (merging the Version Packages pull request deploys the site), and update the collections table in `site/README.md`.
 

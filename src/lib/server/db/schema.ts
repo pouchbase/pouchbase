@@ -103,7 +103,7 @@ export const fields = sqliteTable(
 		required: integer('required', { mode: 'boolean' }).notNull().default(false),
 		unique: integer('unique', { mode: 'boolean' }).notNull().default(false),
 		/**
-		 * Only admins, API keys with the service scope, plugins and API rules see the field: the
+		 * Only admins, API keys, plugins and API rules see the field: the
 		 * records API leaves it out for app users, and they can't filter, sort or write on it.
 		 */
 		hidden: integer('hidden', { mode: 'boolean' }).notNull().default(false),
@@ -511,16 +511,11 @@ export const apiKeys = sqliteTable('api_keys', {
 	keyHash: text('key_hash').notNull().unique(),
 	/** The first characters of the key, so it can be recognised in the list. */
 	prefix: text('prefix').notNull(),
-	/**
-	 * `standard`: what server-side code may do, such as sending email; `service`: also the records
-	 * API as an admin; `plugin`: the key of a plugin's Worker, only for the records API of the
-	 * collections the plugin may use.
-	 */
-	scope: text('scope', { enum: ['standard', 'service', 'plugin'] })
-		.notNull()
-		.default('standard'),
 	functionId: text('function_id').references(() => functions.id, { onDelete: 'cascade' }),
-	/** Set for the key of a plugin (scope `plugin`); built-in plugins have no row in `plugins`. */
+	/**
+	 * Set for the key of a plugin's Worker, which only reaches the records API of the collections
+	 * the plugin may use; built-in plugins have no row in `plugins`. Every other key acts as an admin.
+	 */
 	pluginId: text('plugin_id'),
 	createdAt: integer('created_at', { mode: 'timestamp_ms' })
 		.notNull()

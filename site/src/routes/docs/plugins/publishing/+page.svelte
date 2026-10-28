@@ -24,13 +24,12 @@
 		{
 			status: '409',
 			about:
-				'That version is already published. Published versions never change: bump version in package.json for every release.'
+				'That version is already published. Versions never change: bump version in package.json for every release.'
 		},
 		{ status: '413', about: 'The bundle is larger than 25 MiB.' },
 		{
 			status: '422',
-			about:
-				'The bundle isn’t valid, has an unknown category or an API version the registry doesn’t know.'
+			about: 'The bundle isn’t valid, is for another id, or has an unknown category or API version.'
 		}
 	];
 </script>
@@ -43,21 +42,16 @@
 	<h2 id="publish">Publish</h2>
 
 	<p>
-		Published plugins are listed in the public registry, which every Pouchbase searches by default.
-		You need an account on <a href={resolve('/account')}>pouchbase.io</a>; the first version of a
-		plugin makes its id yours.
-	</p>
-
-	<p>
-		Create a token under <strong>Publish tokens</strong> on your
-		<a href={resolve('/account')}>account page</a>, then publish:
+		Every Pouchbase searches the public registry by default. To publish, create a token under
+		<strong>Publish tokens</strong> on your <a href={resolve('/account')}>pouchbase.io account</a>;
+		the first version of a plugin makes its id yours.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
 		<CodeBlock.Source code={data.code.publish} />
 	</CodeBlock.Root>
 
-	<p>A token publishes as you, so keep it secret. In CI, store it as a secret:</p>
+	<p>A token publishes as you: in CI, store it as a secret.</p>
 
 	<CodeBlock.Root title="Terminal">
 		<CodeBlock.Source code={data.code.ci} />
@@ -94,19 +88,18 @@
 	<h2 id="installing">Installing</h2>
 
 	<p>
-		Admins search and install plugins on the <strong>Plugins</strong> page of the dashboard, which shows
-		what a plugin adds and the hosts it may reach. On install, Pouchbase:
+		Admins install plugins from the <strong>Plugins</strong> page, which shows what a plugin adds and
+		the hosts it may reach. On install, Pouchbase:
 	</p>
 
 	<ul>
 		<li>checks the bundle against the integrity hash the registry lists for that version;</li>
-		<li>compiles the components, so one that doesn't compile stops the install;</li>
+		<li>compiles the components: one that doesn't compile stops the install;</li>
 		<li>
-			deploys the server code as a Worker named <Code.Root
-				>&lt;instance&gt;-plugin-&lt;id&gt;</Code.Root
-			>
-			on its Cloudflare account, which counts toward the plan's limits;
+			deploys the server code as a Worker, <Code.Root>&lt;instance&gt;-plugin-&lt;id&gt;</Code.Root
+			>, on its Cloudflare account, which counts toward the plan's limits;
 		</li>
+		<li>creates the plugin's <a href={resolve('/docs/plugins/collections')}>collections</a>;</li>
 		<li>
 			marks the plugin <strong>Needs settings</strong> while a
 			<a href={resolve('/docs/plugins/settings')}>required setting</a> is empty.
@@ -114,53 +107,51 @@
 	</ul>
 
 	<p>
-		Removing a plugin deletes its Worker and its settings. Fields of its types keep their data, but
-		become read-only. Built-in plugins can't be removed; a newer version of one from the registry
-		replaces it until that version is removed.
+		Removing a plugin deletes its Worker, its settings and its own collections with their records;
+		it is refused while a relation field of another collection points to one of them. Fields of its
+		types elsewhere keep their data, but become read-only. Built-in plugins can't be removed; a
+		newer version of one from the registry replaces it until that version is removed.
 	</p>
 
 	<h2 id="updates">Updates</h2>
 
 	<p>
-		An update replaces the plugin's code, components and Worker. Records, field values and saved
-		settings are kept. To keep installations working:
+		An update replaces the plugin's code, components and Worker, and keeps records, field values and
+		saved settings. To keep installations working:
 	</p>
 
 	<ul>
 		<li>
-			Never rename a field type or a sign-in provider once people use it: fields of the old type
-			become read-only.
+			Never rename a field type or a sign-in provider once in use: fields of the old type become
+			read-only.
 		</li>
 		<li>
 			Don't rename settings: a renamed setting starts empty, or at its default, until an admin saves
 			it again.
 		</li>
 		<li>
-			Keep <Code.Root>deserialize</Code.Root> and the preview of a field type reading old values when
-			you change <Code.Root>serialize</Code.Root>: stored values are never rewritten.
+			Stored values are never rewritten: when you change <Code.Root>serialize</Code.Root>, keep
+			<Code.Root>deserialize</Code.Root> and the preview reading old values.
 		</li>
 		<li>
 			A field keeps the <Code.Root>column</Code.Root> type it was created with, whatever a new version
 			says.
 		</li>
-		<li>
-			Routes and pages are public paths: renaming one breaks the apps and bookmarks that use it.
-		</li>
+		<li>Routes and pages are public paths: renaming one breaks the apps and bookmarks using it.</li>
 	</ul>
 
 	<h2 id="compatibility">Compatibility</h2>
 
 	<ul>
 		<li>
-			Set <Code.Root>engines.pouchbase</Code.Root> to the lowest Pouchbase version that has everything
-			the plugin uses. What these docs describe ships with Pouchbase 0.10.0, so start from
-			<Code.Root>&gt;=0.10.0</Code.Root> and raise it when you use something newer. Pouchbase only installs
-			a version whose range it satisfies.
+			Set <Code.Root>engines.pouchbase</Code.Root> to the lowest Pouchbase version with everything the
+			plugin uses, starting from <Code.Root>&gt;=0.10.0</Code.Root>, which ships what these docs
+			describe. Pouchbase only installs a version whose range it satisfies.
 		</li>
 		<li>
-			Within plugin API version 1, changes are only additive. A change that would break plugins
-			bumps the API version. Until Pouchbase 1.0 only the current API version is supported, so a
-			plugin built for an older one has to be rebuilt.
+			Within plugin API version 1, changes are only additive; a breaking change bumps the API
+			version. Until Pouchbase 1.0 only the current one is supported, so a plugin built for an older
+			one has to be rebuilt.
 		</li>
 	</ul>
 
@@ -170,14 +161,11 @@
 		Pouchbase and the CLI use the public registry, <Code.Root>https://api.pouchbase.io</Code.Root>,
 		unless <Code.Root>POUCHBASE_REGISTRY_URL</Code.Root> is set: as a server variable of an installation,
 		it decides where the Plugins page installs from; for the CLI, where
-		<Code.Root>publish</Code.Root> uploads to (or pass <Code.Root>--registry</Code.Root>).
-	</p>
-
-	<p>
-		Any server that implements the
+		<Code.Root>publish</Code.Root> uploads to (or pass <Code.Root>--registry</Code.Root>). Any
+		server that implements the
 		<a href="https://github.com/pouchbase/pouchbase/tree/main/packages/plugin-sdk#registry-api"
 			>registry API</a
-		> can be a registry, for example for private plugins.
+		> can be a registry.
 	</p>
 
 	<Callout.Root variant="info">

@@ -420,10 +420,7 @@
 
 <svelte:window onkeydown={handleKeydown} onbeforeunload={handleBeforeUnload} />
 
-<div
-	bind:this={root}
-	class="relative flex h-[calc(100dvh-9rem)] min-h-[34rem] flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm"
->
+<div bind:this={root} class="relative flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
 	{#if loading}
 		<div class="flex flex-1 items-center justify-center">
 			<Spinner.Root />

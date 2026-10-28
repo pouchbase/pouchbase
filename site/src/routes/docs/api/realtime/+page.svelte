@@ -19,7 +19,7 @@
 		[
 			'auth',
 			'Client',
-			'{ token? }: the first message, within 10 seconds; without a token, anonymous'
+			'{ token? }: the first message, within 10 seconds; a user’s token, an API key (acts as an admin), or none for anonymous'
 		],
 		['ready', 'Server', '{ subject, expiresAt }: authenticated as admin, user or anonymous'],
 		[
@@ -49,10 +49,14 @@
 	const closeCodes = [
 		['1001', 'A deploy or restart; reconnect'],
 		['1009', 'A message larger than 32 KB'],
+		['1011', 'The server couldn’t check the token'],
 		['4000', 'Too many invalid messages in a row'],
 		['4001', 'No auth message within 10 seconds'],
 		['4004', 'The collection query parameter is missing or invalid'],
-		['4401', 'The token is invalid, or expired while connected']
+		[
+			'4401',
+			'The token or API key is invalid, the key is a plugin’s, or the token expired while connected'
+		]
 	];
 </script>
 
@@ -62,19 +66,18 @@
 	{sections}
 >
 	<p>
-		This is the protocol behind realtime, for clients in any language. In TypeScript, the
-		<a href={resolve('/docs/sdk/realtime')}>SDK</a> speaks it for you. What a subscription sends,
-		and how it is hosted, is on the <a href={resolve('/docs/platform/realtime')}>Realtime</a> page of
-		the platform docs.
+		In TypeScript, the <a href={resolve('/docs/sdk/realtime')}>SDK</a> speaks this protocol for you.
+		How realtime works is under <a href={resolve('/docs/platform/realtime')}>Realtime</a> in the platform
+		docs.
 	</p>
 
 	<h2 id="connecting">Connecting</h2>
 
 	<p>
 		Open a WebSocket to <Code.Root>/api/realtime?collection=&lt;name&gt;</Code.Root>, one per
-		collection. Send an <Code.Root>auth</Code.Root> message first, with the user's token or without one,
-		and subscribe once the server answers <Code.Root>ready</Code.Root>. A plain HTTP request to the
-		endpoint gets a <Code.Root>426</Code.Root>.
+		collection. Send <Code.Root>auth</Code.Root> first, with a user's token, an API key (which skips the
+		view rule) or nothing, and subscribe once the server answers <Code.Root>ready</Code.Root>. A
+		plain HTTP request gets a <Code.Root>426</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="JavaScript">
@@ -82,14 +85,14 @@
 	</CodeBlock.Root>
 
 	<p>
-		A subscription's <Code.Root>id</Code.Root> is yours to choose, and comes back with its events.
+		You choose a subscription's <Code.Root>id</Code.Root>; its events carry it.
 		<Code.Root>where</Code.Root> is a
-		<a href={resolve('/docs/platform/collections/filters')}>condition</a>, such as
-		<Code.Root>status == "published"</Code.Root>, and <Code.Root>select</Code.Root> and
-		<Code.Root>include</Code.Root> are arrays of field names, as in the
+		<a href={resolve('/docs/platform/collections/filters')}>condition</a>, and <Code.Root
+			>select</Code.Root
+		> and <Code.Root>include</Code.Root> are arrays of field names, as in the
 		<a href={resolve('/docs/api/records')}>records API</a>. The
-		<a href={resolve('/docs/platform/collections/access-rules')}>view rule</a> of the collection decides
-		which records you get events for.
+		<a href={resolve('/docs/platform/collections/access-rules')}>view rule</a> decides which records you
+		get events for, and app users don't get hidden fields.
 	</p>
 
 	<h2 id="messages">Messages</h2>
@@ -102,9 +105,8 @@
 
 	<p>
 		<Code.Root>action</Code.Root> is <Code.Root>create</Code.Root>, <Code.Root>update</Code.Root> or
-		<Code.Root>delete</Code.Root>, <Code.Root>record</Code.Root> has the same shape as the records API
-		returns it (for a delete, as it was), and <Code.Root>at</Code.Root> is when the change was saved,
-		in milliseconds:
+		<Code.Root>delete</Code.Root>; <Code.Root>record</Code.Root> is as the records API returns it (for
+		a delete, as it was); <Code.Root>at</Code.Root> is when it was saved, in milliseconds:
 	</p>
 
 	<CodeBlock.Root title="Event">
@@ -114,8 +116,8 @@
 	<h2 id="errors">Errors and close codes</h2>
 
 	<p>
-		A message or subscription the server refuses gets an <Code.Root>error</Code.Root>, with the
-		<Code.Root>id</Code.Root> of the subscription when it is about one:
+		A refused message gets an <Code.Root>error</Code.Root>, with the subscription's
+		<Code.Root>id</Code.Root> when it is about one:
 	</p>
 
 	<CodeBlock.Root title="Error">

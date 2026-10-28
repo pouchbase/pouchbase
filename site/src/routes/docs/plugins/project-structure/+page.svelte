@@ -40,6 +40,11 @@
 			href: resolve('/docs/plugins/sign-in-providers')
 		},
 		{
+			key: 'collections',
+			adds: 'Collections by name: { notes } adds <plugin>_notes.',
+			href: resolve('/docs/plugins/collections')
+		},
+		{
 			key: 'routes',
 			adds: "Routes by path: '/items/:id' answers at /api/plugins/<plugin>/items/:id.",
 			href: resolve('/docs/plugins/routes')
@@ -55,10 +60,9 @@
 	<h2 id="plugin-ts">plugin.ts</h2>
 
 	<p>
-		<Code.Root>plugin.ts</Code.Root> at the root of the plugin is its single entry point. It default-exports
+		<Code.Root>plugin.ts</Code.Root> is the plugin's single entry point. It default-exports
 		<Code.Root>definePlugin(&#123; … &#125;)</Code.Root> from
-		<Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>, with everything the plugin adds, by id.
-		This is the demo plugin's:
+		<Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>. This is the demo plugin's:
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
@@ -85,7 +89,7 @@
 	</Table.Root>
 
 	<p>
-		All keys are optional. The <Code.Root>Register</Code.Root> block at the end types
+		All keys are optional. The <Code.Root>Register</Code.Root> block types
 		<Code.Root>ctx.settings</Code.Root> everywhere in the plugin (see
 		<a href={resolve('/docs/plugins/settings')}>Settings</a>).
 	</p>
@@ -93,38 +97,30 @@
 	<h2 id="folders">Folders</h2>
 
 	<p>
-		Nothing is read from folder or file names: a field type, page or route is part of the plugin
-		because <Code.Root>plugin.ts</Code.Root> imports it, wherever it lives. <Code.Root
-			>init</Code.Root
-		>
-		and <Code.Root>add</Code.Root> use this layout, which is a good start but not a rule:
+		Nothing is read from folder or file names: a file is part of the plugin because
+		<Code.Root>plugin.ts</Code.Root> imports it. <Code.Root>init</Code.Root> and
+		<Code.Root>add</Code.Root> use this layout:
 	</p>
 
 	<CodeBlock.Root>
 		<CodeBlock.Source code={data.code.layout} />
 	</CodeBlock.Root>
 
-	<ul>
-		<li>
-			<Code.Root>icon.svg</Code.Root> at the root is the plugin's logo in the marketplace and the dashboard,
-			unless the manifest's <Code.Root>icon</Code.Root> names another file.
-		</li>
-		<li>
-			Shared code, such as <Code.Root>lib/</Code.Root>, is only bundled where it's imported: into
-			the server code, into the components, or both.
-		</li>
-	</ul>
+	<p>
+		<Code.Root>icon.svg</Code.Root> is the plugin's logo in the marketplace and the dashboard. Shared
+		code, such as <Code.Root>lib/</Code.Root>, is bundled only where it's imported: into the server
+		code, the components, or both.
+	</p>
 
 	<h2 id="naming">Naming</h2>
 
-	<p>The keys in <Code.Root>definePlugin</Code.Root> are the ids, and they are lowercase:</p>
-
 	<ul>
 		<li>
-			Field types use lowercase letters, numbers and underscores (<Code.Root>rich_color</Code.Root
+			Field types and collections use lowercase letters, numbers and underscores (<Code.Root
+				>rich_color</Code.Root
 			>); pages and providers use lowercase words separated by dashes (<Code.Root
 				>monthly-report</Code.Root
-			>), and pages slashes between segments (<Code.Root>reports/monthly</Code.Root>).
+			>), pages with slashes between segments (<Code.Root>reports/monthly</Code.Root>).
 		</li>
 		<li>
 			Route paths start with a slash. <Code.Root>:name</Code.Root> is a param, and static segments may
@@ -132,8 +128,8 @@
 			<Code.Root>'/status.json'</Code.Root> works.
 		</li>
 		<li>
-			Field types and provider ids are stored with your data, and page and route paths are public
-			URLs, so don't rename them once people use them (see
+			Field types, provider ids and collection names are stored with your data, and page and route
+			paths are public URLs, so don't rename them once people use them (see
 			<a href="{resolve('/docs/plugins/publishing')}#updates">Updates</a>).
 		</li>
 	</ul>
@@ -143,7 +139,7 @@
 	<p>
 		<Code.Root>add</Code.Root> creates the files of a new field type, page, route or sign-in provider,
 		never overwriting one, and adds its entry and import to <Code.Root>plugin.ts</Code.Root> (creating
-		<Code.Root>plugin.ts</Code.Root> when there is none):
+		it when there is none). A field type, page or provider also gets its category in the manifest:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -151,9 +147,8 @@
 	</CodeBlock.Root>
 
 	<p>
-		When the record it adds to isn't an object literal, such as <Code.Root
-			>fields: allFields</Code.Root
-		>, it changes nothing and prints the import and entry to add by hand.
+		When the object it adds to isn't a literal, such as <Code.Root>fields: allFields</Code.Root>, it
+		prints the import and entry to add by hand.
 	</p>
 
 	<h2 id="types">Types</h2>
@@ -162,37 +157,30 @@
 		<Code.Root>plugin.ts</Code.Root> imports <Code.Root>.svelte</Code.Root> and
 		<Code.Root>.svg</Code.Root> files like modules. The templates' <Code.Root
 			>tsconfig.json</Code.Root
-		> types them, and checks the components too:
+		> types them (<Code.Root>svelte</Code.Root> and <Code.Root
+			>@pouchbasejs/plugin-sdk/env</Code.Root
+		>):
 	</p>
 
 	<CodeBlock.Root title="tsconfig.json">
 		<CodeBlock.Source code={data.code.tsconfig} />
 	</CodeBlock.Root>
 
-	<ul>
-		<li>
-			<Code.Root>svelte</Code.Root> types the <Code.Root>.svelte</Code.Root> imports and
-			<Code.Root>@pouchbasejs/plugin-sdk/env</Code.Root> the <Code.Root>.svg</Code.Root> imports.
-		</li>
-		<li>
-			Components are checked against the props they get: an input against
-			<Code.Root>FieldInputProps</Code.Root>, a preview against <Code.Root
-				>FieldPreviewProps</Code.Root
-			>
-			and a page against <Code.Root>PageProps</Code.Root>.
-		</li>
-		<li>
-			<Code.Root>pnpm check</Code.Root> runs <Code.Root>svelte-check</Code.Root> over both.
-		</li>
-	</ul>
+	<p>
+		Components are checked against the props they get: an input against
+		<Code.Root>FieldInputProps</Code.Root>, a preview against <Code.Root
+			>FieldPreviewProps</Code.Root
+		>, a page against <Code.Root>PageProps</Code.Root>. <Code.Root>pnpm check</Code.Root> runs
+		<Code.Root>svelte-check</Code.Root> over all of it.
+	</p>
 
 	<h2 id="how-a-build-works">How a build works</h2>
 
 	<p>
 		The CLI bundles <Code.Root>plugin.ts</Code.Root> and runs it in Node.js to read what it adds, so keep
 		the top level of <Code.Root>plugin.ts</Code.Root> and the files it imports free of anything only a
-		Worker has. In that code, every imported <Code.Root>.svelte</Code.Root> or
-		<Code.Root>.svg</Code.Root> file is a reference to the file, not code. Then:
+		Worker has. There, an imported <Code.Root>.svelte</Code.Root> or <Code.Root>.svg</Code.Root> file
+		is only a reference to the file. Then:
 	</p>
 
 	<ul>
@@ -201,9 +189,8 @@
 			<a href={resolve('/docs/plugins/components')}>Components and icons</a>);
 		</li>
 		<li>
-			the server code keeps only the handlers: the hooks of field types, the profile of sign-in
-			providers and the routes, which run in the plugin's
-			<a href="{resolve('/docs/plugins/routes')}#server-code">Worker</a>.
+			the server code keeps only the handlers (field type hooks, provider profiles and routes),
+			which run in the plugin's <a href="{resolve('/docs/plugins/routes')}#server-code">Worker</a>.
 		</li>
 	</ul>
 
@@ -239,14 +226,14 @@
 				<Table.Cell>
 					Up to three of <Code.Root>auth</Code.Root>, <Code.Root>fields</Code.Root>,
 					<Code.Root>pages</Code.Root>, <Code.Root>integrations</Code.Root> and
-					<Code.Root>developer-tools</Code.Root>. Optional: the registry picks them from what the
-					plugin contributes.
+					<Code.Root>developer-tools</Code.Root>. Without them, the registry picks them from what
+					the plugin adds.
 				</Table.Cell>
 			</Table.Row>
 			<Table.Row>
 				<Table.Cell><Code.Root class="whitespace-nowrap">engines.pouchbase</Code.Root></Table.Cell>
 				<Table.Cell>
-					The Pouchbase versions the plugin works with, as a semver range. Start with <Code.Root
+					The Pouchbase versions the plugin works with, as a semver range; start with <Code.Root
 						>&gt;=0.10.0</Code.Root
 					>
 					(see <a href="{resolve('/docs/plugins/publishing')}#compatibility">Compatibility</a>).
@@ -257,7 +244,7 @@
 				>
 				<Table.Cell>
 					The HTTPS hosts the server code may reach; <Code.Root>*.example.com</Code.Root> matches its
-					subdomains. The admin sees them before installing.
+					subdomains, not <Code.Root>example.com</Code.Root> itself.
 				</Table.Cell>
 			</Table.Row>
 			<Table.Row>
@@ -266,9 +253,8 @@
 				>
 				<Table.Cell>
 					The app's collections <Code.Root>ctx.pouch</Code.Root> may <Code.Root>read</Code.Root> or
-					<Code.Root>write</Code.Root>, by name or <Code.Root>*</Code.Root> (see
-					<a href={resolve('/docs/plugins/collections')}>Collections</a>). The admin sees them
-					before installing.
+					<Code.Root>write</Code.Root> (see
+					<a href={resolve('/docs/plugins/collections')}>Collections</a>).
 				</Table.Cell>
 			</Table.Row>
 			<Table.Row>
@@ -281,9 +267,9 @@
 	</Table.Root>
 
 	<p>
-		The <Code.Root>$schema</Code.Root> line gives editors completion and checks while you type. The version,
-		description, license, author, homepage, repository and keywords come from
-		<Code.Root>package.json</Code.Root>, so the version lives in one place:
+		The admin sees both permissions before installing. The <Code.Root>$schema</Code.Root> line gives editors
+		completion and checks. The version, description, license, author, homepage, repository and keywords
+		come from <Code.Root>package.json</Code.Root>:
 	</p>
 
 	<CodeBlock.Root title="package.json">
@@ -291,11 +277,10 @@
 	</CodeBlock.Root>
 
 	<p>
-		When building, the CLI adds what <Code.Root>plugin.ts</Code.Root> declares, so the manifest Pouchbase
-		sees is complete. <Code.Root>settings</Code.Root> in <Code.Root>pouchbase-plugin.json</Code.Root
-		>
-		are refused: they belong in <Code.Root>plugin.ts</Code.Root>. To check what the plugin adds,
-		print the full manifest:
+		The CLI adds what <Code.Root>plugin.ts</Code.Root> declares when it builds, and refuses
+		<Code.Root>settings</Code.Root>, <Code.Root>contributes</Code.Root> and
+		<Code.Root>server</Code.Root> in <Code.Root>pouchbase-plugin.json</Code.Root>. To see the
+		complete manifest:
 	</p>
 
 	<CodeBlock.Root title="Terminal">

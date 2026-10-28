@@ -25,7 +25,7 @@ import semver from 'semver';
 
 import type { PluginRecord, PluginVersionRecord } from './pouchbase';
 
-import { service } from './pouchbase';
+import { admin } from './pouchbase';
 
 /**
  * The plugin registry (API version 1 of `@pouchbasejs/plugin-sdk`, see `registry.ts` there) on top
@@ -158,7 +158,7 @@ const PARTS_PER_REQUEST = 8;
 
 /** The bundle of version `id`: its first part with the ones in `plugin_bundle_parts`. */
 async function readBundle(id: string, first: string): Promise<string> {
-	const parts = await service()
+	const parts = await admin()
 		.db.plugin_bundle_parts.findAll({
 			where: { version: id },
 			orderBy: { part: 'asc' },
@@ -172,7 +172,7 @@ async function readBundle(id: string, first: string): Promise<string> {
 
 /** The bundle of a stored version; `null` when there is none. */
 async function storedBundle(where: Where<PluginVersionRecord>): Promise<string | null> {
-	const row = await service()
+	const row = await admin()
 		.db.plugin_versions.findFirst({ where, select: ['id', 'bundle'] })
 		.catch(backendFailure);
 
@@ -213,11 +213,11 @@ export function backendFailure(error: unknown): never {
 }
 
 function findPlugin(slug: string) {
-	return service().db.plugins.findFirst({ where: { slug } }).catch(backendFailure);
+	return admin().db.plugins.findFirst({ where: { slug } }).catch(backendFailure);
 }
 
 function listVersions(pluginId: string): Promise<VersionRow[]> {
-	return service()
+	return admin()
 		.db.plugin_versions.findAll({ where: { plugin: pluginId }, select: [...VERSION_FIELDS] })
 		.then((rows) => rows.sort(bySemver))
 		.catch(backendFailure);
@@ -258,7 +258,7 @@ export async function searchPlugins(input: SearchInput): Promise<PluginList> {
 		});
 	}
 
-	const result = await service()
+	const result = await admin()
 		.db.plugins.findMany({
 			where: { $and: conditions },
 			orderBy: { downloads: 'desc', name: 'asc' },
@@ -343,7 +343,7 @@ export async function getBundle(slug: string, version: string): Promise<string |
 	}
 
 	// The count is a hint; a failed update shouldn't fail the download.
-	await service()
+	await admin()
 		.db.plugins.patch(plugin.id, { downloads: (plugin.downloads ?? 0) + 1 })
 		.catch((error: unknown) => console.error('Plugin registry: counting a download failed', error));
 
@@ -377,7 +377,7 @@ export async function getIcon(slug: string): Promise<string | null> {
 
 /** The plugins of a user, newest first, for the account pages. */
 export async function listOwnPlugins(userId: string): Promise<PluginRecord[]> {
-	return service()
+	return admin()
 		.db.plugins.findAll({ where: { owner: userId }, orderBy: { created_at: 'desc' } })
 		.catch(backendFailure);
 }
@@ -387,7 +387,7 @@ export async function listOwnPlugins(userId: string): Promise<PluginRecord[]> {
  * goes again, so no version is listed without its whole bundle; then it throws.
  */
 async function storeParts(id: string, parts: string[]) {
-	const db = service().db;
+	const db = admin().db;
 
 	try {
 		// One at a time: each part is a request of up to 1.5 MB.
@@ -502,7 +502,7 @@ export async function publishVersion(
 		version: manifest.version,
 		api_version: manifest.apiVersion
 	};
-	const db = service().db;
+	const db = admin().db;
 
 	try {
 		let plugin = existing;

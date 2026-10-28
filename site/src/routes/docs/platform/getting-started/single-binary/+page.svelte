@@ -25,7 +25,7 @@
 
 <DocsPage
 	title="Single binary"
-	description="Pouchbase also comes as one executable without dependencies: download it and run it. It keeps no files of its own: the data lives on Cloudflare."
+	description="Pouchbase also comes as one executable without dependencies. It keeps no files of its own: the data lives on Cloudflare."
 	{sections}
 >
 	<CredentialsNote />
@@ -35,8 +35,8 @@
 	<p>
 		Every
 		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- external link -->
-		<a href="{GITHUB_URL}/releases">release on GitHub</a> attaches a binary per platform, each with Node
-		26, the app and its static files:
+		<a href="{GITHUB_URL}/releases">release on GitHub</a> attaches a binary per platform, with Node 26
+		and the app built in:
 	</p>
 
 	<ul>
@@ -46,9 +46,10 @@
 	</ul>
 
 	<p>
-		On Linux the binary needs <Code.Root>libatomic1</Code.Root>, which most distributions install by
-		default. On minimal images such as <Code.Root>debian:slim</Code.Root>, install it with
-		<Code.Root>apt-get install libatomic1</Code.Root>.
+		On Linux it needs <Code.Root>libatomic1</Code.Root>, which most distributions have; on minimal
+		images such as <Code.Root>debian:slim</Code.Root>, run <Code.Root
+			>apt-get install libatomic1</Code.Root
+		>.
 	</p>
 
 	<h2 id="run">Run</h2>
@@ -66,20 +67,19 @@
 	</CodeBlock.Root>
 
 	<p>
-		For anything but local use, put a reverse proxy with HTTPS in front of it: the session cookie is
-		only sent over HTTPS, except on <Code.Root>localhost</Code.Root>.
+		For anything but local use, put a reverse proxy with HTTPS in front: the session cookie is only
+		sent over HTTPS or to <Code.Root>localhost</Code.Root>.
 	</p>
 
 	<h2 id="configuration">Configuration</h2>
 
 	<p>
-		The binary reads <Code.Root>.env</Code.Root> from the working directory, or the file passed with
-		<Code.Root>--env-file</Code.Root>; variables in the environment work as well.
-		<Code.Root>--http</Code.Root>, <Code.Root>--port</Code.Root> and <Code.Root>--origin</Code.Root>
-		override <Code.Root>HOST</Code.Root>, <Code.Root>PORT</Code.Root> and <Code.Root
-			>ORIGIN</Code.Root
-		>
-		(<Code.Root>--port=3001</Code.Root> changes only the port). Run
+		The binary reads <Code.Root>.env</Code.Root> from the working directory (or the file passed with
+		<Code.Root>--env-file</Code.Root>) and the environment. Flags override the variables:
+		<Code.Root>--http</Code.Root> sets <Code.Root>HOST</Code.Root> and <Code.Root>PORT</Code.Root>,
+		<Code.Root>--port</Code.Root> only the port, <Code.Root>--origin</Code.Root> sets
+		<Code.Root>ORIGIN</Code.Root> and <Code.Root>--instance</Code.Root>
+		<Code.Root>POUCHBASE_INSTANCE</Code.Root>. Run
 		<Code.Root>pouchbase --help</Code.Root> for all flags.
 	</p>
 
@@ -88,14 +88,16 @@
 	<h2 id="updating">Updating</h2>
 
 	<p>
-		The bottom of the admin sidebar shows when a new version is out; <strong>Update now</strong>
-		installs it and restarts Pouchbase. From the command line, <Code.Root>update</Code.Root> downloads
-		the latest release for your platform, checks it and replaces the executable; restart Pouchbase afterwards.
+		When a new version is out, the bottom of the admin sidebar says so, and <strong
+			>Update now</strong
+		>
+		installs it and restarts Pouchbase. On the command line, <Code.Root>update</Code.Root> replaces the
+		executable with the checked latest release; restart Pouchbase afterwards, and use
+		<Code.Root>sudo</Code.Root> when the binary sits in a system directory.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
-		<CodeBlock.Line kind="comment"># Only check whether a newer version is available</CodeBlock.Line
-		>
+		<CodeBlock.Line kind="comment"># Only check for a newer version</CodeBlock.Line>
 		<CodeBlock.Line>./pouchbase-linux-x64 update --check</CodeBlock.Line>
 		<CodeBlock.Line kind="comment" class="mt-5"># Download and install it</CodeBlock.Line>
 		<CodeBlock.Line>./pouchbase-linux-x64 update</CodeBlock.Line>

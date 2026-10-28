@@ -63,7 +63,7 @@
 		[
 			'POST /api/auth/password/forgot',
 			'{ email }',
-			'{ "sent": true }, for unknown addresses too; 503 without mail settings'
+			'{ "sent": true }, for unknown addresses too; 403 when email and password sign-in is off, 503 without mail settings'
 		],
 		[
 			'POST /api/auth/password/reset',
@@ -91,9 +91,8 @@
 	{sections}
 >
 	<p>
-		These endpoints sign in the users of your app, the records of the built-in
-		<Code.Root>users</Code.Root> collection. Which sign-in methods are on, and whether users must verify
-		their email first, is set in the dashboard; see
+		Users of your app are records of the built-in <Code.Root>users</Code.Root> collection. Sign-in methods
+		and email verification are set in the dashboard; see
 		<a href={resolve('/docs/platform/authentication')}>Authentication</a>.
 	</p>
 
@@ -104,20 +103,20 @@
 	<h2 id="tokens">Tokens</h2>
 
 	<p>
-		Every sign-in returns a <Code.Root>token</Code.Root> and the <Code.Root>user_id</Code.Root>. The
-		token is a JWT, valid for 7 days. Send it with every request as
-		<Code.Root>Authorization: Bearer &lt;token&gt;</Code.Root>; the
-		<a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> then apply to that
-		user. An invalid or expired token is a <Code.Root>401</Code.Root> on every endpoint, so sign the user
-		in again. There is no sign-out endpoint: forget the token.
+		Every sign-in returns a <Code.Root>token</Code.Root>, a JWT valid for 7 days, and the
+		<Code.Root>user_id</Code.Root>. Send it as <Code.Root
+			>Authorization: Bearer &lt;token&gt;</Code.Root
+		>; the <a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> then apply
+		to that user. An invalid or expired token is a <Code.Root>401</Code.Root> everywhere. To sign out,
+		forget the token.
 	</p>
 
 	<h2 id="register">Sign up</h2>
 
 	<p>
 		<Code.Root>POST /api/auth/password/register</Code.Root> takes a <Code.Root>name</Code.Root>, an
-		<Code.Root>email</Code.Root> and a <Code.Root>password</Code.Root> of 8 to 128 characters. With mail
-		set up, it sends a verification email.
+		<Code.Root>email</Code.Root> and a <Code.Root>password</Code.Root> of 8 to 128 characters, and sends
+		a verification email when mail is set up.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -129,9 +128,9 @@
 	</CodeBlock.Root>
 
 	<p>
-		When a verified email is required, <Code.Root>token</Code.Root> is <Code.Root>null</Code.Root> and
-		<Code.Root>verification_required</Code.Root> is <Code.Root>true</Code.Root>: the user signs in
-		after following the link in the email.
+		When a verified email is required, <Code.Root>token</Code.Root> is <Code.Root>null</Code.Root>,
+		<Code.Root>verification_required</Code.Root> is <Code.Root>true</Code.Root>, and the user signs
+		in after following the link.
 	</p>
 
 	<CodeBlock.Root title="400 Bad Request">
@@ -151,8 +150,8 @@
 	</CodeBlock.Root>
 
 	<p>
-		Until the user has verified their address, when that is required, signing in fails with a
-		<Code.Root>code</Code.Root> to check for, so your app can offer to send the link again:
+		When verification is required, signing in before it fails with a <Code.Root>code</Code.Root>, so
+		your app can offer to send the link again:
 	</p>
 
 	<CodeBlock.Root title="403 Forbidden">
@@ -164,10 +163,9 @@
 	<h2 id="me">The signed-in user</h2>
 
 	<p>
-		<Code.Root>GET /api/auth/me</Code.Root> returns the user of the token, as a record of
-		<Code.Root>users</Code.Root> without its hidden fields, or a <Code.Root>401</Code.Root> without a
-		valid token. The view rule of <Code.Root>users</Code.Root> doesn't apply: users can always read their
-		own record.
+		<Code.Root>GET /api/auth/me</Code.Root> returns the user of the token as a record of
+		<Code.Root>users</Code.Root>, without hidden fields, or a <Code.Root>401</Code.Root>. The view
+		rule of <Code.Root>users</Code.Root> doesn't apply here.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -182,9 +180,9 @@
 
 	<p>
 		These need mail settings in the dashboard. The links in the emails open pages of Pouchbase
-		itself, which call the verify and reset endpoints; call them yourself only when your own app
-		handles the links. Reset links are valid for 30 minutes and work once; verification links are
-		valid for 3 days.
+		itself, so call verify and reset only when your own app handles the links. Reset links work
+		once, within 30 minutes; verification links are valid for 3 days. The sending endpoints answer
+		the same whether or not the address has an account.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -193,17 +191,11 @@
 
 	<DocsTable head={['Request', 'Body', 'Answers']} rows={emailEndpoints} />
 
-	<p>
-		The two endpoints that send an email answer the same whether or not the address has an account,
-		so nobody can use them to find out who has one.
-	</p>
-
 	<h2 id="oauth">OAuth</h2>
 
 	<p>
-		<Code.Root>GET /api/auth/providers</Code.Root> lists the providers that are turned on, to build the
-		sign-in buttons from. <Code.Root>iconUrl</Code.Root> is the URL of the provider's logo, or
-		<Code.Root>null</Code.Root>:
+		<Code.Root>GET /api/auth/providers</Code.Root> lists the providers that are turned on, for your sign-in
+		buttons; <Code.Root>iconUrl</Code.Root> may be <Code.Root>null</Code.Root>:
 	</p>
 
 	<CodeBlock.Root title="200 OK">
@@ -211,13 +203,12 @@
 	</CodeBlock.Root>
 
 	<p>
-		A sign-in runs in a popup, and the token never appears in a URL. Your app proves it started the
-		sign-in with PKCE: it makes a random <Code.Root>state</Code.Root> and a secret
-		<Code.Root>verifier</Code.Root>, opens <Code.Root>/api/auth/oauth2/&lt;provider&gt;</Code.Root> with
-		the state and the SHA-256 hash of the verifier as <Code.Root>challenge</Code.Root>, and then
-		polls
-		<Code.Root>POST /api/auth/oauth2/result</Code.Root> with the state and the verifier until the user
-		is done. Only a caller that knows the verifier gets the token.
+		A sign-in runs in a popup and uses PKCE, so the token never appears in a URL. Your app makes a
+		random <Code.Root>state</Code.Root> and a secret <Code.Root>verifier</Code.Root>, opens
+		<Code.Root>/api/auth/oauth2/&lt;provider&gt;</Code.Root> with the state and the SHA-256 hash of the
+		verifier as <Code.Root>challenge</Code.Root>, then polls
+		<Code.Root>POST /api/auth/oauth2/result</Code.Root> with both until the user is done. A sign-in expires
+		after 10 minutes.
 	</p>
 
 	<CodeBlock.Root title="JavaScript">
@@ -229,9 +220,9 @@
 	</CodeBlock.Root>
 
 	<p>
-		The start endpoint redirects the popup to the provider, and answers <Code.Root>400</Code.Root> for
-		a provider that isn't turned on or a missing state or challenge, and <Code.Root>404</Code.Root> for
-		an unknown provider. The result endpoint answers:
+		The start endpoint redirects to the provider, or answers <Code.Root>400</Code.Root> for a provider
+		that is off or a missing state or challenge, and <Code.Root>404</Code.Root> for an unknown one. The
+		result endpoint answers:
 	</p>
 
 	<DocsTable head={['When', 'Status', 'Body']} rows={oauthResults} code={0} />

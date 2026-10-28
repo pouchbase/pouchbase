@@ -1,14 +1,14 @@
 import type { RequestHandler } from './$types';
 
-import { json, noContent, preflight, requestServiceKey } from '#lib/server/api.js';
+import { json, noContent, preflight, requestApiKey } from '#lib/server/api.js';
 import { readJsonObject } from '#lib/server/api-body.js';
 import { apiUpdateCollectionSchema } from '#lib/schemas/collections.js';
 
-import { errorResponse, flag, invalidBody, PURPOSE } from '../responses';
+import { errorResponse, flag, invalidBody } from '../responses';
 
 /** One collection with its fields, indexes, API rules and settings. */
 export const GET: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;
@@ -34,7 +34,7 @@ export const GET: RequestHandler = async (event) => {
  * data need `?force=true` (`409` with the plan otherwise) → the collection.
  */
 export const PATCH: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;
@@ -62,7 +62,7 @@ export const PATCH: RequestHandler = async (event) => {
 
 /** Deletes a collection and its records → `204`. */
 export const DELETE: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;

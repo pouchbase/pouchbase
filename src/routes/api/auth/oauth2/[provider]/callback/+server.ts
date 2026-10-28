@@ -23,7 +23,8 @@ function page(message: string, status = 200) {
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<title>Sign-in</title>
 		<style>
-			body { margin: 0; min-height: 100svh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #fafafa; color: #18181b; }
+			:root { color-scheme: light dark; }
+			body { margin: 0; min-height: 100svh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: light-dark(#fafafa, #161618); color: light-dark(#18181b, #eeeef0); }
 			p { max-width: 22rem; padding: 0 1rem; text-align: center; font-size: 0.875rem; line-height: 1.5; }
 		</style>
 	</head>

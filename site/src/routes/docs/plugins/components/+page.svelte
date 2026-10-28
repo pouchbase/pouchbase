@@ -71,19 +71,16 @@
 	{sections}
 >
 	<p>
-		The components a plugin's <Code.Root>plugin.ts</Code.Root> names (inputs, previews and pages), and
-		the files they import, are its UI files. Pouchbase compiles them with its own Svelte compiler when
-		the plugin is installed, and renders them in the dashboard, in the browser only. A component that
-		fails while rendering shows an error in its place instead of breaking the page.
-		<Code.Root>pouchbase-plugin validate</Code.Root> compiles them the same way, so you see compile errors
-		before installing.
+		The components <Code.Root>plugin.ts</Code.Root> names (inputs, previews and pages) and the files they
+		import are the plugin's UI files. Pouchbase compiles them when the plugin is installed and renders
+		them in the browser only; one that fails shows an error in its place.
+		<Code.Root>pouchbase-plugin validate</Code.Root> compiles them the same way, so you see errors before
+		installing.
 	</p>
 
 	<h2 id="imports">Imports</h2>
 
-	<p>
-		A component or module may import, with static <Code.Root>import</Code.Root> statements only:
-	</p>
+	<p>A UI file may import, with static <Code.Root>import</Code.Root> statements only:</p>
 
 	<ul>
 		<li>
@@ -91,7 +88,7 @@
 			>
 			files of the plugin, by relative path;
 		</li>
-		<li>these modules, which Pouchbase provides in the versions the dashboard uses:</li>
+		<li>these modules, which Pouchbase provides in the dashboard's versions:</li>
 	</ul>
 
 	<Table.Root>
@@ -126,27 +123,23 @@
 
 	<ul>
 		<li>
-			Nothing else: no other npm packages, no dynamic <Code.Root>import()</Code.Root>. Install
-			<Code.Root>svelte</Code.Root> and <Code.Root>@pouchbasejs/ui</Code.Root> as devDependencies for
-			type checking only (the templates do). The
-			<a href={resolve('/docs/plugins/ui')}>UI components</a>
-			docs show every component of <Code.Root>@pouchbasejs/ui</Code.Root> with a live preview.
+			Nothing else: no other npm packages, no dynamic <Code.Root>import()</Code.Root>. The templates
+			install <Code.Root>svelte</Code.Root> and <Code.Root>@pouchbasejs/ui</Code.Root> as devDependencies,
+			for types and the design tokens only. See
+			<a href={resolve('/docs/plugins/ui')}>UI components</a> for every component.
 		</li>
 		<li>
 			Import TypeScript files by their <Code.Root>.js</Code.Root> name:
 			<Code.Root>../../lib/colors.js</Code.Root> for <Code.Root>lib/colors.ts</Code.Root>.
 		</li>
 		<li>
-			Server code can't be imported, directly or through another file: <Code.Root
-				>plugin.ts</Code.Root
-			>
-			and every file that imports <Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>, such as
-			<Code.Root>field.ts</Code.Root>. Move what both need into a shared file, such as
-			<Code.Root>lib/</Code.Root>.
+			Not server code, directly or through another file: <Code.Root>plugin.ts</Code.Root> and every file
+			that imports <Code.Root>@pouchbasejs/plugin-sdk/server</Code.Root>. Move what both need into a
+			shared file, such as <Code.Root>lib/</Code.Root>.
 		</li>
 		<li>
-			Only JavaScript is linked: inline JSON data in a <Code.Root>.ts</Code.Root> module and SVG markup
-			in a component or a string.
+			Not <Code.Root>.json</Code.Root>, <Code.Root>.css</Code.Root> or <Code.Root>.svg</Code.Root>
+			files: put JSON data in a <Code.Root>.ts</Code.Root> module and SVG markup in a component or a string.
 		</li>
 	</ul>
 
@@ -154,29 +147,23 @@
 
 	<ul>
 		<li>
-			Use Tailwind classes, as the dashboard does. The CLI compiles the classes you use, with the
-			dashboard's design tokens (<Code.Root>h-control</Code.Root>, <Code.Root>h-row</Code.Root>, …),
-			so a class means the same as in the dashboard.
+			Use Tailwind classes. The CLI compiles the ones you use with the dashboard's design tokens (<Code.Root
+				>h-control</Code.Root
+			>, <Code.Root>h-row</Code.Root>, …, from
+			<Code.Root>@pouchbasejs/ui</Code.Root>), so a class means the same as in the dashboard.
 		</li>
 		<li>
-			Or use the component's <Code.Root>&lt;style&gt;</Code.Root>, which is scoped to it and can't
-			break the dashboard.
+			Or use the component's <Code.Root>&lt;style&gt;</Code.Root>, which is scoped to it.
 		</li>
 	</ul>
 
 	<h2 id="icons">Icons</h2>
 
 	<p>
-		Field types and pages get an icon in the dashboard, drawn like its built-in icons: in the text
-		color, at 16 pixels. Only the shape counts, so monochrome icons work best. Without one, they
-		show a puzzle piece. The logo of a <a href={resolve('/docs/plugins/sign-in-providers')}
-			>sign-in provider</a
-		> keeps its colors.
-	</p>
-
-	<p>
-		<Code.Root>icon</Code.Root> in <Code.Root>defineField</Code.Root>, a page or
-		<Code.Root>defineAuthProvider</Code.Root> is one of two things:
+		Field types and pages get an icon drawn like the dashboard's own: in the text color, at 16
+		pixels, so only the shape counts. Without one, they show a puzzle piece. The logo of a
+		<a href={resolve('/docs/plugins/sign-in-providers')}>sign-in provider</a> keeps its colors.
+		<Code.Root>icon</Code.Root> is one of two things:
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
@@ -186,13 +173,15 @@
 	<ul>
 		<li>
 			An <a href="https://icon-sets.iconify.design">Iconify</a> name, such as
-			<Code.Root>lucide:palette</Code.Root>, becomes an SVG file of the bundle when the CLI builds,
-			so Pouchbase never fetches it. <Code.Root>lucide</Code.Root> comes with the SDK; for another set,
-			install <Code.Root>@iconify-json/&lt;set&gt;</Code.Root>.
+			<Code.Root>lucide:palette</Code.Root>, which the CLI turns into an SVG file of the bundle.
+			<Code.Root>lucide</Code.Root> comes with the SDK; other sets come from an installed
+			<Code.Root>@iconify-json/&lt;set&gt;</Code.Root>, or from the Iconify API once, cached in
+			<Code.Root>node_modules/.cache</Code.Root>.
 		</li>
 		<li>
-			An <Code.Root>.svg</Code.Root> file of the plugin, imported like a module:
-			<Code.Root>import icon from './icon.svg'</Code.Root>. A path as a string isn't accepted.
+			An imported <Code.Root>.svg</Code.Root> file of the plugin (<Code.Root
+				>import icon from './icon.svg'</Code.Root
+			>), not a path as a string.
 		</li>
 		<li>
 			Icons are plain SVG of at most 32 KiB: no scripts, event handlers or external references.
@@ -208,8 +197,7 @@
 		from <Code.Root>@pouchbasejs/ui/icon</Code.Root> with
 		<Code.Root>src</Code.Root>: a <Code.Root>data:</Code.Root> URL, or an icon of one of the plugin's
 		field types or pages, which Pouchbase serves. Avoid <Code.Root>icon="lucide:…"</Code.Root>:
-		names the dashboard doesn't bundle itself are fetched from the Iconify API, so they show late,
-		or not at all offline.
+		names the dashboard doesn't bundle are fetched from the Iconify API at runtime.
 	</p>
 
 	<CodeBlock.Root title="pages/palette.svelte">

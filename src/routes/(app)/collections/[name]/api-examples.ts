@@ -202,7 +202,7 @@ const first = await ${sdk}.findFirst({ where: { ${textField ?? 'id'}: 'hello' } 
 					name: 'where',
 					type: 'string',
 					description:
-						'A condition in the syntax of the API rules, e.g. `status == "published" and views > 10`.'
+						'A condition in the syntax of the API rules, e.g. `status == "published" && views > 10`.'
 				},
 				{
 					name: 'order',

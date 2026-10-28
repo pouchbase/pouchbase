@@ -1,4 +1,4 @@
-import type { Pouchbase } from '../client.js';
+import type { PouchbaseClient } from '../client.js';
 import { PouchbaseError } from '../error.js';
 import { randomString, s256 } from '../pkce.js';
 import type {
@@ -45,9 +45,9 @@ const OAUTH_ERRORS: Record<OAuthError, string> = {
 
 /** Sign-up, sign-in, OAuth, password resets and email verification for app users. */
 export class AuthService<C extends object = { users: User }> {
-	readonly #pouch: Pouchbase<C>;
+	readonly #pouch: PouchbaseClient;
 
-	constructor(pouch: Pouchbase<C>) {
+	constructor(pouch: PouchbaseClient) {
 		this.#pouch = pouch;
 	}
 

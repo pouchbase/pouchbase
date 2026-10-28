@@ -37,7 +37,7 @@
 		[
 			'invalid',
 			'400',
-			'A value isn’t valid (a message per field in issues), or where, order, select or include is'
+			'A value isn’t valid (a message per field in issues), or where, order, select or include is (for example on a hidden field)'
 		],
 		['unauthorized', '401', 'The token is invalid or has expired; sign in again'],
 		[
@@ -66,12 +66,10 @@
 	{sections}
 >
 	<p>
-		Every collection is a property of <Code.Root>pouch.db</Code.Root>, typed by its fields when you
-		pass the <a href={resolve('/docs/sdk/types')}>generated schema</a>, with these methods. Each one
-		is checked against the collection’s
-		<a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> for the signed-in
-		user. The fields and what the API returns for each type are on
-		<a href={resolve('/docs/platform/collections')}>Collections</a>.
+		Every collection is a property of <Code.Root>pouch.db</Code.Root>, typed by the
+		<a href={resolve('/docs/sdk/types')}>generated schema</a>. Each call is checked against the
+		collection’s <a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> for the
+		signed-in user.
 	</p>
 
 	<DocsTable head={['Method', 'Does']} rows={methods} />
@@ -79,10 +77,7 @@
 	<h2 id="one-record">One record</h2>
 
 	<p>
-		<Code.Root>find()</Code.Root> takes an id and returns the record, or <Code.Root>null</Code.Root
-		>.
-		<Code.Root>select</Code.Root> returns only the fields you name, which keeps responses small; the result
-		type has only those fields too.
+		<Code.Root>select</Code.Root> returns only the fields you name; the result type has only those too.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -97,10 +92,9 @@
 
 	<p>
 		<Code.Root>findMany()</Code.Root> returns the records that match <Code.Root>where</Code.Root>
-		(see <a href={resolve('/docs/sdk/filters')}>Filters</a>), sorted by
-		<Code.Root>orderBy</Code.Root>. Without an order, records come in the order they were created.
-		Fields in <Code.Root>orderBy</Code.Root> are sorted in the order you list them, so
-		<Code.Root>{"{ status: 'asc', published_at: 'desc' }"}</Code.Root> sorts by status first.
+		(see <a href={resolve('/docs/sdk/filters')}>Filters</a>). Without <Code.Root>orderBy</Code.Root
+		>, records come in the order they were created; with several fields, the first one listed sorts
+		first.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -112,20 +106,16 @@
 	</CodeBlock.Root>
 
 	<p>
-		<Code.Root>items</Code.Root> holds the records of this page, <Code.Root>total</Code.Root> how many
-		match in all, <Code.Root>limit</Code.Root> and <Code.Root>offset</Code.Root> what the page was fetched
-		with, and <Code.Root>hasMore</Code.Root> whether more records match after these. Records the list
-		rule hides are left out, and aren't counted in <Code.Root>total</Code.Root>.
+		<Code.Root>total</Code.Root> counts every match. Records the list rule hides are left out of both
+		<Code.Root>items</Code.Root> and <Code.Root>total</Code.Root>.
 	</p>
 
 	<h2 id="pages">Pages and counts</h2>
 
 	<p>
-		<Code.Root>limit</Code.Root> is 30 by default and at most 500, and <Code.Root>offset</Code.Root>
-		skips that many matches first. For page <em>n</em> of <em>size</em> records, pass
-		<Code.Root>offset: (n - 1) * size</Code.Root>. To go through every match, let
-		<Code.Root>iterate()</Code.Root> or <Code.Root>findAll()</Code.Root> fetch the pages for you, 200
-		at a time unless you pass <Code.Root>batchSize</Code.Root>.
+		<Code.Root>limit</Code.Root> is 30 by default and at most 500. <Code.Root>iterate()</Code.Root> and
+		<Code.Root>findAll()</Code.Root> fetch every match for you, 200 at a time unless you pass
+		<Code.Root>batchSize</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -136,9 +126,8 @@
 
 	<p>
 		Relation and file fields hold ids. <Code.Root>include</Code.Root> returns the related records instead,
-		typed from the collection they point to. A single relation becomes a record or
-		<Code.Root>null</Code.Root>, a multiple one an array of records. When you also pass
-		<Code.Root>select</Code.Root>, name the relation there too.
+		typed by their collection: a record or <Code.Root>null</Code.Root>, or an array for a multiple
+		relation.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -150,7 +139,7 @@
 	</CodeBlock.Root>
 
 	<p>
-		<Code.Root>include</Code.Root> works on every read and on <Code.Root>insert()</Code.Root> and
+		<Code.Root>include</Code.Root> works on every read, <Code.Root>insert()</Code.Root> and
 		<Code.Root>patch()</Code.Root>, and nests up to three levels deep:
 	</p>
 
@@ -163,30 +152,29 @@
 		<Callout.Body>
 			<Callout.Title>Related records follow their own view rule</Callout.Title>
 			<Callout.Description>
-				A related record that the view rule of its collection hides is left out (<Code.Root
-					>null</Code.Root
-				>, or missing from the array), and including a relation to a collection whose view rule is
-				Admins only fails with <Code.Root>invalid</Code.Root>.
+				A related record its collection's view rule hides is left out (<Code.Root>null</Code.Root>,
+				or missing from the array). Including a collection whose view rule is Admins only fails with
+				<Code.Root>invalid</Code.Root>.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
 
 	<p>
-		Each relation field sets what happens when a record it links to is deleted:
+		When a linked record is deleted, the relation field's <Code.Root>onDelete</Code.Root> decides:
 		<Code.Root>set_null</Code.Root> (the default) unlinks it, <Code.Root>cascade</Code.Root> deletes the
-		linking records too (as comments go with their post), and <Code.Root>restrict</Code.Root> refuses
-		the delete with a <Code.Root>conflict</Code.Root> while any record links to it. A record that is the
-		default value of a relation field can't be deleted either.
+		linking records too, and <Code.Root>restrict</Code.Root> refuses with a
+		<Code.Root>conflict</Code.Root>. A record that is the default value of a relation field can't be
+		deleted either.
 	</p>
 
 	<h2 id="creating">Creating</h2>
 
 	<p>
-		<Code.Root>insert()</Code.Root> takes the generated <Code.Root>&lt;Name&gt;Create</Code.Root>
-		type: fields Pouchbase fills in itself (ids, timestamps and computed fields) are left out, and required
-		fields are required. Fields you leave out get their default value. It returns the new record, with
-		<Code.Root>select</Code.Root> and <Code.Root>include</Code.Root> as in
-		<Code.Root>find()</Code.Root>:
+		<Code.Root>insert()</Code.Root> takes the generated <Code.Root>&lt;Name&gt;Create</Code.Root> type;
+		fields you leave out get their default value. It returns the new record, with
+		<Code.Root>select</Code.Root> and <Code.Root>include</Code.Root> as in <Code.Root
+			>find()</Code.Root
+		>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -200,11 +188,9 @@
 	<h2 id="changing-and-deleting">Changing and deleting</h2>
 
 	<p>
-		<Code.Root>patch()</Code.Root> changes only the fields you send; the others keep their value, and
-		an Updated field is set to now. It returns the whole record, or what you
-		<Code.Root>select</Code.Root>. <Code.Root>remove()</Code.Root> deletes a record and resolves with
-		nothing. Both fail with <Code.Root>not_found</Code.Root> when the record doesn't exist or the update
-		or delete rule doesn't allow it.
+		<Code.Root>patch()</Code.Root> also sets Updated fields to now. <Code.Root>patch()</Code.Root> and
+		<Code.Root>remove()</Code.Root> fail with <Code.Root>not_found</Code.Root> when the record doesn't
+		exist or the update or delete rule doesn't allow it.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -214,28 +200,19 @@
 	<h2 id="errors">Errors</h2>
 
 	<p>
-		A failed call throws a <Code.Root>PouchbaseError</Code.Root>, with the HTTP
-		<Code.Root>status</Code.Root>, a <Code.Root>message</Code.Root>, a <Code.Root>kind</Code.Root>
-		and, for <Code.Root>invalid</Code.Root> and <Code.Root>conflict</Code.Root>, a message per field
-		in <Code.Root>issues</Code.Root>. <Code.Root>.safe()</Code.Root> on any call returns the error instead
-		of throwing it; see <a href={resolve('/docs/sdk/errors')}>Errors</a>.
+		A failed call throws a <a href={resolve('/docs/sdk/errors')}>PouchbaseError</a>;
+		<Code.Root>.safe()</Code.Root> returns it instead.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
 		<CodeBlock.Source code={data.code.errors} />
 	</CodeBlock.Root>
 
-	<p>For records, the kinds mean:</p>
-
 	<DocsTable head={['Kind', 'Status', 'When']} rows={errorKinds} />
-
-	<p>The body of an <Code.Root>invalid</Code.Root> record has a message per field:</p>
 
 	<CodeBlock.Root title="400 Bad Request">
 		<CodeBlock.Source code={data.code.invalidResponse} />
 	</CodeBlock.Root>
-
-	<p>and a value that a unique field already has is a <Code.Root>conflict</Code.Root>:</p>
 
 	<CodeBlock.Root title="409 Conflict">
 		<CodeBlock.Source code={data.code.conflictResponse} />

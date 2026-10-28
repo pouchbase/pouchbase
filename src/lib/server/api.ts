@@ -74,7 +74,7 @@ export async function requestUser(
 	return { user: result.value };
 }
 
-/** The key of the request's bearer token, of any scope; see `requestApiKey`. */
+/** The key of the request's bearer token, the key of a plugin too; see `requestApiKey`. */
 async function verifiedApiKey(
 	event: RequestEvent
 ): Promise<{ key: ApiKey } | { response: Response }> {
@@ -99,8 +99,8 @@ async function verifiedApiKey(
 
 /**
  * The API key of the request's bearer token (`pbk_…`, see `ApiKeysService`), for routes only
- * server-side code may call. Without a valid key the route answers with the `401` response; the
- * key of a plugin gets a `403`, as it only reaches the records API.
+ * server-side code may call; a key acts as an admin. Without a valid key the route answers with
+ * the `401` response; the key of a plugin gets a `403`, as it only reaches the records API.
  */
 export async function requestApiKey(
 	event: RequestEvent
@@ -111,7 +111,7 @@ export async function requestApiKey(
 		return caller;
 	}
 
-	if (caller.key.scope === 'plugin') {
+	if (caller.key.pluginId) {
 		return { response: json({ message: 'A plugin key can only use the records API' }, 403) };
 	}
 
@@ -142,9 +142,8 @@ async function pluginAccess(
 /**
  * Who the records API acts for: the user of the request's bearer token (`{ user }`, see
  * `requestUser`), a plugin (`{ plugin }`, for the key of its Worker, or the in-memory key of a
- * built-in plugin, see `internal-keys.ts`), or `undefined` for an API key with the `service`
- * scope, which the API rules don't apply to. Other API keys get a `403` response, an invalid key a
- * `401`.
+ * built-in plugin, see `internal-keys.ts`), or `undefined` for any other API key, which acts as an
+ * admin: the API rules don't apply to it. An invalid key gets a `401` response.
  */
 export async function requestAccess(
 	event: RequestEvent
@@ -171,44 +170,5 @@ export async function requestAccess(
 		return caller;
 	}
 
-	if (caller.key.scope === 'plugin' && caller.key.pluginId) {
-		return pluginAccess(event, caller.key.pluginId);
-	}
-
-	if (caller.key.scope !== 'service') {
-		return {
-			response: json(
-				{ message: 'Only an API key with the service scope can use the records API' },
-				403
-			)
-		};
-	}
-
-	return { access: undefined };
-}
-
-/**
- * The API key of the request when it has the `service` scope, for routes that act as an admin
- * (such as the collections API). Other keys get a `403` response, an invalid key a `401`.
- *
- * @param purpose What the key is for, in the `403` message: `Only an API key with the service
- *   scope can <purpose>`.
- */
-export async function requestServiceKey(
-	event: RequestEvent,
-	purpose: string
-): Promise<{ key: ApiKey } | { response: Response }> {
-	const caller = await requestApiKey(event);
-
-	if ('response' in caller) {
-		return caller;
-	}
-
-	if (caller.key.scope !== 'service') {
-		return {
-			response: json({ message: `Only an API key with the service scope can ${purpose}` }, 403)
-		};
-	}
-
-	return caller;
+	return caller.key.pluginId ? pluginAccess(event, caller.key.pluginId) : { access: undefined };
 }

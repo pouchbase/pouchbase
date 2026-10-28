@@ -6,9 +6,6 @@ import type { ZodError } from 'zod';
 import { describeStep, describeWarning } from '#lib/environments/describe.js';
 import { json } from '#lib/server/api.js';
 
-/** What the service key is for, in the `403` for other API keys. */
-export const PURPOSE = 'manage collections';
-
 /** `?<name>=true`. */
 export function flag(url: URL, name: string) {
 	return url.searchParams.get(name) === 'true';

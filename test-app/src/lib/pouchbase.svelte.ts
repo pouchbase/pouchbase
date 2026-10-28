@@ -1,24 +1,21 @@
 import { createClient } from '@pouchbasejs/js-sdk';
+import { POUCHBASE_API_KEY } from '$app/env/public';
 import type { SessionData } from '@pouchbasejs/js-sdk';
+import type { Schema,  } from './pouchbase-types';
 
 const URL_KEY = 'pouchbase_test_url';
 
 /** The instance to test against: the one picked in the header, else `VITE_POUCHBASE_URL`. */
 export const baseUrl =
-	readStoredUrl() ?? import.meta.env.VITE_POUCHBASE_URL ?? 'http://localhost:4300';
+	readStoredUrl() ?? import.meta.env.VITE_POUCHBASE_URL ?? 'http://localhost:5175';
 
 /** The SDK client every page uses; the app is client-side only (`ssr = false`). */
-export const pouch = createClient(baseUrl, { session: 'browser' });
+export const pouch = createClient<Schema>(baseUrl, { session: 'browser', apiKey: POUCHBASE_API_KEY });
 
 /** The session as reactive state, for the header and the auth page. */
 export const auth = $state<{ session: SessionData | null }>({ session: null });
 
-pouch.session.subscribe(
-	(session) => {
-		auth.session = session;
-	},
-	{ immediate: true }
-);
+// pouch.mail.send('test')
 
 /** Saves another instance URL and reloads, so every page starts with a fresh client. */
 export function switchInstance(url: string) {

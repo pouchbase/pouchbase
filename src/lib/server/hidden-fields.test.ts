@@ -39,7 +39,7 @@ describe('visibleFields', () => {
 		expect(names(visibleFields(FIELDS, { user: null }))).toEqual(['id', 'name']);
 	});
 
-	it('keeps hidden fields for admins and service keys (no access)', () => {
+	it('keeps hidden fields for admins and API keys (no access)', () => {
 		expect(names(visibleFields(FIELDS, undefined))).toEqual(['id', 'name', 'role']);
 	});
 

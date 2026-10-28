@@ -144,8 +144,7 @@
 					<Form.Checkbox />
 					<Form.Label>Hidden</Form.Label>
 					<Form.Description class="w-full pl-6">
-						Only admins, API keys with the service scope and API rules see it; app users can't read,
-						filter or write it.
+						Only admins, API keys and API rules see it; app users can't read, filter or write it.
 					</Form.Description>
 				</Form.Field>
 			{/if}

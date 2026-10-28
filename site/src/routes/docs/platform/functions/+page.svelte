@@ -27,11 +27,10 @@
 	<h2 id="write-a-function">Write a function</h2>
 
 	<p>
-		Create functions in the admin, under <strong>System → Functions</strong>. A function is one ES
-		module whose default export has a <Code.Root>fetch(request, env, ctx)</Code.Root> handler, the same
-		as a Cloudflare Worker. Write it in TypeScript or JavaScript in the editor, or upload a
-		<Code.Root>.ts</Code.Root> or <Code.Root>.js</Code.Root> file; TypeScript is compiled in the browser.
-		A new function starts with this code:
+		Create functions on the <strong>Functions</strong> page of the dashboard. A function is one ES
+		module whose default export has a <Code.Root>fetch(request, env, ctx)</Code.Root> handler, like a
+		Cloudflare Worker. Write TypeScript or JavaScript in the editor, or upload a
+		<Code.Root>.ts</Code.Root> or <Code.Root>.js</Code.Root> file. A new function starts with:
 	</p>
 
 	<CodeBlock.Root title="function.ts">
@@ -39,8 +38,8 @@
 	</CodeBlock.Root>
 
 	<p>
-		Function names are lowercase letters, digits and dashes, at most 40 characters. The code can be
-		up to 1 MB. To use npm packages, bundle them into one file first and upload that:
+		Names are lowercase letters, digits and dashes, at most 40 characters; the code is at most 1 MB.
+		To use npm packages, bundle them into one file and upload that:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -50,33 +49,29 @@
 	<h2 id="the-signed-in-user">The signed-in user</h2>
 
 	<p>
-		Pouchbase checks the token of the app user who calls the function before the request reaches it.
-		<Code.Root>pouchbaseUser(request)</Code.Root> returns that user, as
-		<Code.Root>GET /api/auth/me</Code.Root> does, or <Code.Root>null</Code.Root> when the request has
-		no valid token. A function set to require sign-in answers <Code.Root>401</Code.Root> to requests without
-		a valid token, so its code never runs for them.
+		Pouchbase checks the caller's token before the request reaches the function.
+		<Code.Root>pouchbaseUser(request)</Code.Root> returns the user, as
+		<Code.Root>GET /api/auth/me</Code.Root> does, or <Code.Root>null</Code.Root> without a valid token.
+		A function set to require sign-in answers <Code.Root>401</Code.Root> to those requests without running.
 	</p>
 
 	<h2 id="secrets">Secrets and variables</h2>
 
 	<p>
-		Set secrets on the <strong>Secrets</strong> tab of a function: API keys, webhook secrets and the
-		like. Cloudflare stores them encrypted on the function's Worker, and the code reads them from
-		<Code.Root>env</Code.Root>. Names are upper-case letters, digits and underscores.
-		<Code.Root>env.POUCHBASE_URL</Code.Root> is set by Pouchbase: the URL of the installation, for calling
-		its API from the function. So is <Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an API key of the
-		function that is renewed on every deploy, for example to
-		<a href={resolve('/docs/platform/email')}>send email templates</a> (see
-		<a href={resolve('/docs/platform/api-keys')}>API keys</a>).
+		Set secrets on the <strong>Secrets</strong> tab. Cloudflare stores them encrypted on the
+		function's Worker, and the code reads them from <Code.Root>env</Code.Root>. Names are upper-case
+		letters, digits and underscores. Pouchbase sets <Code.Root>env.POUCHBASE_URL</Code.Root>, the
+		URL of the installation, and <Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an
+		<a href={resolve('/docs/platform/api-keys')}>API key</a> renewed on every deploy, for example to
+		<a href={resolve('/docs/platform/email')}>send email</a>.
 	</p>
 
 	<h2 id="call-a-function">Call a function</h2>
 
 	<p>
-		Apps call a function at <Code.Root>/api/functions/&lt;name&gt;</Code.Root>, with the token of
-		the signed-in user. The method, headers, body, and the rest of the path and query string are
-		passed on, so one function can serve a whole small API. A function that doesn't exist answers
-		<Code.Root>404</Code.Root>. Calls from servers, such as webhooks, and JSON requests from
+		Apps call a function at <Code.Root>/api/functions/&lt;name&gt;</Code.Root>, with the user's
+		token. The method, headers, body, and the rest of the path and query string are passed on, so
+		one function can serve a small API. Calls from servers, such as webhooks, and JSON requests from
 		browsers work; browsers on other sites can't post HTML forms to a function.
 	</p>
 
@@ -97,32 +92,31 @@
 	<ul>
 		<li>Every deploy is kept as a version, and an earlier version can be restored.</li>
 		<li>
-			The <strong>Test</strong> tab sends requests to the deployed version, without a signed-in
-			user:
-			<Code.Root>pouchbaseUser(request)</Code.Root> returns <Code.Root>null</Code.Root> there.
+			The <strong>Test</strong> tab sends requests to the deployed version, without a user:
+			<Code.Root>pouchbaseUser(request)</Code.Root> returns <Code.Root>null</Code.Root>.
 		</li>
 		<li>
-			The <strong>Logs</strong> tab shows what the function logged, from Workers Logs. The API token of
-			the instance needs Workers Observability (Edit) for this.
+			The <strong>Logs</strong> tab shows Workers Logs; the instance's API token needs Workers Observability
+			(Edit) for it.
 		</li>
 	</ul>
 
 	<h2 id="how-it-runs">How it runs</h2>
 
 	<p>
-		Every deploy uploads the code as a Worker of its own on the same Cloudflare account, named
+		Every deploy uploads the code as a Worker of its own on the same Cloudflare account,
 		<Code.Root>&lt;instance&gt;-fn-&lt;name&gt;</Code.Root> (<Code.Root
 			>pouchbase-fn-hello</Code.Root
 		>
-		by default). So functions run on Cloudflare whichever way you host Pouchbase itself, and follow the
-		limits and pricing of your Workers plan.
+		by default). So functions run on Cloudflare however you host Pouchbase, with the limits and pricing
+		of your Workers plan.
 	</p>
 
 	<p>
-		The Worker answers on its <Code.Root>workers.dev</Code.Root> URL, but only to requests that carry
-		the function's secret, which only Pouchbase knows: apps always go through
-		<Code.Root>/api/functions</Code.Root>. The account needs a <Code.Root>workers.dev</Code.Root>
-		subdomain; open Workers &amp; Pages in the Cloudflare dashboard once to get one.
+		The Worker answers on its <Code.Root>workers.dev</Code.Root> URL only to requests with the function's
+		secret, which only Pouchbase knows. The account needs a
+		<Code.Root>workers.dev</Code.Root> subdomain; open Workers &amp; Pages in the Cloudflare dashboard
+		once to get one.
 	</p>
 
 	<Callout.Root variant="info">
@@ -130,9 +124,9 @@
 		<Callout.Body>
 			<Callout.Title>HTML from a function can't run scripts</Callout.Title>
 			<Callout.Description>
-				Answers are served from the domain of your Pouchbase admin, so they get
+				Answers come from the domain of your Pouchbase admin, so they get
 				<Code.Root>Content-Security-Policy: sandbox</Code.Root>. Serve pages with scripts from your
-				own app instead.
+				own app.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>

@@ -798,8 +798,8 @@ export class RecordsService extends Service {
 
 	/**
 	 * One page of records for the records API, filtered by `options.where` and by the collection's
-	 * list rule: records the rule doesn't match are left out. Without `access` (an API key with the
-	 * service scope), the rule isn't checked. `options.include` replaces relations by their records
+	 * list rule: records the rule doesn't match are left out. Without `access` (an API key or the
+	 * admin), the rule isn't checked. `options.include` replaces relations by their records
 	 * (see `include()`).
 	 */
 	apiList(

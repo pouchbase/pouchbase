@@ -65,10 +65,10 @@ const CONDITIONS = [
 		`any(tags) ${operator} "a"`,
 		`any(tags) ${operator} ""`
 	]),
-	'x == $user.v or y > 1',
-	'x > 1 or y > 1',
-	'x > 1 and y > 1',
-	'(x > 1 or x == "a") and y != null',
+	'x == $user.v || y > 1',
+	'x > 1 OR y > 1',
+	'x > 1 AND y > 1',
+	'(x > 1 || x == "a") && y != null',
 	'created_at < now()',
 	'created_at > now()',
 	'created_at < today()',
@@ -79,9 +79,9 @@ const CONDITIONS = [
 	'x == today()',
 	'"a" == any(tags)',
 	'$user.v != any(tags)',
-	'not x == "a"',
-	'not (x > 1 or y > 1)',
-	'not not x != null'
+	'!x == "a"',
+	'NOT (x > 1 || y > 1)',
+	'! NOT x != null'
 ];
 
 const db = new DatabaseSync(':memory:');
@@ -211,7 +211,7 @@ describe('functions', () => {
 		['contains(title, "react")', false],
 		['contains(title, "")', true],
 		['contains(title, "%")', false],
-		['not contains(title, "react")', true],
+		['!contains(title, "react")', true],
 		['contains(any(tags), "lea")', true],
 		['starts_with(title, "hello")', true],
 		['starts_with(title, "svelte")', false],
@@ -267,9 +267,9 @@ describe('functions', () => {
 		['created_at <= now()', true],
 		['published_at < today()', true],
 		['date_add(today(), 1, "day") > now()', true],
-		['not (views > 100)', true],
-		['not (missing > 1)', true],
-		['not contains(missing, "x")', true]
+		['!(views > 100)', true],
+		['NOT (missing > 1)', true],
+		['!contains(missing, "x")', true]
 	])('%s is %s', (condition, expected) => {
 		expect(matches(condition, POST, { user: { prefix: 'HEL', suffix: 'lte', days: 3 } })).toBe(
 			expected
@@ -360,13 +360,13 @@ describe('relations', () => {
 		['starts_with(post.author.name, "li")', ['c2']],
 		['post.author.created_at < "2025-01-01"', ['c1']],
 		['post.author == $user.id', ['c2']],
-		['post.author.id == $user.id or post.title == "Hello"', ['c1', 'c2']],
+		['post.author.id == $user.id || post.title == "Hello"', ['c1', 'c2']],
 		['any(post.editors) == "u3"', ['c1']],
 		['any(post.editors.role) == "editor"', ['c1']],
 		['any(post.editors.team.name) == "Core"', ['c4']],
 		['contains(any(post.editors.name), "ra")', ['c1']],
 		['count(post.editors) == 2', ['c1']],
-		['not post.author.role == "admin"', ['c2', 'c3', 'c4']]
+		['!post.author.role == "admin"', ['c2', 'c3', 'c4']]
 	])('%s', (condition, expected) => {
 		expect(comments(condition)).toEqual(expected);
 	});

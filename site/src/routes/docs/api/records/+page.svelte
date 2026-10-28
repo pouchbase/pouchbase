@@ -42,10 +42,13 @@
 			'400',
 			'The body isn’t a JSON object, a parameter is invalid, or values are invalid (issues per field)'
 		],
-		['401', 'The token or API key is invalid or has expired'],
+		[
+			'401',
+			'The token or API key is invalid or has expired, or the plugin of a key is no longer installed'
+		],
 		[
 			'403',
-			'The rule is Admins only, the create rule doesn’t allow the record, the rule is invalid, the action isn’t offered for the collection, or the API key has the wrong scope'
+			'The rule is Admins only, the create rule doesn’t allow the record, the rule is invalid, the action isn’t offered for the collection, or a plugin key may not use it'
 		],
 		['404', 'The collection or record doesn’t exist, or a rule hides the record'],
 		[
@@ -62,12 +65,10 @@
 	{sections}
 >
 	<p>
-		Every collection is at <Code.Root>/api/db/&lt;collection&gt;</Code.Root>. What a request may do
-		depends on the collection's
-		<a href={resolve('/docs/platform/collections/access-rules')}>access rules</a>, for the user of
-		the token (see <a href={resolve('/docs/api/authentication')}>Authentication</a>), or for nobody
-		without one. An API key with the service scope skips the rules. Records come back with real JSON
-		values; see
+		The collection's <a href={resolve('/docs/platform/collections/access-rules')}>access rules</a>
+		decide what a request may do, for the user of the token or for nobody without one; an API key acts
+		as an admin and skips them. App users never see or write
+		<a href="{resolve('/docs/platform/collections')}#hidden-fields">hidden fields</a>. See
 		<a href="{resolve('/docs/platform/collections')}#a-record">a record</a> for what each field type returns.
 	</p>
 
@@ -76,10 +77,9 @@
 	<DocsTable head={['Request', 'Does']} rows={endpoints} />
 
 	<p>
-		Every call but a delete takes <Code.Root>select</Code.Root> and <Code.Root>include</Code.Root>,
-		so a create or update can return just what you need. Files are records of the built-in
-		<Code.Root>files</Code.Root> collection, at <Code.Root>/api/db/files</Code.Root>; their content
-		is at <a href={resolve('/docs/api/files')}>/api/files/&lt;id&gt;</a>.
+		Every call but a delete takes <Code.Root>select</Code.Root> and <Code.Root>include</Code.Root>.
+		File records are at <Code.Root>/api/db/files</Code.Root>, their content at
+		<a href={resolve('/docs/api/files')}>/api/files/&lt;id&gt;</a>.
 	</p>
 
 	<h2 id="list-records">List records</h2>
@@ -89,13 +89,10 @@
 	<DocsTable head={['Parameter', 'Meaning', 'Example']} rows={listParams} />
 
 	<p>
-		<Code.Root>where</Code.Root> is a condition, such as
-		<Code.Root>status == "published" and contains(title, "svelte")</Code.Root>; see
-		<a href={resolve('/docs/platform/collections/filters')}>Filters</a> for the syntax. Without an <Code.Root
-			>order</Code.Root
-		>, records come in the order they were created. URL-encode the values, as <Code.Root
-			>--data-urlencode</Code.Root
-		> does:
+		See <a href={resolve('/docs/platform/collections/filters')}>Filters</a> for the syntax of
+		<Code.Root>where</Code.Root>, with functions and <Code.Root>&amp;&amp;</Code.Root>,
+		<Code.Root>||</Code.Root> and <Code.Root>!</Code.Root>. Without an <Code.Root>order</Code.Root>,
+		records come in the order they were created. URL-encode the values:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -107,9 +104,8 @@
 	</CodeBlock.Root>
 
 	<p>
-		<Code.Root>total</Code.Root> counts every match the list rule allows; there are more pages while
-		<Code.Root>offset + items.length &lt; total</Code.Root>. A parameter that isn't valid is a
-		<Code.Root>400</Code.Root> that says what is wrong:
+		There are more pages while <Code.Root>offset + items.length &lt; total</Code.Root>. An invalid
+		parameter is a <Code.Root>400</Code.Root>:
 	</p>
 
 	<CodeBlock.Root title="400 Bad Request">
@@ -119,8 +115,7 @@
 	<h2 id="get-a-record">Get a record</h2>
 
 	<p>
-		<Code.Root>GET /api/db/&lt;collection&gt;/&lt;id&gt;</Code.Root> answers with the record, or a
-		<Code.Root>404</Code.Root> when it doesn't exist or the view rule hides it:
+		A record the view rule hides is a <Code.Root>404</Code.Root>, as if it didn't exist:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -134,9 +129,8 @@
 	<h2 id="create-a-record">Create a record</h2>
 
 	<p>
-		<Code.Root>POST /api/db/&lt;collection&gt;</Code.Root> takes a JSON object with a value per field.
-		Fields that are left out get their default value, and ids, timestamps and computed fields are filled
-		in. It answers <Code.Root>200</Code.Root> with the new record:
+		Fields you leave out get their default value; ids, timestamps and computed fields are filled in.
+		It answers <Code.Root>200</Code.Root> with the new record:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -147,33 +141,32 @@
 		<CodeBlock.Source code={data.code.createResponse} />
 	</CodeBlock.Root>
 
-	<p>Values that aren't valid are a <Code.Root>400</Code.Root>, with a message per field:</p>
+	<p>
+		Invalid values are a <Code.Root>400</Code.Root>, a taken unique value a <Code.Root
+			>409</Code.Root
+		>:
+	</p>
 
 	<CodeBlock.Root title="400 Bad Request">
 		<CodeBlock.Source code={data.code.invalid} />
 	</CodeBlock.Root>
-
-	<p>and a value that a unique field already has is a <Code.Root>409</Code.Root>:</p>
 
 	<CodeBlock.Root title="409 Conflict">
 		<CodeBlock.Source code={data.code.conflict} />
 	</CodeBlock.Root>
 
 	<p>
-		When the create rule doesn't allow the new record, nothing is saved and the answer is a
-		<Code.Root>403</Code.Root>. For <Code.Root>users</Code.Root>, which are created by signing up,
-		and
-		<Code.Root>files</Code.Root>, which are uploaded in the dashboard, creating isn't offered.
+		A record the create rule doesn't allow is a <Code.Root>403</Code.Root>, and nothing is saved.
+		With a user token, <Code.Root>users</Code.Root> can't be created (users sign up),
+		<Code.Root>files</Code.Root> can't be created or updated, and the <Code.Root>email</Code.Root> and
+		<Code.Root>verified</Code.Root> fields of <Code.Root>users</Code.Root> can't be written.
 	</p>
 
 	<h2 id="update-a-record">Update a record</h2>
 
 	<p>
-		<Code.Root>PATCH /api/db/&lt;collection&gt;/&lt;id&gt;</Code.Root> takes a JSON object with the fields
-		to change; the others keep their value, and an Updated field is set to now. It answers with the whole
-		record, or what you <Code.Root>select</Code.Root>, and with a <Code.Root>404</Code.Root>
-		when the record doesn't exist or the update rule doesn't allow it. Validation errors are the same
-		as for a create.
+		Send only the fields to change; an Updated field is set to now. A record the update rule doesn't
+		allow is a <Code.Root>404</Code.Root>; validation errors are as for a create.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -187,10 +180,9 @@
 	<h2 id="delete-a-record">Delete a record</h2>
 
 	<p>
-		<Code.Root>DELETE /api/db/&lt;collection&gt;/&lt;id&gt;</Code.Root> answers with a
-		<Code.Root>204</Code.Root> and no body, or a <Code.Root>404</Code.Root> when the record doesn't exist
-		or the delete rule doesn't allow it. Records that link to it are unlinked or deleted, as their relation
-		field says; a relation with <Code.Root>restrict</Code.Root> stops the delete:
+		It answers <Code.Root>204</Code.Root>, or a <Code.Root>404</Code.Root> when the delete rule doesn't
+		allow it. Linked records are unlinked or deleted as their relation field says; a relation with
+		<Code.Root>restrict</Code.Root> stops the delete:
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -202,11 +194,6 @@
 	</CodeBlock.Root>
 
 	<h2 id="status-codes">Status codes</h2>
-
-	<p>
-		Every error has a <Code.Root>message</Code.Root>, and validation errors an
-		<Code.Root>issues</Code.Root> object with a message per field:
-	</p>
 
 	<CodeBlock.Root title="403 Forbidden">
 		<CodeBlock.Source code={data.code.locked} />

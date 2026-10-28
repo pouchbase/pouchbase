@@ -49,8 +49,8 @@
 		<Callout.Body>
 			<Callout.Title>Pouchbase is under active development</Callout.Title>
 			<Callout.Description>
-				It is not yet ready for production use. APIs, the database schema and the admin interface
-				may change without notice, and there is no guaranteed upgrade path between versions yet.
+				It is not ready for production yet: APIs, the database schema and the admin interface may
+				change without notice or upgrade path.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
@@ -58,8 +58,8 @@
 	<h2 id="choose-how-to-run-it">Choose how to run it</h2>
 
 	<p>
-		Whichever option you choose, the data lives on Cloudflare: D1 for the databases and R2 for
-		uploaded files. The options differ in where the app itself runs.
+		The data always lives on Cloudflare (D1 for the databases, R2 for files); the options differ in
+		where the app runs.
 	</p>
 
 	<div class="not-prose grid gap-3">
@@ -86,26 +86,30 @@
 	</div>
 
 	<p>
-		<strong>Run it as a Worker when speed matters.</strong> A Worker queries D1 through bindings,
-		inside Cloudflare's network. With Docker and the single binary, every database round-trip goes
-		through the D1 HTTP API, which takes a few hundred milliseconds each. To check, set
-		<Code.Root>POUCHBASE_LOG_TIMING=true</Code.Root>: every <Code.Root>[db]</Code.Root> line says whether
-		a query used a <Code.Root>binding</Code.Root> or the <Code.Root>api</Code.Root>.
+		<strong>Run it as a Worker when speed matters.</strong> A Worker queries D1 through bindings;
+		Docker and the single binary go through the D1 HTTP API, a few hundred milliseconds per
+		round-trip. With <Code.Root>POUCHBASE_LOG_TIMING=true</Code.Root>, every <Code.Root
+			>[db]</Code.Root
+		>
+		log line says whether a query used a <Code.Root>binding</Code.Root> or the <Code.Root
+			>api</Code.Root
+		>.
 	</p>
 
 	<h2 id="before-you-start">Before you start</h2>
 
-	<p>Every option needs the same two things from Cloudflare:</p>
+	<p>Every option needs two things from Cloudflare:</p>
 
 	<ul>
 		<li>
-			Your <strong>account ID</strong>. Find it in the Cloudflare dashboard under Workers & Pages,
-			in the right column.
+			Your <strong>account ID</strong>, in the Cloudflare dashboard under Workers & Pages, in the
+			right column.
 		</li>
 		<li>
-			An <strong>API token</strong>, created under My Profile → API Tokens, with these account-level
-			permissions: Workers Scripts, D1, Workers R2 Storage and Workers KV Storage (Edit), and
-			Account Settings (Read). To see the logs of functions, add Workers Observability (Edit).
+			An <strong>API token</strong> (My Profile → API Tokens) with these account permissions: Workers
+			Scripts, D1, Workers R2 Storage and Workers KV Storage (Edit), and Account Settings (Read). Add
+			Workers Observability (Edit) for the logs of functions, and Email Sending (Edit) to send mail through
+			Cloudflare.
 		</li>
 	</ul>
 

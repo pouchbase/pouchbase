@@ -250,6 +250,7 @@ pages: {
 		component: Monthly, // import Monthly from './pages/reports/monthly.svelte'
 		title: 'Monthly report', // default: the last segment of the path, `Monthly`
 		navigation: true, // a link in the sidebar; default true
+		layout: 'default', // 'default', 'wide' or 'full'; see below
 		icon: 'lucide:calendar' // an Iconify name or an imported .svg file; see Icons
 	}
 }
@@ -263,6 +264,8 @@ pages: {
 	let { params, api }: PageProps = $props();
 </script>
 ```
+
+`layout` sets how much of the dashboard the page takes below the top bar (`PAGE_LAYOUTS`): `default` is the dashboard's reading width with its padding, `wide` the full width with that padding, and `full` all of the space, without padding, for a page that lays itself out (an editor, a map, a board). A `full` page fills the height too and scrolls itself: give its root element `flex-1` (or `h-full`) and let its own panels scroll.
 
 The sidebar lists a plugin's pages in the order of `pages`. `definePage({ ... })` types a page written outside `definePlugin`, e.g. in a file of its own.
 

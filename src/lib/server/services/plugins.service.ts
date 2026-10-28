@@ -16,6 +16,7 @@ import type {
 	AuthProviderContribution,
 	ContributionSummary,
 	ManifestIssue,
+	PageLayout,
 	PluginDetails,
 	PluginList,
 	PluginManifest,
@@ -127,6 +128,8 @@ export type PluginPage = {
 	title: string;
 	/** Whether the sidebar links to it. */
 	navigation: boolean;
+	/** How much of the dashboard the page takes (`PAGE_LAYOUTS` of the plugin SDK). */
+	layout: PageLayout;
 	/** The page's own icon (`icon` of the contribution), served by Pouchbase; `null` without one. */
 	iconUrl: string | null;
 };
@@ -330,10 +333,11 @@ function iconUrl(manifest: PluginManifest) {
 }
 
 function pagesOf(manifest: PluginManifest): PluginPage[] {
-	return manifest.contributes.pages.map(({ path, title, navigation, icon }) => ({
+	return manifest.contributes.pages.map(({ path, title, navigation, layout, icon }) => ({
 		path,
 		title,
 		navigation,
+		layout: layout ?? 'default',
 		iconUrl: imageUrl(manifest, icon)
 	}));
 }
@@ -1179,6 +1183,7 @@ export class PluginsService extends Service {
 							title: match.page.title,
 							component: match.page.component,
 							navigation: match.page.navigation,
+							layout: match.page.layout ?? 'default',
 							iconUrl: imageUrl(source.manifest, match.page.icon)
 						},
 						params: match.params

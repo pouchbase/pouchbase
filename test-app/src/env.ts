@@ -1,0 +1,18 @@
+import { defineEnvVars } from '@sveltejs/kit/env';
+import { building } from '$app/env';
+import { z } from 'zod';
+
+/**
+ * The site uses a Pouchbase instance as the back-end of the plugin registry and of accounts. Both
+ * variables are optional during `vite build`.
+ */
+const required = building ? z.string().optional() : z.string().min(1);
+
+export const variables = defineEnvVars({
+	POUCHBASE_API_KEY: {
+		description:
+			'API key (`pbk_…`) of that instance (System → API keys), so the registry can write plugins, versions and publish tokens',
+		schema: required,
+        public: true
+	}
+});

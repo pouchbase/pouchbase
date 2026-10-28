@@ -32,7 +32,7 @@ export const getApiKeys = query(async () => {
 export const createApiKey = form(apiKeySchema, async (data) => {
 	const { services } = requireUser();
 
-	const result = await services.apiKeys().create(data.name, data.scope);
+	const result = await services.apiKeys().create(data.name);
 
 	if (result.isErr()) {
 		fail(result.error);

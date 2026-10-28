@@ -33,11 +33,10 @@
 	<h2 id="file-urls">File URLs</h2>
 
 	<p>
-		File fields hold the ids of records in the
+		File fields hold ids of records in the
 		<a href={resolve('/docs/platform/collections/files')}>files collection</a>.
-		<Code.Root>pouch.files.url()</Code.Root> takes such an id, or a file record from
-		<a href="{resolve('/docs/sdk/records')}#relations">include</a>, and returns the URL to put in an
-		<Code.Root>&lt;img src&gt;</Code.Root> or a download link. It makes no request.
+		<Code.Root>pouch.files.url()</Code.Root> turns such an id, or a file record from
+		<a href="{resolve('/docs/sdk/records')}#relations">include</a>, into a URL, without a request.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -45,8 +44,7 @@
 	</CodeBlock.Root>
 
 	<p>
-		<Code.Root>download: true</Code.Root> serves the file as a download. Without it, only PNG, JPEG, GIF,
-		WebP and AVIF images are shown inline; other types are downloaded anyway.
+		Only PNG, JPEG, GIF, WebP and AVIF images are shown inline; other types are always downloaded.
 	</p>
 
 	<Callout.Root variant="warning">
@@ -54,7 +52,7 @@
 		<Callout.Body>
 			<Callout.Title>Files are public</Callout.Title>
 			<Callout.Description>
-				Anyone with the URL of a file can load it, without a token. Ids are random, so URLs can't be
+				Anyone with the URL can load a file, without a token. Ids are random, so URLs can't be
 				guessed.
 			</Callout.Description>
 		</Callout.Body>
@@ -63,8 +61,8 @@
 	<h2 id="thumbnails">Thumbnails</h2>
 
 	<p>
-		<Code.Root>size</Code.Root> asks for a thumbnail, as width by height. Only the sizes listed in the
-		settings of the files collection are made; for any other size, the original file is returned.
+		Only the sizes listed in the settings of the files collection are made; any other
+		<Code.Root>size</Code.Root> returns the original file.
 	</p>
 
 	<DocsTable head={['size', 'Thumbnail']} rows={sizes} />

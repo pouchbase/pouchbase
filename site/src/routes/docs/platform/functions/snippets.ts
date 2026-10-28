@@ -7,7 +7,8 @@ export const handler = snippet(
 interface Env {
 	/** URL of this Pouchbase installation. */
 	POUCHBASE_URL: string;
-	STRIPE_KEY: string;
+	/** API key of this function, e.g. to send email templates (pouch.mail.send of the JS SDK). */
+	POUCHBASE_API_KEY: string;
 }
 
 export default {

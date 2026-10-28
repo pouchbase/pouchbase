@@ -14,19 +14,6 @@
 
 	const form = createApiKey.preflight(apiKeySchema);
 
-	const scopes = [
-		{
-			value: 'standard',
-			label: 'Standard',
-			description: 'Server-only endpoints, such as sending email.'
-		},
-		{
-			value: 'service',
-			label: 'Service',
-			description: "Also reads and writes every record; API rules don't apply."
-		}
-	];
-
 	/** The new key, shown once after it was created. */
 	let key = $state<string | null>(null);
 </script>
@@ -35,8 +22,8 @@
 	<Dialog.Header>
 		<Dialog.Title>New API key</Dialog.Title>
 		<Dialog.Description>
-			Server-side code, such as your back-end, uses the key to send email through the API, or with
-			the service scope to manage records.
+			Server-side code, such as your back-end, uses the key to call the API as an admin: every
+			record, the schema and email, without the API rules. Give it only to servers you trust.
 		</Dialog.Description>
 	</Dialog.Header>
 
@@ -74,15 +61,6 @@
 				<Form.Label>Name</Form.Label>
 				<Form.Input placeholder="Back-end" autocomplete="off" />
 				<Form.Description>So you know later what uses it.</Form.Description>
-				<Form.Errors />
-			</Form.Field>
-
-			<Form.Field field={form.fields.scope}>
-				<Form.Label>Scope</Form.Label>
-				<Form.Select items={scopes} defaultValue="standard" />
-				<Form.Description>
-					A service key acts as an admin on the records API. Give it only to servers you trust.
-				</Form.Description>
 				<Form.Errors />
 			</Form.Field>
 

@@ -19,8 +19,7 @@ export default {
 	async fetch(request, env) {
 		const pb = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-		await pb.mail.send({
-			template: '${name}',
+		await pb.mail.send('${name}', {
 			to: 'ada@example.com',
 			variables: ${indent(sampleData, 3)}
 		});

@@ -18,11 +18,11 @@ import { fetchTypes } from './typegen.js';
 const USAGE = `Usage: pouchbase types [url] [--api-key <key>] [--out <file>]
 
 Downloads the TypeScript types of your collections. Copy the URL from the Types page of the
-Pouchbase admin, or set POUCHBASE_TYPES_URL. With an API key of the service scope (--api-key or
+Pouchbase admin, or set POUCHBASE_TYPES_URL. With an API key (--api-key or
 POUCHBASE_API_KEY), pass the URL of the instance instead, or set POUCHBASE_URL.
 
 Options:
-  -k, --api-key <key>  An API key with the service scope, instead of the token in the URL
+  -k, --api-key <key>  An API key, instead of the token in the URL
   -o, --out <file>     Write the types to this file instead of printing them
   -h, --help           Show this help`;
 
@@ -74,6 +74,14 @@ async function main(argv: string[]): Promise<number> {
 		return 1;
 	}
 
+	if (!apiKey && !isTypesUrl(url)) {
+		console.error(
+			`${url} is not the URL from the Types page (…/api/types?token=…). For the URL of the instance, pass an API key with --api-key or POUCHBASE_API_KEY.\n\n${USAGE}`
+		);
+
+		return 1;
+	}
+
 	let code: string;
 
 	try {
@@ -99,6 +107,15 @@ async function main(argv: string[]): Promise<number> {
 	console.error(`Wrote the types to ${parsed.values.out}`);
 
 	return 0;
+}
+
+/** Whether `url` points at `GET /api/types`, as the URL on the Types page does. */
+function isTypesUrl(url: string): boolean {
+	try {
+		return new URL(url).pathname.replace(/\/+$/, '').endsWith('/api/types');
+	} catch {
+		return false;
+	}
 }
 
 process.exitCode = await main(process.argv.slice(2));

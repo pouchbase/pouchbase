@@ -66,7 +66,7 @@
 		['Their filters, order, select and include', 'No', 'As if the field doesn’t exist'],
 		['Writes by app users', 'No', 'A create or update that sends it fails'],
 		['API rules', 'Yes', 'The rule can use the field, and $user.<field> for users'],
-		['Admins, service keys, plugins', 'Yes', 'They read and write it like any field'],
+		['Admins, API keys, plugins', 'Yes', 'They read and write it like any field'],
 		['Functions (pouchbaseUser)', 'Yes', 'The signed-in user with every field, on the server']
 	];
 
@@ -118,18 +118,16 @@
 	<h2 id="collections">Collections</h2>
 
 	<p>
-		A collection is a table in the app database of your instance, and each of its rows is a <strong
-			>record</strong
-		>. You create collections and their fields in the dashboard, under <strong>Collections</strong>,
-		or <a href={resolve('/docs/sdk/schema')}>from code</a>. Every collection has an
-		<a href={resolve('/docs/platform/collections/access-rules')}>access rule</a> per action, which decides
-		who may read and write its records through the API; new collections are only open to admins.
+		A collection is a table in the app database, and each row is a <strong>record</strong>. Create
+		collections and fields in the dashboard or <a href={resolve('/docs/sdk/schema')}>from code</a>.
+		An <a href={resolve('/docs/platform/collections/access-rules')}>access rule</a> per action decides
+		who may use its records through the API; new collections are only open to admins.
 	</p>
 
 	<p>
-		The examples in these docs use a <Code.Root>posts</Code.Root> collection like this one, and a
-		<Code.Root>comments</Code.Root> collection with a <Code.Root>post</Code.Root> relation to posts, an
-		<Code.Root>author</Code.Root> relation to users, a <Code.Root>body</Code.Root> and a
+		The examples in these docs use this <Code.Root>posts</Code.Root> collection, and
+		<Code.Root>comments</Code.Root> with <Code.Root>post</Code.Root> (to posts),
+		<Code.Root>author</Code.Root> (to users), <Code.Root>body</Code.Root> and
 		<Code.Root>created_at</Code.Root>:
 	</p>
 
@@ -137,39 +135,33 @@
 
 	<h2 id="field-types">Field types</h2>
 
-	<p>
-		Each field has a type, which sets what it holds, how it is checked when a record is saved and
-		what the API returns for it:
-	</p>
-
 	<DocsTable head={['Type', 'Holds', 'The API returns']} rows={fieldTypes} code={0} />
 
 	<p>
 		An empty field is <Code.Root>null</Code.Root>, and an empty multiple field (relations, files or
 		lists with <strong>Multiple</strong> on) is <Code.Root>[]</Code.Root>. A field can be
-		<strong>required</strong>, <strong>unique</strong> and have a <strong>default value</strong>,
-		which a new record gets when the field is left out. Collections get an ID field and timestamps
-		only when you add them; without an ID field, other records can't link to them.
+		<strong>required</strong>, <strong>unique</strong> and have a <strong>default value</strong> for
+		new records that leave it out. Collections only get an ID field and timestamps when you add
+		them; without an ID field, other records can't link to them.
 		<a href={resolve('/docs/plugins/field-types')}>Plugins</a> can add field types of their own.
 	</p>
 
 	<h2 id="hidden-fields">Hidden fields</h2>
 
 	<p>
-		A field can also be <strong>hidden</strong>: then it is for your own code only. Use it for what
-		the users of your app must not see or change, such as a <Code.Root>role</Code.Root>, a
-		<Code.Root>stripe_customer_id</Code.Root> or internal notes. Tick <strong>Hidden</strong> when
-		you add the field, or in the <strong>Hidden</strong> column when you edit the fields of a
-		collection. The ID field and the built-in fields of <Code.Root>users</Code.Root> and
-		<Code.Root>files</Code.Root> can't be hidden.
+		A <strong>hidden</strong> field is for your own code only: use it for what app users must not
+		see or change, such as a <Code.Root>role</Code.Root> or a <Code.Root
+			>stripe_customer_id</Code.Root
+		>. Tick <strong>Hidden</strong> when you add or edit the field. The ID field and the built-in
+		fields of <Code.Root>users</Code.Root> and <Code.Root>files</Code.Root> can't be hidden.
 	</p>
 
 	<DocsTable head={['Who', 'Sees it', 'How']} rows={hiddenRules} code={0} />
 
 	<p>
 		So an <a href={resolve('/docs/platform/collections/access-rules')}>access rule</a> such as
-		<Code.Root>$user.role == "editor"</Code.Root> works while users can't read or set their role, and
-		a back-end with a <a href={resolve('/docs/platform/api-keys')}>service key</a> sets it.
+		<Code.Root>$user.role == "editor"</Code.Root> works while users can't read or set their role; a back-end
+		with an <a href={resolve('/docs/platform/api-keys')}>API key</a> sets it.
 	</p>
 
 	<Callout.Root variant="warning">
@@ -177,42 +169,39 @@
 		<Callout.Body>
 			<Callout.Title>Give required hidden fields a default</Callout.Title>
 			<Callout.Description>
-				App users can't send a hidden field, so a required one needs a default value; otherwise
-				their creates fail. A unique hidden field still refuses a value another record has, which
-				tells the user that the value exists.
+				App users can't send a hidden field, so a required one needs a default, or their creates
+				fail. A unique hidden field still refuses a taken value, which tells the user it exists.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
 
 	<h2 id="a-record">A record</h2>
 
-	<p>A record of <Code.Root>posts</Code.Root>, as every read and write of the API returns it:</p>
+	<p>A record of <Code.Root>posts</Code.Root>, as the API returns it:</p>
 
 	<CodeBlock.Root title="Response">
 		<CodeBlock.Source code={data.code.record} />
 	</CodeBlock.Root>
 
 	<p>
-		Values come back as real JSON values: booleans as booleans, JSON fields parsed and multiple
-		fields as arrays. Relation and file fields hold ids; <a
-			href="{resolve('/docs/sdk/records')}#relations">include</a
-		> returns the related records instead.
+		Booleans come back as booleans, JSON fields parsed and multiple fields as arrays. Relation and
+		file fields hold ids; <a href="{resolve('/docs/sdk/records')}#relations">include</a> returns the related
+		records instead.
 	</p>
 
 	<h2 id="built-in-collections">Built-in collections</h2>
 
 	<p>
-		Every installation has two collections of its own. You can add fields to them, but not rename or
-		delete them, and the API offers fewer actions for them:
+		Every installation has two collections of its own. You can add fields, but not rename or delete
+		them, and the API offers fewer actions:
 	</p>
 
 	<ul>
 		<li>
-			<Code.Root>users</Code.Root>: the users of your app, with an email, name, avatar and verified
-			field. Users are created by signing up (see
-			<a href={resolve('/docs/platform/authentication')}>Authentication</a>), so the API can list,
-			view, update and delete them, but not create them. <Code.Root>email</Code.Root> and
-			<Code.Root>verified</Code.Root> can't be changed through it.
+			<Code.Root>users</Code.Root>: the users of your app, who
+			<a href={resolve('/docs/platform/authentication')}>sign up</a> themselves. The API can list,
+			view, update and delete them, but not create them or change <Code.Root>email</Code.Root> and
+			<Code.Root>verified</Code.Root>.
 		</li>
 		<li>
 			<Code.Root>files</Code.Root>: uploads, which the API can list, view and delete (see
@@ -223,11 +212,11 @@
 	<h2 id="types">TypeScript types</h2>
 
 	<p>
-		The <strong>Types</strong> page of the dashboard has TypeScript types for your collections, and
-		a URL to download them, for example in a <Code.Root>postinstall</Code.Root> script or a CI job. With
-		them, the <a href={resolve('/docs/sdk/types')}>JS SDK</a> checks field names, filters and the values
-		you send. The URL holds a token of its own: anyone with it can read the names and fields of your collections,
-		but no records.
+		The <strong>Types</strong> page of the dashboard has TypeScript types for your collections, with
+		a download URL for a <Code.Root>postinstall</Code.Root> script or CI job. With them, the
+		<a href={resolve('/docs/sdk/types')}>JS SDK</a> checks field names, filters and values. The URL
+		holds a token of its own: anyone with it can read your collections' names and fields, but no
+		records. An <a href={resolve('/docs/platform/api-keys')}>API key</a> downloads them too.
 	</p>
 
 	<h2 id="next-steps">Next steps</h2>

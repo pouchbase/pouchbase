@@ -13,7 +13,7 @@ import type {
 } from '#lib/mail/mail-templates.js';
 import type { TemplateVariable, Variables } from '#lib/mail/template.js';
 
-import { normalizeStyle } from '#lib/mail/layout.js';
+import { htmlToText, normalizeStyle } from '#lib/mail/layout.js';
 import {
 	compileTemplate,
 	missingVariables,
@@ -62,6 +62,14 @@ export type CreateMailTemplateInput = {
 export type UpdateMailTemplateInput = MailTemplateContent & {
 	description: string;
 	sampleData: Variables;
+};
+
+/** A template the API can send, with its variables, for the generated types. */
+export type SendableMailTemplate = {
+	name: string;
+	description: string;
+	/** `null` when the template has problems, so its variables aren't known. */
+	variables: TemplateVariable[] | null;
 };
 
 type Row = typeof mailTemplates.$inferSelect;
@@ -130,6 +138,23 @@ export class MailTemplatesService extends Service {
 
 			return [...system, ...own];
 		});
+	}
+
+	/** The templates the API can send (not the system ones), by name, with their variables. */
+	sendable(): ResultAsync<SendableMailTemplate[], QueryFailed> {
+		return this.rows().map((rows) =>
+			rows
+				.filter((row) => !systemTemplate(row.name))
+				.map((row) => {
+					const compiled = compileTemplate(contentOf(row));
+
+					return {
+						name: row.name,
+						description: row.description,
+						variables: compiled.ok ? compiled.variables : null
+					};
+				})
+		);
 	}
 
 	get(name: string): ResultAsync<MailTemplate | null, QueryFailed> {
@@ -293,19 +318,22 @@ export class MailTemplatesService extends Service {
 				template ? okAsync(template) : errAsync(this.error(24001, 'MAIL_TEMPLATE_NOT_FOUND'))
 			)
 			.andThen((template) => this.render(template.content, variables))
-			.andThen((mail) =>
-				to.reduce<ResultAsync<number, QueryFailed | SendError>>(
-					(chain, address) =>
-						chain.andThen((sent) =>
-							this.services
-								.mail()
-								.send(address, mail)
-								.map(() => sent + 1)
-						),
-					okAsync(0)
-				)
-			)
-			.map((sent) => ({ sent }));
+			.andThen((mail) => this.sendAll(to, mail));
+	}
+
+	/**
+	 * Sends an email of the caller's own, without a template, to every recipient. Without `text`
+	 * the plain-text version is made from the HTML.
+	 */
+	sendCustom(
+		to: string[],
+		mail: { subject: string; html: string; text?: string }
+	): ResultAsync<{ sent: number }, SendError> {
+		return this.sendAll(to, {
+			subject: mail.subject,
+			html: mail.html,
+			text: mail.text || htmlToText(mail.html)
+		});
 	}
 
 	/** Sends the content from the editor, saved or not, with its sample data. */
@@ -315,6 +343,22 @@ export class MailTemplatesService extends Service {
 		sampleData: Variables
 	): ResultAsync<void, MissingVariables | InvalidTemplate | SendError> {
 		return this.render(content, sampleData).andThen((mail) => this.services.mail().send(to, mail));
+	}
+
+	/** Sends the same email to every recipient, each an email of their own, one after another. */
+	private sendAll(to: string[], mail: RenderedMail): ResultAsync<{ sent: number }, SendError> {
+		return to
+			.reduce<ResultAsync<number, SendError>>(
+				(chain, address) =>
+					chain.andThen((sent) =>
+						this.services
+							.mail()
+							.send(address, mail)
+							.map(() => sent + 1)
+					),
+				okAsync(0)
+			)
+			.map((sent) => ({ sent }));
 	}
 
 	private render(

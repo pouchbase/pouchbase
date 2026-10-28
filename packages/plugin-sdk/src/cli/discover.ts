@@ -854,6 +854,7 @@ async function discoverDefinition(
 			title: page.title ?? title(path),
 			component: uiBundlePath(use.path),
 			...(page.navigation !== undefined ? { navigation: page.navigation } : {}),
+			...(page.layout !== undefined ? { layout: page.layout } : {}),
 			...(icon ? { icon } : {})
 		});
 

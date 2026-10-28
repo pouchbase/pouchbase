@@ -90,6 +90,20 @@ describe('parseManifest', () => {
 		}
 	});
 
+	it('takes the layout of a page, and only a known one', () => {
+		const page = (layout: string) =>
+			parseManifest({
+				...valid,
+				contributes: {
+					pages: [{ path: 'editor', title: 'Editor', component: 'ui/e.svelte', layout }]
+				}
+			});
+		const full = page('full');
+
+		expect(full.success && full.manifest.contributes.pages[0]?.layout).toBe('full');
+		expect(page('huge').success).toBe(false);
+	});
+
 	it('rejects duplicate contributions', () => {
 		const field = valid.contributes!.fields![0]!;
 		const result = parseManifest({ ...valid, contributes: { fields: [field, field] } });

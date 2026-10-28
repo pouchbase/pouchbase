@@ -38,7 +38,7 @@ const { items } = await pouch.db.posts.findMany({
 export const otherRequests = snippet(
 	'typescript',
 	`
-// Any API path, with the session's token and the same error handling
+// Any API path, with the API key or session token and the same error handling
 const result = await pouch.request<{ status: string }>('/api/health');
 await pouch.request('/api/plugins/demo/items', { method: 'POST', body: { title: 'Hi' } });
 
@@ -58,7 +58,7 @@ npx @pouchbasejs/js-sdk types "https://pouchbase.example.com/api/types?token=…
 # Or with the URL in the environment, e.g. in CI
 POUCHBASE_TYPES_URL="https://pouchbase.example.com/api/types?token=…" npx @pouchbasejs/js-sdk types --out src/pouchbase.ts
 
-# Or with an API key of the service scope instead of the token
+# Or with an API key instead of the token
 npx @pouchbasejs/js-sdk types https://pouchbase.example.com --api-key pbk_… --out src/pouchbase.ts`
 );
 
@@ -77,7 +77,7 @@ export const typesFile = snippet(
 	`
 // src/pouchbase.ts (generated)
 export interface PostsRecord {
-	/** \`id\` · ID. */
+	/** \`id\` · ID. Unique id of the record. */
 	id: string;
 	/** \`title\` · Text, required. */
 	title: string;
@@ -91,13 +91,24 @@ export interface PostsRecord {
 
 export interface PostsCreate {
 	title: string; // required
-	status?: 'draft' | 'published';
+	status?: 'draft' | 'published' | null; // has a default
 	published_at?: string | Date | null;
 	// … no id, timestamps or computed fields
 }
 
 export interface Schema {
 	posts: { $record: PostsRecord; $create: PostsCreate; $relations: { author: 'users' } };
+	// …
+}
+
+export interface MailTemplates {
+	/** Sent after sign-up. */
+	welcome: {
+		/** \`name\`, required. */
+		name: unknown;
+		/** \`items\`. */
+		items?: unknown;
+	};
 	// …
 }`
 );
@@ -117,6 +128,22 @@ await pouch.db.posts.findMany({ where: { satus: 'draft' } }); // type error: no 
 
 // A collection that isn't in the schema, untyped
 const drafts = await pouch.db.$collection('drafts').findMany();`
+);
+
+export const typedMail = snippet(
+	'typescript',
+	`
+import { createClient } from '@pouchbasejs/js-sdk';
+import type { MailTemplates, Schema } from './pouchbase';
+
+const pouch = createClient<Schema, MailTemplates>(env.POUCHBASE_URL, {
+	apiKey: env.POUCHBASE_API_KEY
+});
+
+await pouch.mail.send('welcome', { to: 'ada@example.com', variables: { name: 'Ada' } });
+
+await pouch.mail.send('welcome', { to: 'ada@example.com' }); // type error: name is required
+await pouch.mail.send('welcom', { to: 'ada@example.com' }); // type error: no template welcom`
 );
 
 export const fetchTypes = snippet(
@@ -285,9 +312,9 @@ export const whereCompiled = snippet(
 	'bash',
 	`
 # What the SDK sends as ?where= for the query above
-status == "published" and views >= 10 and views < 1000 and contains(title, "svelte")
-and any(tags) == "news" and cover != null and published_at <= "2026-10-25T09:30:00.000Z"
-and (featured == true or views > 500)`
+status == "published" && views >= 10 && views < 1000 && contains(title, "svelte")
+&& any(tags) == "news" && cover != null && published_at <= "2026-10-25T09:30:00.000Z"
+&& (featured == true || views > 500)`
 );
 
 export const conditionTag = snippet(
@@ -297,7 +324,7 @@ import { condition } from '@pouchbasejs/js-sdk';
 
 // Values in \${…} are escaped, so they can come from users
 await pouch.db.posts.findMany({
-	where: condition\`author == $user.id or contains(title, \${search})\`
+	where: condition\`author == $user.id || contains(title, \${search})\`
 });
 
 // Functions of the condition syntax, such as the posts of the last 7 days
@@ -376,21 +403,25 @@ import type { Schema } from './pouchbase';
 // On a server only, with the key from the environment
 const pouch = createClient<Schema>(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-await pouch.mail.send({ template: 'welcome', to: 'ada@example.com' }); // any key`
+await pouch.mail.send('welcome', { to: 'ada@example.com', variables: { name: 'Ada' } });`
 );
 
-export const asService = snippet(
+export const adminClient = snippet(
 	'typescript',
 	`
-// A key with the service scope also reaches the records API as an admin
-const pouch = createClient<Schema>(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_SERVICE_KEY });
+// A client with an API key acts as an admin everywhere
+const pouch = createClient<Schema>(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
 // The API rules don't apply to these calls
-await pouch.asService().db.posts.patch(id, { featured: true });
-const { total } = await pouch.asService().db.users.findMany({ limit: 1 });
+await pouch.db.posts.patch(id, { featured: true });
+const users = await pouch.db.users.count();
 
-// Without asService(), calls act for the session's user (or nobody), as in an app
-await pouch.db.posts.findMany();`
+// Realtime too: every change, whatever the view rule says
+pouch.realtime.subscribe('posts', (event) => console.log(event.action, event.record));
+
+// Without an apiKey, calls act for the session's user (or nobody), as in an app
+const app = createClient<Schema>(env.POUCHBASE_URL);
+await app.db.posts.findMany();`
 );
 
 /* Email */
@@ -409,8 +440,7 @@ export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
 		const pouch = createClient(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-		const { sent } = await pouch.mail.send({
-			template: 'welcome',
+		const { sent } = await pouch.mail.send('welcome', {
 			to: 'ada@example.com', // or a list of up to 50
 			variables: { name: 'Ada', items: [{ title: 'Create a project' }] }
 		});
@@ -420,13 +450,26 @@ export default {
 };`
 );
 
+export const sendCustomMail = snippet(
+	'typescript',
+	`
+await pouch.mail.send(
+	{
+		subject: 'Your order has shipped',
+		html: '<p>Hi Ada, your order <strong>#1042</strong> is on its way.</p>',
+		text: 'Hi Ada, your order #1042 is on its way.' // optional; made from the HTML otherwise
+	},
+	{ to: 'ada@example.com' }
+);`
+);
+
 export const mailErrors = snippet(
 	'typescript',
 	`
 import { isPouchbaseError } from '@pouchbasejs/js-sdk';
 
 try {
-	await pouch.mail.send({ template: 'welcome', to: 'ada@example.com' });
+	await pouch.mail.send('welcome', { to: 'ada@example.com' });
 } catch (error) {
 	if (isPouchbaseError(error) && error.status === 422) {
 		error.issues; // { 'variables.name': 'Required' }
@@ -439,8 +482,8 @@ try {
 export const schema = snippet(
 	'typescript',
 	`
-// An API key with the service scope, never in code that runs in a browser
-const pouch = createClient(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_SERVICE_KEY });
+// An API key, never in code that runs in a browser
+const pouch = createClient(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
 const posts = await pouch.schema.find('posts'); // CollectionSchema | null
 const users = await pouch.schema.find('users');
@@ -462,7 +505,7 @@ await pouch.schema.create({
 	rules: {
 		list: '', // everyone
 		view: '',
-		create: '$user.id != null and author == $user.id',
+		create: '$user.id != null && author == $user.id',
 		update: 'author == $user.id',
 		delete: 'author == $user.id'
 	}

@@ -1,7 +1,7 @@
-import type { Pouchbase } from '../client.js';
+import type { PouchbaseClient } from '../client.js';
 import type { PouchbaseError } from '../error.js';
 import { compileInclude, compileSelect, compileWhere } from '../query.js';
-import type { Condition, Where } from '../query.js';
+import type { Condition, FieldName, Selected, Where } from '../query.js';
 import { RealtimeConnection } from '../realtime/connection.js';
 import type {
 	ConnectionState,
@@ -10,22 +10,73 @@ import type {
 	WebSocketLike
 } from '../realtime/connection.js';
 import { REALTIME_PATH } from '../realtime/protocol.js';
-import type { AnyInclude } from './db.js';
+import type {
+	AnyInclude,
+	AnyRecord,
+	AnyRelations,
+	Include,
+	Included,
+	RecordOf,
+	RelationsOf
+} from './db.js';
+import type { DefaultCollections } from '../types.js';
 
-/** Options for `pouch.realtime.subscribe()`. */
-export type SubscribeOptions<R = Record<string, unknown>> = {
+/**
+ * Options for `pouch.realtime.subscribe()`, typed by the record `R`. `S` is the `select` and `I` the
+ * `include` passed; `H` is every `include` the collection allows (`Include`), for the editor's
+ * completions.
+ */
+export type SubscribeOptions<
+	R = AnyRecord,
+	S = readonly string[] | undefined,
+	I = AnyInclude | undefined,
+	H = never
+> = {
 	/** Only changes to records that match, after the change (and before it, for deletes). */
 	where?: Where<R> | Condition;
-	/** Only these fields of each record. */
-	select?: readonly string[];
+	/** Only these fields of each record; the event type has only them too. */
+	select?: S;
 	/**
 	 * Relations to send as records instead of ids, as in `pouch.db.<name>.find()`; related records
 	 * the view rule of their collection hides are left out (`null`).
 	 */
-	include?: AnyInclude;
+	include?: I | NoInfer<H>;
 	/** Called when the subscription fails, now or after a reconnect (see `ready`). */
 	onError?: (error: PouchbaseError) => void;
 };
+
+/**
+ * What `pouch.realtime.subscribe()` listens to: a collection of the schema `C` (`'posts'`) or one
+ * record of it (`'posts/<id>'`).
+ */
+export type Topic<C> = (keyof C & string) | `${keyof C & string}/${string}`;
+
+/** The collection of a topic: `'posts'` for `'posts'` and `'posts/<id>'`. */
+export type TopicCollection<T extends string> = T extends `${infer N}/${string}` ? N : T;
+
+/** Whether the collection of topic `T` is in the schema `C`. */
+type Typed<C, T extends string> = string extends T
+	? false
+	: TopicCollection<T> extends keyof C
+		? true
+		: false;
+
+/** The record of the collection of topic `T`; `AnyRecord` for a collection not in the schema. */
+export type TopicRecord<C, T extends string> =
+	Typed<C, T> extends true ? RecordOf<C[TopicCollection<T> & keyof C]> : AnyRecord;
+
+/** The relations of the collection of topic `T` (see `RelationsOf`). */
+export type TopicRelations<C, T extends string> =
+	Typed<C, T> extends true ? RelationsOf<C[TopicCollection<T> & keyof C]> : AnyRelations;
+
+/** The record of an event of topic `T`, with the `select` `S` and the `include` `I`. */
+export type TopicOutput<C, T extends string, S, I> = Included<
+	TopicRecord<C, T>,
+	Selected<TopicRecord<C, T>, S>,
+	C,
+	TopicRelations<C, T>,
+	I
+>;
 
 /**
  * Changes to records as they happen, over a WebSocket (`/api/realtime`): every create, update and
@@ -41,16 +92,23 @@ export type SubscribeOptions<R = Record<string, unknown>> = {
  * subscription.unsubscribe();
  * ```
  *
- * `pouch.db.<name>.subscribe()` does the same, typed by the schema.
+ * Topics, `where`, `select`, `include` and the events are typed by the schema `C`, as in
+ * `pouch.db.<name>.subscribe()`; collections that aren't in it are untyped.
  */
-export class RealtimeService {
-	readonly #pouch: Pouchbase<object>;
+export class RealtimeService<C extends object = DefaultCollections> {
+	readonly #pouch: PouchbaseClient;
+	readonly #token: () => string;
 	readonly #webSocket?: WebSocketLike;
 	readonly #connections = new Map<string, RealtimeConnection>();
 	readonly #listeners = new Set<(collection: string, state: ConnectionState) => void>();
 
-	constructor(pouch: Pouchbase<object>, webSocket?: WebSocketLike) {
+	/**
+	 * @param token What the connections authenticate with: the client's API key, the session's
+	 *   token, or `''` for an anonymous connection.
+	 */
+	constructor(pouch: PouchbaseClient, token: () => string, webSocket?: WebSocketLike) {
 		this.#pouch = pouch;
+		this.#token = token;
 		this.#webSocket = webSocket;
 
 		pouch.session.subscribe(() => {
@@ -63,11 +121,22 @@ export class RealtimeService {
 	/**
 	 * Calls `callback` with every change to the records of `topic`: a collection (`'posts'`) or one
 	 * record of it (`'posts/<id>'`).
+	 *
+	 * ```ts
+	 * pouch.realtime.subscribe('posts', (event) => console.log(event.record.title), {
+	 * 	where: { status: 'published' },
+	 * 	select: ['id', 'title']
+	 * });
+	 * ```
 	 */
-	subscribe<R = Record<string, unknown>>(
-		topic: string,
-		callback: (event: RealtimeEvent<R>) => void,
-		options: SubscribeOptions<R> = {}
+	subscribe<
+		const T extends Topic<C> | (string & {}),
+		const S extends readonly FieldName<TopicRecord<C, T>>[] | undefined = undefined,
+		const I extends Include<C, TopicRelations<C, T>> | undefined = undefined
+	>(
+		topic: T,
+		callback: (event: RealtimeEvent<TopicOutput<C, T, S, I>>) => void,
+		options: SubscribeOptions<TopicRecord<C, T>, S, I, Include<C, TopicRelations<C, T>>> = {}
 	): RealtimeSubscription {
 		const separator = topic.indexOf('/');
 		const collection = separator === -1 ? topic : topic.slice(0, separator);
@@ -76,9 +145,9 @@ export class RealtimeService {
 		return this.#connection(collection).subscribe(
 			{
 				record: record || undefined,
-				where: compileWhere(options.where) || undefined,
-				select: compileSelect(options.select)?.split(','),
-				include: compileInclude(options.include)?.split(',')
+				where: compileWhere(options.where as Where<AnyRecord> | Condition | undefined) || undefined,
+				select: compileSelect(options.select as readonly string[] | undefined)?.split(','),
+				include: compileInclude(options.include as AnyInclude | undefined)?.split(',')
 			},
 			callback as (event: RealtimeEvent) => void,
 			options.onError
@@ -115,7 +184,7 @@ export class RealtimeService {
 			url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
 			connection = new RealtimeConnection({
 				url: url.toString(),
-				token: () => this.#pouch.session.token ?? '',
+				token: this.#token,
 				webSocket: this.#webSocket,
 				onState: (state) => {
 					for (const listener of this.#listeners) {

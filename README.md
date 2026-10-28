@@ -231,10 +231,10 @@ Every sign-in returns `{ token, user_id }`; a sign-up returns `{ token, user_id,
 | `DELETE /api/db/<collection>/<id>`                    | Deletes a record when the delete rule allows it; `204`                                                             |
 | `GET /api/realtime?collection=<name>` (WebSocket)     | Changes to records the view rule allows, as they happen, see [Realtime](#realtime)                                 |
 | `GET /api/files/<id>`                                 | A file from the `files` collection (public; ids are random); `?size=<size>`, `?download`                           |
-| `GET /api/types?token=…`                              | TypeScript types of every collection; the URL is on the **Types** page, or send a service key (`Bearer pbk_…`)     |
+| `GET /api/types?token=…`                              | TypeScript types of every collection; the URL is on the **Types** page, or send an API key (`Bearer pbk_…`)        |
 | `GET /api/plugins/<id>/assets/ui/<file>.svg`          | An image of a plugin, e.g. a sign-in provider's logo (public, sandboxed)                                           |
 | `<any method> /api/functions/<name>/<path>`           | Calls a [function](#functions); `401` when it requires sign-in, `404` if none                                      |
-| `POST /api/mail/send`                                 | Sends an [email template](#email-templates); needs an API key (`Bearer pbk_…`)                                     |
+| `POST /api/mail/send`                                 | Sends an [email template](#email-templates) or your own HTML; needs an API key (`Bearer pbk_…`)                    |
 | `GET /api/schema`                                     | Every collection with its fields, indexes, API rules and settings; see below                                       |
 | `GET` / `PATCH` / `DELETE /api/schema/<name>`         | One collection; `PATCH` changes the given parts (`?force`), `DELETE` answers `204`                                 |
 | `POST /api/schema`                                    | `{ name, fields?, indexes?, rules?, thumbnails? }`; `201` with the collection                                      |
@@ -243,7 +243,7 @@ Every sign-in returns `{ token, user_id }`; a sign-up returns `{ token, user_id,
 
 ### Schema API, export and import
 
-The schema can be managed from code too, with an [API key](#email-templates) with the **service** scope (other keys get `403`): `/api/schema` creates, changes and deletes collections with their fields, indexes and API rules, and exports and imports them as a JSON file without records. The admin has the same export and import in the menu next to **Collections**.
+The schema can be managed from code too, with an [API key](#email-templates): `/api/schema` creates, changes and deletes collections with their fields, indexes and API rules, and exports and imports them as a JSON file without records. The admin has the same export and import in the menu next to **Collections**.
 
 - A collection comes back as `{ id, name, system, settings: { rules, thumbnails }, fields, indexes }`; relation fields point at collections by id (`options.collectionId`).
 - `PATCH` only changes the parts it is given. `fields` and `indexes` are the whole list: a field with an `id`, or else with the name of an existing field, changes that field; other fields are added and fields left out are deleted. `rules` keeps the actions it leaves out.
@@ -260,24 +260,24 @@ Every collection has a database API at `/api/db/<collection>`, guarded by the co
 - **Everyone**: also without signing in.
 - **Signed-in users**: any request with a valid token (`$user.id != null`).
 - **Owner**: only the user in a relation field to `users`, such as `author == $user.id`, or `any(editors) == $user.id` for a multiple relation (in `users`: the user themselves).
-- **Custom rule**: a condition, and only records that match it are allowed, e.g. `status == "published" or author == $user.id`. The list rule filters the results; the create rule is checked against the new record. The editor suggests fields as you type and underlines mistakes.
+- **Custom rule**: a condition, and only records that match it are allowed, e.g. `status == "published" || author == $user.id`. The list rule filters the results; the create rule is checked against the new record. The editor suggests fields as you type and underlines mistakes.
 
 #### Conditions
 
-Custom rules and the `?where=` parameter are conditions, such as `status == "published" and (views > 10 or author == $user.id)`:
+Custom rules and the `?where=` parameter are conditions, such as `status == "published" && (views > 10 || author == $user.id)`:
 
 - **Values**: field names, `"strings"` or `'strings'`, numbers, `true`, `false`, `null`, `$user.<field>` (the signed-in user; `null` when signed out) and `$input.<field>` (the submitted value, in create and update rules), and function calls.
 - **Comparisons**: `==`, `!=`, `>`, `>=`, `<` and `<=`.
 - **Functions**: text (`contains(title, "x")`, `starts_with`, `ends_with`, `like`, `lower`, `upper`, `trim`, `length`), dates in UTC (`now()`, `today()`, `date`, `date_add(now(), -7, "days")`, `start_of(now(), "week")`, `year`, `month`, `day`, `weekday`, `hour`, `minute`), numbers (`abs`, `round`) and lists (`count(tags)`). `contains`, `starts_with`, `ends_with` and `like` are conditions of their own; the others are values to compare. Dates compare with Created and Updated fields too: `created_at >= date_add(now(), -7, "days")`.
 - **Lists**: `any(<field>) <comparison> <value>` is true when any item of a multiple relation or list matches, e.g. `any(tags) == "news"`.
 - **Related records**: `author.role` is a field of the related record, up to three relations deep (`post.author.team.name`); a multiple relation goes in `any()`: `any(editors.role) == "admin"`. In `where`, related records are checked against the view rule of their collection and hidden fields can't be used; API rules see everything.
-- **Combining**: `not`, `and`, `or` and parentheses. `#` starts a comment until the end of the line, so a long rule can span several lines.
+- **Combining**: `&&` or `AND`, `||` or `OR`, `!` or `NOT` (uppercase words only), and parentheses. `#` starts a comment until the end of the line, so a long rule can span several lines.
 
 #### Listing and reading
 
 A list takes `?where=<condition>`, `?order=created_at:desc,title` (ascending unless a field ends in `:desc`), `?select=id,title`, `?include=author,comments.author`, `?limit=` (default 30, 1 to 500) and `?offset=` (default 0), and answers `{ items, total, limit, offset }`. An invalid parameter answers `400` with `{ "message": "Invalid <param>: <reason>" }` (`where`, `order`, `select` or `include`).
 
-Records come back with real values: booleans as `true`/`false`, JSON fields parsed, and multiple relations, files and lists as arrays (`[]` when empty); blob fields are left out. `select` returns only those fields. `include` (on every database call except `DELETE`) replaces relation and file fields by the records they point to, up to three levels deep: a single relation becomes a record or `null`, a multiple one an array of records. Related records are only included when the view rule of their collection allows them, and including fails with `400` when the API doesn't show that collection at all (its view rule is **Admins only**). An [API key](#email-templates) with the **service** scope (`Authorization: Bearer pbk_…`) uses the database API as an admin: the API rules don't apply to it, so a back-end can write what users may not; other API keys get `403` there. `users` can't be created through the API (use sign-up), and its `email` and `verified` can't be changed there; `files` can only be listed, viewed and deleted. The **Preview** tab of the same panel shows every endpoint with SDK and cURL examples for its fields.
+Records come back with real values: booleans as `true`/`false`, JSON fields parsed, and multiple relations, files and lists as arrays (`[]` when empty); blob fields are left out. `select` returns only those fields. `include` (on every database call except `DELETE`) replaces relation and file fields by the records they point to, up to three levels deep: a single relation becomes a record or `null`, a multiple one an array of records. Related records are only included when the view rule of their collection allows them, and including fails with `400` when the API doesn't show that collection at all (its view rule is **Admins only**). An [API key](#email-templates) (`Authorization: Bearer pbk_…`) uses the database API as an admin: the API rules don't apply to it, so a back-end can write what users may not. `users` can't be created through the API (use sign-up), and its `email` and `verified` can't be changed there; `files` can only be listed, viewed and deleted. The **Preview** tab of the same panel shows every endpoint with SDK and cURL examples for its fields.
 
 ### Realtime
 
@@ -293,7 +293,7 @@ await subscription.ready; // rejects when the view rule doesn't allow it
 subscription.unsubscribe();
 ```
 
-`pouch.db.posts.subscribe(callback, { id })` subscribes to one record. The SDK opens one connection per collection, reconnects by itself and follows sign-ins and sign-outs. The protocol, for other clients: connect to `/api/realtime?collection=<name>` and send `{"type":"auth","token":"<token>"}` (leave out `token` to connect anonymously) within 10 seconds; after `{"type":"ready"}`, send `{"type":"subscribe","id":"<your id>","record":"<record id>?","where":"<condition>?","select":["…"]?,"include":["author"]?}` (`include` as in the database API, checked against the view rules of the related collections for every event), answered by `subscribed` or `error`, and receive `{"type":"event","id","action","record","at"}`. `{"type":"ping"}` is answered by `{"type":"pong"}`; send it every 30 seconds. See `src/lib/realtime/protocol.ts` for the messages, error codes and close codes (`4401`: invalid or expired token).
+`pouch.db.posts.subscribe(callback, { id })` subscribes to one record. The SDK opens one connection per collection, reconnects by itself and follows sign-ins and sign-outs. The protocol, for other clients: connect to `/api/realtime?collection=<name>` and send `{"type":"auth","token":"<token>"}` (a user's token, or an API key, which acts as an admin and skips the view rules; leave out `token` to connect anonymously) within 10 seconds; after `{"type":"ready"}`, send `{"type":"subscribe","id":"<your id>","record":"<record id>?","where":"<condition>?","select":["…"]?,"include":["author"]?}` (`include` as in the database API, checked against the view rules of the related collections for every event), answered by `subscribed` or `error`, and receive `{"type":"event","id","action","record","at"}`. `{"type":"ping"}` is answered by `{"type":"pong"}`; send it every 30 seconds. See `src/lib/realtime/protocol.ts` for the messages, error codes and close codes (`4401`: invalid or expired token, an invalid API key, or a plugin key).
 
 - An event's `record` has the same shape as the database API returns it; for a delete it is the record as it was. A record that no longer matches the view rule or the `where` after an update sends no event.
 - The rule sees the signed-in user as it was when the connection was made; it is checked again on reconnect. The connection is closed when the token expires.
@@ -398,7 +398,7 @@ Under **System → Mail** you make email templates: a subject, a preview text an
 
 A variable used outside `#if` and loops, without a fallback, is required: sending without it answers `422`. Every email also gets a plain-text version, made from the HTML.
 
-Templates are sent with `POST /api/mail/send` (`{ "template", "to", "variables" }`; `to` is one address or up to 50, each recipient gets an email of their own), or `pouch.mail.send()` of the JS SDK. That needs an **API key** (`Authorization: Bearer pbk_…`), so only server-side code can send email: create keys for your back-end under **System → API keys** (only a hash is stored; the key is shown once), with the **service** scope when the back-end also manages records past the API rules; every function has its own in `env.POUCHBASE_API_KEY`. The verification and password-reset emails are built-in templates (with `{{url}}` and `{{email}}`): they can be changed and reset, but not deleted or sent through the API.
+Templates are sent with `POST /api/mail/send` (`{ "template", "to", "variables" }`; `to` is one address or up to 50, each recipient gets an email of their own; `{ "subject", "html", "text"?, "to" }` sends HTML of your own without a template), or `pouch.mail.send()` of the JS SDK. That needs an **API key** (`Authorization: Bearer pbk_…`), so only server-side code can send email: create keys for your back-end under **System → API keys** (only a hash is stored; the key is shown once); every key acts as an admin, so the back-end can also manage records past the API rules, and every function has its own in `env.POUCHBASE_API_KEY`. The verification and password-reset emails are built-in templates (with `{{url}}` and `{{email}}`): they can be changed and reset, but not deleted or sent through the API.
 
 ## Plugins
 

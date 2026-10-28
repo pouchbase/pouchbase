@@ -1,4 +1,4 @@
-import type { Pouchbase } from '../client.js';
+import type { PouchbaseClient } from '../client.js';
 
 /** Options for `pouch.files.url()`. */
 export type FileUrlOptions = {
@@ -15,9 +15,9 @@ export type FileUrlOptions = {
 
 /** Files of the built-in `files` collection. Files are public; their ids are random. */
 export class FilesService {
-	readonly #pouch: Pouchbase<object>;
+	readonly #pouch: PouchbaseClient;
 
-	constructor(pouch: Pouchbase<object>) {
+	constructor(pouch: PouchbaseClient) {
 		this.#pouch = pouch;
 	}
 

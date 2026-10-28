@@ -6,7 +6,7 @@ import { FILTER_FUNCTIONS, functionSignature, isFilterFunction, normalizeUnit } 
  * Conditions, used by `?where=` of the records API and by the API rules of a collection:
  *
  * ```
- * status == "published" and (views > 10 or author == $user.id) and not contains(title, "draft")
+ * status == "published" && (views > 10 || author == $user.id) && !contains(title, "draft")
  * ```
  *
  * - Values: field names, `"strings"` or `'strings'`, numbers, `true`, `false`, `null`,
@@ -21,7 +21,8 @@ import { FILTER_FUNCTIONS, functionSignature, isFilterFunction, normalizeUnit } 
  * - `any(<field>)` as a value: the condition is true when it holds for any item of a multiple
  *   relation or list, or of a path through one (`any(editors) == $user.id`,
  *   `contains(any(tags), "news")`, `any(editors.role) == "admin"`).
- * - `not`, `and`, `or` and parentheses; `#` starts a comment until the end of the line.
+ * - `&&` or `AND`, `||` or `OR`, `!` or `NOT`, and parentheses; `#` starts a comment until the
+ *   end of the line. The words are uppercase, so they never look like field names.
  *
  * Shared between the client (validating rules in forms) and the server, which compiles the parsed
  * expression to SQL (`src/lib/server/filter.ts`).
@@ -76,8 +77,15 @@ export const MAX_RELATION_DEPTH = 3;
 
 const NAME = /^[a-z][a-z0-9_]{0,62}$/;
 
-/** Words with a meaning of their own, so they can't be field names in a condition. */
-export const KEYWORDS = ['and', 'or', 'not'] as const;
+/** The words that combine and negate conditions, next to `&&`, `||` and `!`. */
+const LOGICAL_WORDS = { AND: 'and', OR: 'or', NOT: 'not' } as const;
+
+/** What to write instead of a lowercase `and`, `or` or `not`. */
+const LOWERCASE_HINTS: Record<string, string> = {
+	and: 'Use `&&` or `AND` to combine conditions',
+	or: 'Use `||` or `OR` to combine conditions',
+	not: 'Use `!` or `NOT` to negate a condition'
+};
 
 /** A condition that can't be parsed; `position` is the offset in the text where it went wrong. */
 export class FilterError extends Error {
@@ -124,10 +132,13 @@ function tokenize(text: string): Token[] {
 		}
 
 		if (rest.startsWith('&&') || rest.startsWith('||')) {
-			throw new FilterError(
-				`Use \`${char === '&' ? 'and' : 'or'}\` to combine conditions`,
-				position
-			);
+			tokens.push({ type: char === '&' ? 'and' : 'or', position });
+			index += 2;
+			continue;
+		}
+
+		if (char === '&' || char === '|') {
+			throw new FilterError(`Use \`${char}${char}\` to combine conditions`, position);
 		}
 
 		if (char === '"' || char === "'") {
@@ -173,8 +184,11 @@ function tokenize(text: string): Token[] {
 			throw new FilterError('Use `==` to compare', position);
 		}
 
+		// After `!=`, so this is `!` on its own.
 		if (char === '!') {
-			throw new FilterError('Use `not` to negate a condition', position);
+			tokens.push({ type: 'not', position });
+			index++;
+			continue;
 		}
 
 		const word = /^\$?[A-Za-z_][A-Za-z0-9_.]*/.exec(rest);
@@ -182,8 +196,10 @@ function tokenize(text: string): Token[] {
 		if (word) {
 			const value = word[0];
 
-			if (value === 'and' || value === 'or' || value === 'not') {
-				tokens.push({ type: value, position });
+			if (Object.hasOwn(LOGICAL_WORDS, value)) {
+				tokens.push({ type: LOGICAL_WORDS[value as keyof typeof LOGICAL_WORDS], position });
+			} else if (Object.hasOwn(LOWERCASE_HINTS, value)) {
+				throw new FilterError(LOWERCASE_HINTS[value], position);
 			} else {
 				tokens.push({ type: 'identifier', value, position });
 			}
@@ -385,7 +401,7 @@ export function parseFilter(text: string): FilterExpression {
 
 				if (result.kind === 'call' && FILTER_FUNCTIONS[result.name].returns === 'boolean') {
 					throw new FilterError(
-						`\`${result.name}()\` is a condition of its own; use \`not\` to negate it`,
+						`\`${result.name}()\` is a condition of its own; use \`!\` to negate it`,
 						token.position
 					);
 				}
@@ -423,7 +439,7 @@ export function parseFilter(text: string): FilterExpression {
 
 			if (peek()?.type === 'operator') {
 				throw new FilterError(
-					`\`${predicate.name}()\` is a condition of its own; use \`not\` to negate it`,
+					`\`${predicate.name}()\` is a condition of its own; use \`!\` to negate it`,
 					peek()?.position
 				);
 			}
@@ -444,7 +460,7 @@ export function parseFilter(text: string): FilterExpression {
 			(operator?.type === 'not' && peek()?.type === 'identifier')
 		) {
 			throw new FilterError(
-				'Use `contains(text, search)` or `not contains(text, search)`',
+				'Use `contains(text, search)` or `!contains(text, search)`',
 				operator.position
 			);
 		}
@@ -501,7 +517,7 @@ export function parseFilter(text: string): FilterExpression {
 	const rest = peek();
 
 	if (rest) {
-		throw new FilterError('Expected `and` or `or` between conditions', rest.position);
+		throw new FilterError('Expected `&&` or `||` between conditions', rest.position);
 	}
 
 	return expression;

@@ -42,6 +42,12 @@ export type User = Record<string, unknown> & { id: string };
 export type DefaultCollections = { users: User };
 
 /**
+ * The variables of each email template, by name, such as the `MailTemplates` interface that
+ * `pouchbase types` generates. Without one, any name and any variables are allowed.
+ */
+export type DefaultMailTemplates = Record<string, Record<string, unknown>>;
+
+/**
  * The record type of the `users` collection in `C`: a `Schema` entry (`{ $record }`) or a record
  * type.
  */

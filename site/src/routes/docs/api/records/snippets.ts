@@ -5,7 +5,7 @@ export const list = snippet(
 	`
 curl -G "https://pouchbase.example.com/api/db/posts" \\
 	-H "Authorization: Bearer $TOKEN" \\
-	--data-urlencode 'where=status == "published" and contains(title, "svelte")' \\
+	--data-urlencode 'where=status == "published" && contains(title, "svelte")' \\
 	--data-urlencode 'order=published_at:desc' \\
 	--data-urlencode 'select=id,title,author' \\
 	--data-urlencode 'include=author' \\

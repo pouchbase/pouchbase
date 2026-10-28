@@ -1,6 +1,6 @@
 {
 	"name": "pouchbase-plugin-cms",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"private": true,
 	"description": "An example plugin that turns Pouchbase into a small CMS: a posts collection and a WordPress-style post editor.",
 	"license": "MIT",

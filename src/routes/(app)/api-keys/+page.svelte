@@ -38,9 +38,10 @@
 			<div class="flex flex-col gap-1">
 				<Page.Title>API keys</Page.Title>
 				<Page.Description>
-					Secret keys for server-side code, such as your back-end, to send email templates through
-					the API. Keys with the service scope also use the records API as an admin. Every function
-					has a key of its own in <code>env.POUCHBASE_API_KEY</code>, renewed on each deploy.
+					Secret keys for server-side code, such as your back-end, to call the API as an admin: the
+					API rules don't apply to them. Every function has a key of its own in <code
+						>env.POUCHBASE_API_KEY</code
+					>, renewed on each deploy.
 				</Page.Description>
 			</div>
 
@@ -71,9 +72,6 @@
 									{apiKey.name}
 									{#if apiKey.functionName}
 										<Badge.Root variant="outline">Function</Badge.Root>
-									{/if}
-									{#if apiKey.scope === 'service'}
-										<Badge.Root variant="outline">Service</Badge.Root>
 									{/if}
 								</span>
 							</Table.Cell>

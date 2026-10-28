@@ -21,19 +21,19 @@
 		["{ status: 'published' }", 'status == "published"'],
 		["{ status: { eq: 'published' } }", 'status == "published"'],
 		["{ status: { not: 'draft' } }", 'status != "draft"'],
-		["{ status: { in: ['draft', 'published'] } }", '(status == "draft" or status == "published")'],
+		["{ status: { in: ['draft', 'published'] } }", '(status == "draft" || status == "published")'],
 		["{ status: { notIn: ['draft'] } }", 'status != "draft"'],
-		['{ views: { gt: 10, lte: 100 } }', 'views > 10 and views <= 100'],
+		['{ views: { gt: 10, lte: 100 } }', 'views > 10 && views <= 100'],
 		["{ title: { contains: 'svelte' } }", 'contains(title, "svelte")'],
-		["{ title: { notContains: 'draft' } }", 'not contains(title, "draft")'],
+		["{ title: { notContains: 'draft' } }", '!contains(title, "draft")'],
 		["{ slug: { startsWith: 'release-' } }", 'starts_with(slug, "release-")'],
 		["{ email: { endsWith: '@example.com' } }", 'ends_with(email, "@example.com")'],
 		["{ tags: { has: 'news' } }", 'any(tags) == "news"'],
 		['{ tags: { isEmpty: true } }', 'tags == ""'],
 		['{ cover: null }', 'cover == null'],
 		['{ published_at: { lte: new Date() } }', 'published_at <= "2026-10-25T09:30:00.000Z"'],
-		['{ $or: [{ featured: true }, { views: { gt: 500 } }] }', '(featured == true or views > 500)'],
-		['{ $and: [ … ] }', '( … and … )']
+		['{ $or: [{ featured: true }, { views: { gt: 500 } }] }', '(featured == true || views > 500)'],
+		['{ $and: [ … ] }', '( … && … )']
 	];
 
 	const comparisons = [
@@ -56,13 +56,11 @@
 	<h2 id="where">The where object</h2>
 
 	<p>
-		<Code.Root>where</Code.Root> is an object, typed by the fields of the collection. A value means "equals",
-		an object holds comparisons, and fields next to each other must all match.
+		<Code.Root>where</Code.Root> is typed by the fields of the collection: a value means "equals", an
+		object holds comparisons, and fields next to each other must all match.
 		<Code.Root>$or</Code.Root> and <Code.Root>$and</Code.Root> take a list of such objects. Values are
-		escaped, so they can come from users. The same <Code.Root>where</Code.Root> works in
-		<Code.Root>findMany()</Code.Root>, <Code.Root>findFirst()</Code.Root>,
-		<Code.Root>count()</Code.Root>, <Code.Root>iterate()</Code.Root>,
-		<Code.Root>findAll()</Code.Root> and <a href={resolve('/docs/sdk/realtime')}>subscribe()</a>.
+		escaped, so they can come from users. It works in every list call and in
+		<a href={resolve('/docs/sdk/realtime')}>subscribe()</a>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -71,13 +69,11 @@
 
 	<h2 id="comparisons">Comparisons per field</h2>
 
-	<p>Which comparisons a field takes depends on its type, and TypeScript checks them:</p>
-
 	<DocsTable head={['Field', 'Comparisons']} rows={comparisons} code={0} />
 
 	<p>
-		Text search is case-insensitive, and <Code.Root>%</Code.Root> and <Code.Root>_</Code.Root> in the
-		value are plain characters. For a pattern, use the
+		Text search is case-insensitive, and <Code.Root>%</Code.Root> and <Code.Root>_</Code.Root> are plain
+		characters; for a pattern, use the
 		<a href="{resolve('/docs/platform/collections/filters')}#functions">like()</a> function in a
 		<a href="#writing-conditions">hand-written condition</a>. An empty <Code.Root>in</Code.Root> or
 		<Code.Root>$or</Code.Root> matches nothing, and <Code.Root>null</Code.Root> matches empty fields.
@@ -87,16 +83,13 @@
 
 	<p>
 		The SDK turns the object into a
-		<a href={resolve('/docs/platform/collections/filters')}>condition</a>, the syntax the server
-		runs and the access rules use, and sends it as the <Code.Root>where</Code.Root> parameter. The query
-		above is sent as:
+		<a href={resolve('/docs/platform/collections/filters')}>condition</a>, the syntax of the access
+		rules, and sends it as the <Code.Root>where</Code.Root> parameter. The query above becomes:
 	</p>
 
 	<CodeBlock.Root title="Condition">
 		<CodeBlock.Source code={data.code.whereCompiled} />
 	</CodeBlock.Root>
-
-	<p>Each form of <Code.Root>where</Code.Root> and the condition it becomes:</p>
 
 	<DocsTable head={['where', 'Condition']} rows={whereForms} code={2} />
 
@@ -104,9 +97,7 @@
 
 	<p>
 		For what the object can't express, such as the signed-in user (<Code.Root>$user.id</Code.Root>)
-		or the functions of the condition syntax, write the condition yourself with the
-		<Code.Root>condition</Code.Root> tag. It escapes the values you put in
-		<Code.Root>{'${…}'}</Code.Root>:
+		or functions, write the condition with the <Code.Root>condition</Code.Root> tag:
 	</p>
 
 	<CodeBlock.Root title="TypeScript">
@@ -118,15 +109,14 @@
 		<Callout.Body>
 			<Callout.Title>Never join strings into a condition</Callout.Title>
 			<Callout.Description>
-				A value from a user that is pasted into the text can change the condition. Put it in
+				A user's value pasted into the text can change the condition. Put it in
 				<Code.Root>{'${…}'}</Code.Root> of the <Code.Root>condition</Code.Root> tag instead.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
 
 	<p>
-		The operands, operators, functions and limits of conditions are on
-		<a href={resolve('/docs/platform/collections/filters')}>Filters</a> in the platform docs. An
-		invalid condition fails with an <Code.Root>invalid</Code.Root> error.
+		The full syntax is on <a href={resolve('/docs/platform/collections/filters')}>Filters</a> in the
+		platform docs. An invalid condition fails with <Code.Root>invalid</Code.Root>.
 	</p>
 </DocsPage>

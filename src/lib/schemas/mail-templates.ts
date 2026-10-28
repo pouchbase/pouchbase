@@ -93,19 +93,35 @@ export const sendTestMailTemplateSchema = z.object({
 	to: email
 });
 
-/** Body of `POST /api/mail/send`. */
-export const sendMailSchema = z.object({
+const recipients = z
+	.union([email, z.array(email)])
+	.transform((to) => (Array.isArray(to) ? to : [to]))
+	.pipe(
+		z
+			.array(z.string())
+			.min(1, 'Name at least one recipient')
+			.max(MAX_RECIPIENTS, `Send to at most ${MAX_RECIPIENTS} recipients at once`)
+	);
+
+/** Body of `POST /api/mail/send` for an email template. */
+export const sendMailTemplateSchema = z.object({
 	template: z.string().min(1, 'Name the template'),
-	to: z
-		.union([email, z.array(email)])
-		.transform((to) => (Array.isArray(to) ? to : [to]))
-		.pipe(
-			z
-				.array(z.string())
-				.min(1, 'Name at least one recipient')
-				.max(MAX_RECIPIENTS, `Send to at most ${MAX_RECIPIENTS} recipients at once`)
-		),
+	to: recipients,
 	variables: variables.default({})
+});
+
+/** Body of `POST /api/mail/send` for an email of your own, without a template. */
+export const sendCustomMailSchema = z.object({
+	subject: content.subject,
+	html: z
+		.string()
+		.min(1, 'The email is empty')
+		.max(MAX_TEMPLATE_BODY, `The email must be at most ${MAX_TEMPLATE_BODY} characters`),
+	text: z
+		.string()
+		.max(MAX_TEMPLATE_BODY, `The text must be at most ${MAX_TEMPLATE_BODY} characters`)
+		.optional(),
+	to: recipients
 });
 
 /** Image types offered for emails; most email clients show these. */

@@ -1,4 +1,5 @@
 import type { ErrorOf, ServiceError } from './base.service';
+import type { ApiKeysService } from './api-keys.service';
 import type { AuthService } from './auth.service';
 import type { Collection } from './collections.service';
 import type { Field } from './fields.service';
@@ -23,6 +24,7 @@ import { compileFilter, compileRule, usesRelations } from '../filter';
 import { authorizationChecks } from '../realtime/authorize';
 import { background } from '../platform/runtime';
 import { publish } from '../realtime/broker';
+import { API_KEY_PREFIX } from './api-keys.service';
 import { Service } from './base.service';
 import { checkUserFields, visibleFields } from '../hidden-fields';
 import { apiRecord, relatedCollections } from './records.service';
@@ -94,20 +96,42 @@ export class RealtimeService extends Service {
 	}
 
 	/**
-	 * Who a socket is: the app user of `token`, else the dashboard admin of the session cookie
-	 * (only passed on when the upgrade came from the same origin), else anonymous.
+	 * Who a socket is: an admin for an API key (`pbk_…`) other than a plugin's, else the app user
+	 * of `token`, else the dashboard admin of the session cookie (only passed on when the upgrade
+	 * came from the same origin), else anonymous.
 	 */
 	session(
 		token: string | null
 	): ResultAsync<
 		SessionResult,
-		ErrorOf<ReturnType<AuthService['verifyToken']>> | ServiceError<11006, 'INVALID_TOKEN'>
+		| ErrorOf<ReturnType<AuthService['verifyToken']>>
+		| ServiceError<11006, 'INVALID_TOKEN'>
+		| ErrorOf<ReturnType<ApiKeysService['verify']>>
+		| ServiceError<22005, 'INVALID_API_KEY'>
+		| ServiceError<22006, 'PLUGIN_KEY'>
 	> {
 		if (!token) {
 			return okAsync({
 				subject: this.ctx.locals.user ? { kind: 'admin' } : { kind: 'anonymous' },
 				expiresAt: null
 			});
+		}
+
+		if (token.startsWith(API_KEY_PREFIX)) {
+			return this.services
+				.apiKeys()
+				.verify(token)
+				.andThen((key) => {
+					if (!key) {
+						return errAsync(this.error(22005, 'INVALID_API_KEY'));
+					}
+
+					if (key.pluginId) {
+						return errAsync(this.error(22006, 'PLUGIN_KEY'));
+					}
+
+					return okAsync<SessionResult>({ subject: { kind: 'admin' }, expiresAt: null });
+				});
 		}
 
 		return this.services

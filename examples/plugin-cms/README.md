@@ -7,9 +7,10 @@ An example [Pouchbase](https://pouchbase.io) plugin that turns an instance into 
 - two **collections** (`collections`), created on install:
   - `cms_posts` (`collections/posts.ts`): `title`, `slug` (unique), `content` (a Rich text field, as HTML), `excerpt`, `status` (`draft`, `pending`, `published` or `trash`), `published_at`, `featured_image`, `sticky`, `categories` (a relation to `cms_categories`) and `tags` (JSON). Its API rules let apps read published posts whose publish date has passed, and nothing else;
   - `cms_categories` (`collections/categories.ts`): `name` and `slug`, readable by everyone;
-- two **dashboard pages** (`pages`):
-  - **Posts** (`/plugins/cms/posts`): the posts screen of WordPress, with the status links (All, Published, Drafts, Pending, Trash) and their counts, search, paging and the row actions Edit, Trash, View, Restore and Delete permanently. `/plugins/cms/posts/<id>` edits a post;
-  - **Add new post** (`/plugins/cms/posts/new`): the editor for a new post. Its path is longer than `posts`, so it wins over `/plugins/cms/posts/:id`;
+- three **dashboard pages** (`pages`):
+  - **Posts** (`/plugins/cms/posts`): the posts screen of WordPress, at the dashboard's reading width, with the status links (All, Published, Drafts, Pending, Trash) and their counts, search, paging and the row actions Edit, Trash, View, Restore and Delete permanently;
+  - **Add new post** (`/plugins/cms/posts/new`): the editor for a new post, with `layout: 'full'`, so it takes all of the space below the dashboard's top bar;
+  - **Edit post** (`/plugins/cms/posts/edit/<id>`): the same editor for an existing post, without a sidebar link (`navigation: false`); the id is the path below the page (`params`). The longest page path wins, so `posts/new` and `posts/edit` aren't taken for `posts`;
 - eight **routes** under `/api/plugins/cms/`, all for admins of the dashboard (`ctx.admin`) except `GET /site`: `GET`/`POST /posts`, `GET`/`PATCH`/`DELETE /posts/:id`, `GET`/`POST /categories` and `GET /site`;
 - one **setting**, `site_url`: where the posts are published. The editor shows a post's permalink (`<site URL>/<slug>`) and links to it once it is published.
 
@@ -48,8 +49,9 @@ plugin-cms/
 ├── icon.svg
 ├── collections/              # posts.ts, categories.ts: defineCollection
 ├── pages/
-│   ├── posts.svelte          # the list, or the editor for /posts/<id>
-│   └── new-post.svelte       # the editor for a new post
+│   ├── posts.svelte          # the list
+│   ├── new-post.svelte       # the editor for a new post (layout: 'full')
+│   └── edit-post.svelte      # the editor for /posts/edit/<id> (layout: 'full', no sidebar link)
 ├── components/
 │   ├── popover.svelte
 │   ├── posts/                # post-list.svelte, post-row.svelte
@@ -71,7 +73,8 @@ plugin-cms/
 
 - Routes are public, so every route that writes checks `ctx.admin` (`adminOnly` in `lib/store.ts`); `ctx.pouch` doesn't apply the collection's API rules, which are for app users.
 - A new post gets a slug from its title, made unique like WordPress does (`hello-world`, `hello-world-2`, …), and a publish date when it is published without one; a date in the future schedules it.
-- A page receives `params`, the path below it: `pages/posts.svelte` shows the list for `/plugins/cms/posts` and the editor for `/plugins/cms/posts/<id>`.
+- A page receives `params`, the path below it: `pages/edit-post.svelte` reads the post id from `/plugins/cms/posts/edit/<id>`.
+- `layout` sets how much of the dashboard a page takes: the editor pages use `full` and fill the height themselves (the editor's root is `flex-1` and its canvas and sidebar scroll on their own); the list keeps the `default` reading width.
 - The icons inside the components are data URLs (`lib/icons.ts`) for `Icon.Root src`, which always renders; `icon="lucide:…"` only renders at once for icons the dashboard bundles itself.
 - UI files may only import the modules Pouchbase provides; the CLI checks the source of `.svelte` files, so even `import type` from another module, such as `svelte/elements`, is refused. `rich-text.svelte` declares its props itself for that reason.
 - `document.execCommand` formats the selected text (bold, italic, links). It is deprecated, but still the one way to do this in every browser without an editor library, which a plugin can't bring along.

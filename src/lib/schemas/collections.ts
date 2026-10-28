@@ -90,7 +90,7 @@ export const apiFieldSchema = z.object({
 	type: fieldTypeIdSchema(),
 	required: z.boolean().default(false),
 	unique: z.boolean().default(false),
-	/** Only admins, service keys, plugins and API rules see the field. */
+	/** Only admins, API keys, plugins and API rules see the field. */
 	hidden: z.boolean().default(false),
 	defaultValue: z.string().nullable().default(null),
 	options: fieldOptionsSchema.default({})

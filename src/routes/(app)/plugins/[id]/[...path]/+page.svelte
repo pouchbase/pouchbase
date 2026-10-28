@@ -11,6 +11,8 @@
 	const id = $derived(page.params.id ?? '');
 	const result = $derived(await getPluginPage({ id, path: page.params.path ?? '' }));
 
+	const layout = $derived(result.page.layout);
+
 	// What the plugin's page component gets: the path below the page and its own routes.
 	const props = $derived<PageProps>({
 		params: result.params.split('/').filter(Boolean),
@@ -40,8 +42,16 @@
 	</Breadcrumb.Root>
 </Topbar.Root>
 
-<Page.Root>
-	<div class="mx-auto flex w-full max-w-5xl flex-col gap-6">
+<!-- The page's `layout`: the reading width, the full width, or all of the space without padding. -->
+<Page.Root fill={layout === 'full'}>
+	<div
+		class={[
+			'flex w-full flex-col',
+			layout === 'default' && 'mx-auto max-w-5xl gap-6',
+			layout === 'wide' && 'gap-6',
+			layout === 'full' && 'min-h-0 flex-1'
+		]}
+	>
 		<!-- A new page of the plugin is a new component; the same one keeps its state across params. -->
 		{#key `${result.plugin.id}@${result.plugin.version}:${result.page.component}`}
 			<PluginComponent.Root plugin={result.plugin} path={result.page.component} {props} />

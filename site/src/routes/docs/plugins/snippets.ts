@@ -82,6 +82,8 @@ color-picker/
 │   └── gitlab/
 │       ├── provider.ts          # defineAuthProvider({ ... })
 │       └── icon.svg             # the provider's logo
+├── collections/
+│   └── notes.ts                 # defineCollection({ fields, indexes, rules })
 ├── routes/
 │   ├── stats.ts                 # export const GET, POST, ...
 │   └── items/
@@ -411,7 +413,7 @@ export default defineAuthProvider({
 		tokenUrl: 'https://gitlab.com/oauth/token',
 		userinfoUrl: 'https://gitlab.com/oauth/userinfo'
 	}),
-	label: 'GitLab', // on the sign-in button; defaults to the provider id
+	label: 'GitLab', // on the sign-in button; defaults to the id, capitalized
 	icon: logo, // the logo on the button, in its own colors; or an Iconify name
 	consoleUrl: 'https://gitlab.com/-/user_settings/applications' // where an admin registers the app
 });`

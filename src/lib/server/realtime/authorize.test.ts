@@ -170,7 +170,7 @@ describe('authorizationChecks', () => {
 		for (const viewRule of [
 			'author == $user.id',
 			'any(members) == $user.id',
-			'published == true and views > 10'
+			'published == true && views > 10'
 		]) {
 			const checks = authorizationChecks({
 				action: 'update',
@@ -248,7 +248,7 @@ describe('authorizationChecks', () => {
 			type: 'text' as const
 		}));
 		const condition = (fields: typeof readable) =>
-			fields.map((field) => `${field.name} != "x"`).join(' and ');
+			fields.map((field) => `${field.name} != "x"`).join(' && ');
 		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
 
 		const [update] = authorizationChecks({
@@ -273,8 +273,8 @@ describe('authorizationChecks', () => {
 		}));
 		const rule = readable
 			.slice(0, 30)
-			.map((field) => `not contains(${field.name}, "x")`)
-			.join(' and ');
+			.map((field) => `!contains(${field.name}, "x")`)
+			.join(' && ');
 		const row = Object.fromEntries([['id', 'p1'], ...readable.map((field) => [field.name, 'y'])]);
 
 		const [update] = authorizationChecks({
@@ -291,8 +291,8 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `not contains(${field.name}, "x")`)
-						.join(' and ')
+						.map((field) => `!contains(${field.name}, "x")`)
+						.join(' && ')
 				)
 			]
 		});
@@ -313,8 +313,8 @@ describe('authorizationChecks', () => {
 					ADA,
 					readable
 						.slice(30)
-						.map((field) => `not contains(${field.name}, "x")`)
-						.join(' and ')
+						.map((field) => `!contains(${field.name}, "x")`)
+						.join(' && ')
 				)
 			]
 		});

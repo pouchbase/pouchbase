@@ -31,10 +31,7 @@
 			'POST /api/schema/import',
 			'Applies an export file: { applied, plan }; ?dryRun=true, ?removeMissing=true, ?force=true'
 		],
-		[
-			'GET /api/types?token=…',
-			'TypeScript types of every collection, as text (token or service key)'
-		]
+		['GET /api/types?token=…', 'TypeScript types of every collection, as text (token or API key)']
 	];
 
 	const body = [
@@ -54,16 +51,16 @@
 		['204', 'Deleted; no body'],
 		['400', 'The body isn’t valid (issues per field), or the name isn’t allowed'],
 		['401', 'The API key is missing or invalid'],
-		[
-			'403',
-			'The key doesn’t have the service scope, or a built-in collection can’t be renamed or deleted'
-		],
-		['404', 'The collection doesn’t exist'],
+		['403', 'A built-in collection can’t be renamed or deleted, or the key is a plugin’s'],
+		['404', 'The collection, or a collection named in an export, doesn’t exist'],
 		[
 			'409',
-			'The name is taken, other collections still link to it, or the changes remove data without force'
+			'The name is taken, other collections still link to it, the changes remove data without force, or a publish, pull, backup or restore is running'
 		],
-		['422', 'An import has relations to collections or field types this instance doesn’t have']
+		[
+			'422',
+			'An import has relations to collections or field types this instance doesn’t have, or stopped partway ({ message, done })'
+		]
 	];
 </script>
 
@@ -73,10 +70,9 @@
 	{sections}
 >
 	<p>
-		The schema API needs an <a href={resolve('/docs/platform/api-keys')}>API key</a> with the
-		<strong>service</strong> scope, as <Code.Root>Authorization: Bearer pbk_…</Code.Root>, so it is
-		for deploy scripts and other server-side code. The field types, rules and settings are explained
-		in the <a href={resolve('/docs/platform/collections')}>platform docs</a>.
+		The schema API needs an <a href={resolve('/docs/platform/api-keys')}>API key</a>, so it is for
+		deploy scripts and other server-side code. Field types, rules and settings are explained under
+		<a href={resolve('/docs/platform/collections')}>Collections</a>.
 	</p>
 
 	<h2 id="endpoints">Endpoints</h2>
@@ -90,9 +86,9 @@
 	<DocsTable head={['Field', 'Value']} rows={body} />
 
 	<p>
-		Field <Code.Root>type</Code.Root>s are the ids of the field types, such as
-		<Code.Root>text</Code.Root>, <Code.Root>rich_text</Code.Root> or <Code.Root>relation</Code.Root
-		>. A relation points to a collection by its id, in <Code.Root>options.collectionId</Code.Root>.
+		A field's <Code.Root>type</Code.Root> is a field type id, such as <Code.Root>text</Code.Root> or
+		<Code.Root>relation</Code.Root>; a relation names its collection's id in
+		<Code.Root>options.collectionId</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -100,8 +96,7 @@
 	</CodeBlock.Root>
 
 	<p>
-		It answers <Code.Root>201</Code.Root> with the collection, in the same shape as
-		<Code.Root>GET /api/schema/&lt;name&gt;</Code.Root> returns it:
+		It answers with the collection, as <Code.Root>GET /api/schema/&lt;name&gt;</Code.Root> returns it:
 	</p>
 
 	<CodeBlock.Root title="201 Created">
@@ -111,11 +106,10 @@
 	<h2 id="change-a-collection">Change a collection</h2>
 
 	<p>
-		<Code.Root>PATCH /api/schema/&lt;name&gt;</Code.Root> takes the same fields, and only changes the
-		ones you send. <Code.Root>fields</Code.Root> and <Code.Root>indexes</Code.Root> are the whole list:
-		fields with an <Code.Root>id</Code.Root>, or else the name of an existing field, change that
-		field, the others are added, and the ones left out are deleted. <Code.Root>rules</Code.Root> keeps
-		the actions you leave out.
+		<Code.Root>PATCH /api/schema/&lt;name&gt;</Code.Root> changes only the parts you send.
+		<Code.Root>fields</Code.Root> and <Code.Root>indexes</Code.Root> are the whole list: fields matched
+		by <Code.Root>id</Code.Root>, or else by name, change, new ones are added and missing ones
+		deleted. <Code.Root>rules</Code.Root> keeps the actions you leave out.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -123,8 +117,8 @@
 	</CodeBlock.Root>
 
 	<p>
-		Changes that delete fields or data need <Code.Root>?force=true</Code.Root>. Without it, nothing
-		changes and the answer is a <Code.Root>409</Code.Root> with the plan of what would happen:
+		Changes that delete fields or data need <Code.Root>?force=true</Code.Root>; without it, nothing
+		changes and you get a <Code.Root>409</Code.Root> with the plan:
 	</p>
 
 	<CodeBlock.Root title="409 Conflict">
@@ -134,12 +128,10 @@
 	<h2 id="export-and-import">Export and import</h2>
 
 	<p>
-		An export file holds collections with their fields, indexes, rules and settings, without
-		records:
-		<Code.Root>{'{ format: 2, exportedAt, collections, related }'}</Code.Root>, where
-		<Code.Root>related</Code.Root> lists the collections relations point at that aren't in the file. An
-		import creates the collections of the file and changes existing ones to match it, matched by id and
-		then by name.
+		An export file, <Code.Root>{'{ format: 2, exportedAt, collections, related }'}</Code.Root>,
+		holds collections without records; <Code.Root>related</Code.Root> lists collections that relations
+		point at outside the file. An import creates the file's collections and changes existing ones, matched
+		by id and then by name, to match.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -151,14 +143,10 @@
 	</CodeBlock.Root>
 
 	<p>
-		<Code.Root>?dryRun=true</Code.Root> only returns the plan, with <Code.Root
-			>applied: false</Code.Root
-		>. Other collections stay unless you pass <Code.Root>?removeMissing=true</Code.Root>, and
-		changes that delete collections, fields or data need <Code.Root>?force=true</Code.Root>, as for
-		a change. Each step of the plan has a <Code.Root>severity</Code.Root> (<Code.Root
-			>safe</Code.Root
-		>,
-		<Code.Root>risky</Code.Root> or <Code.Root>destructive</Code.Root>) and a description in words.
+		<Code.Root>?dryRun=true</Code.Root> only returns the plan. Other collections stay unless you pass
+		<Code.Root>?removeMissing=true</Code.Root>; deleting collections, fields or data needs
+		<Code.Root>?force=true</Code.Root>. Each step has a <Code.Root>severity</Code.Root>:
+		<Code.Root>safe</Code.Root>, <Code.Root>risky</Code.Root> or <Code.Root>destructive</Code.Root>.
 	</p>
 
 	<h2 id="status-codes">Status codes</h2>
@@ -170,11 +158,9 @@
 	<p>
 		<Code.Root>GET /api/types</Code.Root> returns TypeScript types for every collection, as text. It takes
 		the token from the <strong>Types</strong> page of the dashboard, as
-		<Code.Root>?token=</Code.Root> or <Code.Root>Authorization: Bearer</Code.Root>, or an API key
-		with the <Code.Root>service</Code.Root> scope (<Code.Root>Authorization: Bearer pbk_…</Code.Root
-		>); without a valid one it answers <Code.Root>401</Code.Root>, and other API keys get
-		<Code.Root>403</Code.Root>. The
-		<a href={resolve('/docs/sdk/types')}>SDK</a> has a command that writes them to a file.
+		<Code.Root>?token=</Code.Root> or a bearer token, or an API key; otherwise it answers
+		<Code.Root>401</Code.Root>. The <a href={resolve('/docs/sdk/types')}>SDK</a> has a command that writes
+		them to a file.
 	</p>
 
 	<CodeBlock.Root title="Terminal">

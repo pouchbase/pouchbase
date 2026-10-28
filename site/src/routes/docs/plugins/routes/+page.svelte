@@ -34,7 +34,7 @@
 		},
 		{
 			member: 'ctx.log',
-			about: 'info, warn and error, written to the log of the plugin’s Worker.'
+			about: 'info, warn and error, written to the plugin’s log.'
 		},
 		{
 			member: 'ctx.admin',
@@ -74,7 +74,7 @@
 		{
 			status: '502',
 			about:
-				'The handler threw, returned no Response, its Worker couldn’t be reached or didn’t answer within 10 seconds. The reason is only in the Pouchbase log.'
+				'The handler threw, returned no Response, or its Worker couldn’t be reached or didn’t answer within 10 seconds. The reason is only in the Pouchbase log.'
 		}
 	];
 </script>
@@ -87,13 +87,12 @@
 	<h2 id="a-route">A route</h2>
 
 	<p>
-		Routes are the <Code.Root>routes</Code.Root> of <Code.Root>definePlugin</Code.Root>, by path.
-		Each has a handler per HTTP method it answers: <Code.Root>GET</Code.Root>,
-		<Code.Root>POST</Code.Root>, <Code.Root>PUT</Code.Root>, <Code.Root>PATCH</Code.Root> or
-		<Code.Root>DELETE</Code.Root>. A module that exports them, imported with
-		<Code.Root>import * as</Code.Root>, is one; its other exports are left alone. A path answers at
-		<Code.Root>/api/plugins/&lt;plugin&gt;&lt;path&gt;</Code.Root>, and <Code.Root>'/'</Code.Root>
-		is the plugin's root.
+		<Code.Root>routes</Code.Root> of <Code.Root>definePlugin</Code.Root> maps each path to a handler per
+		method: <Code.Root>GET</Code.Root>, <Code.Root>POST</Code.Root>, <Code.Root>PUT</Code.Root>,
+		<Code.Root>PATCH</Code.Root> or <Code.Root>DELETE</Code.Root>, usually a module imported with
+		<Code.Root>import * as</Code.Root> (its other exports are ignored). A path answers at
+		<Code.Root>/api/plugins/&lt;plugin&gt;&lt;path&gt;</Code.Root>; <Code.Root>'/'</Code.Root> is the
+		plugin's root.
 	</p>
 
 	<CodeBlock.Root title="plugin.ts">
@@ -115,9 +114,7 @@
 	<p>
 		<Code.Root>:name</Code.Root> in a path is a param, in <Code.Root>ctx.params</Code.Root>. A
 		static segment wins over a param: <Code.Root>/items/new</Code.Root> goes to
-		<Code.Root>'/items/new'</Code.Root> before <Code.Root>'/items/:id'</Code.Root>. The file name
-		doesn't matter: the demo registers <Code.Root>routes/item.ts</Code.Root> at
-		<Code.Root>'/items/:id'</Code.Root>.
+		<Code.Root>'/items/new'</Code.Root> before <Code.Root>'/items/:id'</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="routes/item.ts">
@@ -132,8 +129,8 @@
 			<Callout.Title>Routes are public</Callout.Title>
 			<Callout.Description>
 				Anyone can call them, from any origin. Check <Code.Root>ctx.admin</Code.Root> or
-				<Code.Root>ctx.user</Code.Root> before doing anything that needs either. See the
-				<a href={resolve('/docs/plugins/security')}>security model</a>.
+				<Code.Root>ctx.user</Code.Root> where it matters (see the
+				<a href={resolve('/docs/plugins/security')}>security model</a>).
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
@@ -145,7 +142,8 @@
 		</li>
 		<li>
 			<Code.Root>ctx.user</Code.Root> is the app user of the request's
-			<Code.Root>Authorization: Bearer &lt;token&gt;</Code.Root>, or <Code.Root>null</Code.Root>:
+			<Code.Root>Authorization: Bearer &lt;token&gt;</Code.Root>, or <Code.Root>null</Code.Root> (also
+			for an API key):
 		</li>
 	</ul>
 
@@ -155,9 +153,7 @@
 
 	<h2 id="the-context">The context</h2>
 
-	<p>
-		Every handler, of a route, a field type or a sign-in provider, gets <Code.Root>ctx</Code.Root>:
-	</p>
+	<p>Every handler, of a route, field type or sign-in provider, gets <Code.Root>ctx</Code.Root>:</p>
 
 	<Table.Root>
 		<Table.Header>
@@ -185,8 +181,7 @@
 
 	<p>
 		The handlers of routes, field types and sign-in providers are bundled into one module that runs
-		in its own Worker on your Cloudflare account; their components and icons stay out of it. In that
-		Worker:
+		in the plugin's own Worker on your Cloudflare account. In that Worker:
 	</p>
 
 	<ul>
@@ -202,6 +197,10 @@
 			npm packages the server code imports are bundled in, so install them as dependencies.
 			<Code.Root>cloudflare:*</Code.Root> and <Code.Root>node:*</Code.Root> modules aren't available.
 		</li>
+		<li>
+			A Pouchbase in development (<Code.Root>vite dev</Code.Root>) runs the module inside itself
+			instead, without these limits, so only install plugins you trust there.
+		</li>
 	</ul>
 
 	<CodeBlock.Root title="routes/github-status.ts">
@@ -211,8 +210,8 @@
 	<h2 id="status-codes">Status codes</h2>
 
 	<p>
-		A route's response reaches the caller as the route returns it. Pouchbase answers these itself,
-		with a JSON <Code.Root>message</Code.Root>:
+		A route's response reaches the caller as is. Pouchbase answers these itself, with a JSON
+		<Code.Root>message</Code.Root>:
 	</p>
 
 	<Table.Root>
@@ -233,7 +232,7 @@
 	</Table.Root>
 
 	<p>
-		Paths below <Code.Root>/assets</Code.Root> and <Code.Root>/modules</Code.Root> belong to Pouchbase,
-		which serves the plugin's images and components there.
+		Paths below <Code.Root>/assets</Code.Root> and <Code.Root>/modules</Code.Root> belong to Pouchbase
+		(the plugin's images and components).
 	</p>
 </DocsPage>

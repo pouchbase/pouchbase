@@ -56,6 +56,15 @@ export const PROVIDER_ID_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 export const RESERVED_PROVIDER_IDS: readonly string[] = ['password', 'email', 'otp'];
 
 /** `stats`, `reports/monthly`. */
+/**
+ * How much of the dashboard a page takes, below the top bar: `default` is the dashboard's own
+ * reading width with its padding, `wide` the full width with that padding, and `full` all of the
+ * space, without padding and with the page's own scrolling (an editor, a map, a board).
+ */
+export const PAGE_LAYOUTS = ['default', 'wide', 'full'] as const;
+
+export type PageLayout = (typeof PAGE_LAYOUTS)[number];
+
 const PAGE_PATH_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*$/;
 
 /** `api.example.com`, `*.example.com`. */
@@ -119,6 +128,8 @@ export const pageContributionSchema = z.object({
 	component: componentPath,
 	/** Whether the page gets a link in the sidebar. */
 	navigation: z.boolean().default(true),
+	/** How much of the dashboard the page takes (see `PAGE_LAYOUTS`); missing is `default`. */
+	layout: z.enum(PAGE_LAYOUTS).optional(),
 	/**
 	 * The page's icon in the sidebar, e.g. `ui/pages/stats.svg`: drawn in one color at 16 pixels,
 	 * like the dashboard's own links (see `svgIconIssues`). Missing shows a neutral icon.

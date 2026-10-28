@@ -20,9 +20,9 @@
 	<h2 id="how-it-works">How it works</h2>
 
 	<p>
-		An app opens a WebSocket to Pouchbase, signs in with the user's token and subscribes to a
-		collection, or to one record, optionally with a filter. Every create, update and delete that is
-		saved through the records API then reaches it as an event, without polling. Subscribe:
+		An app opens a WebSocket, signs in with the user's token and subscribes to a collection or one
+		record, optionally with a filter. Every create, update and delete saved through the records API
+		then reaches it as an event. Subscribe:
 	</p>
 
 	<ul>
@@ -43,8 +43,8 @@
 		<Callout.Body>
 			<Callout.Title>The view rule decides</Callout.Title>
 			<Callout.Description>
-				A subscription needs a view rule other than Admins only, and only sends the records that
-				rule lets the user see; see
+				A subscription needs a view rule other than Admins only, and only sends the records it lets
+				the user see; API keys see everything. See
 				<a
 					href={resolve('/docs/platform/collections/access-rules')}
 					class="font-medium underline underline-offset-2">Access rules</a
@@ -56,33 +56,28 @@
 	<h2 id="what-you-receive">What you receive</h2>
 
 	<ul>
+		<li>An event's record has the same shape as in the records API; for a delete, as it was.</li>
 		<li>
-			An event's record has the same shape as the records API returns it. For a delete, it is the
-			record as it was.
+			An update after which a record no longer matches the view rule or your
+			<Code.Root>where</Code.Root> sends no event.
 		</li>
 		<li>
-			A record that no longer matches the view rule or your <Code.Root>where</Code.Root> after an update
-			sends no event.
-		</li>
-		<li>
-			The rule sees the signed-in user as they were when the connection was made, and is checked
-			again on every reconnect.
+			The rule sees the user as they were when the connection opened, and is checked again on every
+			reconnect.
 		</li>
 		<li>Changes made outside the database API, such as restoring a backup, send no events.</li>
 		<li>
-			The records grid in the dashboard subscribes too: it updates while you look at it, and shows <strong
-				>Realtime</strong
-			> in the top bar while connected.
+			The records grid in the dashboard updates live, and shows <strong>Realtime</strong> in the top bar
+			while connected.
 		</li>
 	</ul>
 
 	<h2 id="hosting">Hosting</h2>
 
 	<p>
-		On Cloudflare Workers, every collection with subscribers has a Durable Object that holds its
-		sockets. It is SQLite-backed, so the Free plan works too, and it hibernates while no events come
-		in, so open sockets aren't billed for duration. On Docker and the single binary, the server
-		holds the sockets itself.
+		On Workers, every collection with subscribers has a Durable Object that holds its sockets. It is
+		SQLite-backed, so the Free plan works, and hibernates between events, so open sockets aren't
+		billed for duration. On Docker and the single binary, the server holds the sockets.
 	</p>
 
 	<p>

@@ -1,12 +1,12 @@
 import type { RequestHandler } from './$types';
 
-import { bearerToken, json, preflight, requestServiceKey, text } from '#lib/server/api.js';
+import { bearerToken, json, preflight, requestApiKey, text } from '#lib/server/api.js';
 import { API_KEY_PREFIX } from '#lib/server/services/api-keys.service.js';
 
 /**
  * TypeScript types of every collection, for the SDK's `pouchbase types` command and
  * `pouch.schema.types()`. It takes the token shown on the API types page in the admin
- * (`?token=…` or `Authorization: Bearer <token>`), or an API key with the `service` scope
+ * (`?token=…` or `Authorization: Bearer <token>`), or an API key
  * (`Authorization: Bearer pbk_…`).
  */
 export const GET: RequestHandler = async (event) => {
@@ -14,7 +14,7 @@ export const GET: RequestHandler = async (event) => {
 	const bearer = bearerToken(event);
 
 	if (bearer?.startsWith(API_KEY_PREFIX)) {
-		const auth = await requestServiceKey(event, 'download the types');
+		const auth = await requestApiKey(event);
 
 		if ('response' in auth) {
 			return auth.response;

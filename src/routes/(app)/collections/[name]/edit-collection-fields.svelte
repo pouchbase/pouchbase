@@ -202,8 +202,7 @@
 					<span class="w-16 text-center">Unique</span>
 					<span
 						class="w-16 text-center"
-						title="Only admins, API keys with the service scope and API rules see hidden fields"
-						>Hidden</span
+						title="Only admins, API keys and API rules see hidden fields">Hidden</span
 					>
 					<span class="w-16"></span>
 				{/snippet}

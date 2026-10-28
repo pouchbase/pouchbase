@@ -41,8 +41,9 @@
 			'any(<field>)',
 			'Each item of a multiple field: true when any item matches, as in any(tags) == "news" or contains(any(tags), "re")'
 		],
-		['not', 'The opposite of a condition: not contains(title, "draft")'],
-		['and  or', 'Both, either; not goes before and, and before or'],
+		['!  NOT', 'The opposite of a condition: !contains(title, "draft")'],
+		['&&  AND', 'Both conditions hold'],
+		['||  OR', 'Either condition holds; ! goes before &&, and && before ||'],
 		['( )', 'Grouping'],
 		['# …', 'A comment, until the end of the line']
 	];
@@ -82,9 +83,9 @@
 
 	const examples = [
 		['status == "published"', 'Published posts'],
-		['status != "draft" and views >= 100', 'Not drafts, with 100 views or more'],
+		['status != "draft" && views >= 100', 'Not drafts, with 100 views or more'],
 		['contains(title, "svelte")', 'Svelte in the title, in any case'],
-		['not contains(title, "draft")', 'No draft in the title'],
+		['!contains(title, "draft")', 'No draft in the title'],
 		['starts_with(slug, "release-")', 'A slug that starts with release-'],
 		['lower(status) == "draft"', 'Draft, in any case'],
 		['length(title) <= 80', 'A title of at most 80 characters'],
@@ -103,13 +104,13 @@
 		['author.role == "admin"', 'Written by an admin'],
 		['post.author == $user.id', 'Comments on posts of the signed-in user'],
 		['any(editors.team.name) == "Docs"', 'An editor in the Docs team'],
-		['featured == true or (status == "published" and views > 500)', 'Featured, or popular']
+		['featured == true || (status == "published" && views > 500)', 'Featured, or popular']
 	];
 
 	const problems = [
 		['status = "draft"', 'Use `==` to compare'],
-		['a && b', 'Use `and` to combine conditions'],
-		['title contains "x"', 'Use `contains(text, search)` or `not contains(text, search)`'],
+		['a == 1 and b == 2', 'Use `&&` or `AND` to combine conditions'],
+		['title contains "x"', 'Use `contains(text, search)` or `!contains(text, search)`'],
 		['published_at <= $now', 'Use `now()` for the current date and time'],
 		['contains(title)', 'Call it as `contains(text, search)`'],
 		['lower(title)', 'Compare `lower()` with a value, e.g. `lower(status) == "draft"`'],
@@ -136,8 +137,7 @@
 
 	<p>
 		A condition is an expression that is true or false for a record, such as
-		<Code.Root>status == "published" and views &gt; 10</Code.Root>. The same syntax is used in four
-		places:
+		<Code.Root>status == "published" &amp;&amp; views &gt; 10</Code.Root>. It is used in:
 	</p>
 
 	<ul>
@@ -163,17 +163,16 @@
 
 	<p>
 		A condition compares two operands, or is a function that is true or false on its own, such as
-		<Code.Root>contains(title, "svelte")</Code.Root>:
+		<Code.Root>contains(title, "svelte")</Code.Root>.
 	</p>
 
 	<DocsTable head={['Operand', 'Meaning']} rows={operands} />
 
 	<p>
-		<Code.Root>$user</Code.Root> is the user whose token came with the request; any field of
-		<Code.Root>users</Code.Root> can follow it, including fields you added. When nobody is signed in,
-		<Code.Root>$user.id != null</Code.Root> is false, and a comparison such as
-		<Code.Root>author == $user.id</Code.Root> matches no record, not even those without an author.
-		<Code.Root>$input</Code.Root> is only set in create and update rules; see
+		<Code.Root>$user</Code.Root> is the user of the request's token, with any field of
+		<Code.Root>users</Code.Root>. When nobody is signed in, <Code.Root>$user.id != null</Code.Root> is
+		false, and <Code.Root>author == $user.id</Code.Root> matches no record, not even those without an
+		author. <Code.Root>$input</Code.Root> is only set in create and update rules; see
 		<a href="{resolve('/docs/platform/collections/access-rules')}#checking-what-is-written"
 			>Access rules</a
 		>.
@@ -184,25 +183,23 @@
 	<p>
 		A relation field followed by a dot and a field name is that field of the related record:
 		<Code.Root>author.role</Code.Root> is the role of the post's author, and
-		<Code.Root>post.author.name</Code.Root> on a comment the name of the author of its post. A path goes
-		through at most three relations. It works anywhere a field does, also in functions:
-		<Code.Root>lower(author.name) == "ada"</Code.Root>. When the relation is empty, or the related
-		record is gone, the field is empty too, so <Code.Root>author.role == null</Code.Root> matches posts
-		without an author.
+		<Code.Root>post.author.name</Code.Root> on a comment the name of its post's author. It works anywhere
+		a field does, also in functions: <Code.Root>lower(author.name) == "ada"</Code.Root>. When the
+		relation is empty or the related record is gone, the field is empty, so
+		<Code.Root>author.role == null</Code.Root> matches posts without an author.
 	</p>
 
 	<p>
-		A multiple relation points to several records, so its fields go in <Code.Root>any()</Code.Root>:
-		<Code.Root>any(editors.role) == "admin"</Code.Root> is true when one of the editors is an admin. The
-		path may go on after it (<Code.Root>any(editors.team.name)</Code.Root>).
+		The fields of a multiple relation go in <Code.Root>any()</Code.Root>:
+		<Code.Root>any(editors.role) == "admin"</Code.Root> is true when one of the editors is an admin, and
+		the path may go on (<Code.Root>any(editors.team.name)</Code.Root>).
 	</p>
 
 	<p>
-		In a <Code.Root>where</Code.Root>, related records are checked against the view rule of their
-		collection, as with <Code.Root>include</Code.Root>: a related record the user may not see counts
-		as empty, so a filter can't find out what is in it, and a collection the API doesn't show can't
-		be followed at all. Hidden fields can't be used either. Access rules are written by you, so they
-		see every related record and field.
+		In a <Code.Root>where</Code.Root>, related records follow the view rule of their collection, as
+		with <Code.Root>include</Code.Root>: a record the user may not see counts as empty, and a
+		collection the API doesn't show can't be followed at all. Access rules see every related record
+		and field.
 	</p>
 
 	<h2 id="operators">Operators</h2>
@@ -210,9 +207,9 @@
 	<DocsTable head={['Operator', 'Meaning']} rows={operators} />
 
 	<p>
-		<Code.Root>and</Code.Root> binds more tightly than <Code.Root>or</Code.Root>, so
-		<Code.Root>a or b and c</Code.Root> means <Code.Root>a or (b and c)</Code.Root>; add parentheses
-		when you mean otherwise. A long condition can span several lines, with comments:
+		The words are uppercase. <Code.Root>a || b &amp;&amp; c</Code.Root> means
+		<Code.Root>a || (b &amp;&amp; c)</Code.Root>; add parentheses when you mean otherwise. A long
+		condition can span several lines, with comments:
 	</p>
 
 	<CodeBlock.Root title="Condition">
@@ -222,36 +219,27 @@
 	<h2 id="functions">Functions</h2>
 
 	<p>
-		Functions turn a value into another one, such as <Code.Root>lower(title)</Code.Root> or
-		<Code.Root>length(title)</Code.Root>, which you then compare:
-		<Code.Root>length(title) &lt;= 80</Code.Root>. <Code.Root>contains</Code.Root>,
-		<Code.Root>starts_with</Code.Root>, <Code.Root>ends_with</Code.Root> and <Code.Root
-			>like</Code.Root
-		>
-		are true or false, so they are conditions of their own; put <Code.Root>not</Code.Root> in front for
-		the opposite. The rule editor suggests them as you type. Arguments are values: fields, strings, numbers,
+		Most functions give a value to compare: <Code.Root>length(title) &lt;= 80</Code.Root>.
+		<Code.Root>contains</Code.Root>, <Code.Root>starts_with</Code.Root>,
+		<Code.Root>ends_with</Code.Root> and <Code.Root>like</Code.Root> are conditions of their own; put
+		<Code.Root>!</Code.Root> in front for the opposite. Arguments can be fields, strings, numbers,
 		<Code.Root>$user</Code.Root> and <Code.Root>$input</Code.Root> fields, and other functions.
 	</p>
 
 	<DocsTable head={['Function', 'Gives']} rows={functions} />
 
-	<p>
-		"In any case" means without regard to upper and lower case for the letters A to Z; other
-		letters, such as é and É, are compared exactly.
-	</p>
+	<p>"In any case" ignores case for the letters A to Z only; é and É are compared exactly.</p>
 
 	<h2 id="dates">Dates</h2>
 
 	<p>
 		Date fields hold ISO 8601 text, and Created and Updated fields milliseconds since 1970;
-		conditions compare them all as dates. <Code.Root>published_at &lt;= now()</Code.Root>,
-		<Code.Root>created_at &lt;= now()</Code.Root> and <Code.Root
-			>created_at &gt;= "2026-01-01"</Code.Root
+		conditions compare them all as dates, so <Code.Root>created_at &gt;= "2026-01-01"</Code.Root> works,
+		and so does comparing a Created field with a Date field. A string such as <Code.Root
+			>"2026-01-01T09:30"</Code.Root
 		>
-		all work, and so does comparing a Created field with a Date field. A string such as
-		<Code.Root>"2026-01-01"</Code.Root> or <Code.Root>"2026-01-01T09:30"</Code.Root> counts as UTC unless
-		it ends in a zone (<Code.Root>"2026-01-01T09:30:00+02:00"</Code.Root>). Every date function
-		works in UTC.
+		counts as UTC unless it ends in a zone (<Code.Root>"2026-01-01T09:30:00+02:00"</Code.Root>).
+		Every date function works in UTC.
 	</p>
 
 	<DocsTable head={['Function', 'Gives']} rows={dateFunctions} />
@@ -260,16 +248,11 @@
 
 	<p>
 		<Code.Root>null</Code.Root> and <Code.Root>""</Code.Root> both stand for an empty value:
-		<Code.Root>cover == null</Code.Root> and <Code.Root>cover == ""</Code.Root> both match records without
-		a cover, and <Code.Root>!=</Code.Root> matches the ones with one. For a multiple field,
-		<Code.Root>tags == ""</Code.Root> matches records without any tags. The other comparisons never match
-		an empty value: <Code.Root>views &lt; 10</Code.Root> leaves out records without views.
-	</p>
-
-	<p>
-		<Code.Root>not</Code.Root> matches everything the condition doesn't:
-		<Code.Root>not (views &gt; 10)</Code.Root> includes records without views, and
-		<Code.Root>not contains(title, "x")</Code.Root> records without a title.
+		<Code.Root>cover == null</Code.Root> and <Code.Root>cover == ""</Code.Root> match records without
+		a cover, <Code.Root>!=</Code.Root> those with one, and <Code.Root>tags == ""</Code.Root> records without
+		tags. Other comparisons never match an empty value: <Code.Root>views &lt; 10</Code.Root>
+		leaves out records without views. <Code.Root>!</Code.Root> matches everything the condition doesn't,
+		so <Code.Root>!(views &gt; 10)</Code.Root> includes them.
 	</p>
 
 	<h2 id="examples">Examples</h2>
@@ -285,22 +268,22 @@
 			Blob fields can't be compared.
 		</li>
 		<li>
-			In conditions of app users (their <Code.Root>where</Code.Root>),
-			<a href="{resolve('/docs/platform/collections')}#hidden-fields">hidden fields</a>
-			don't exist: not of the collection, not through a path, and not as
-			<Code.Root>$user.&lt;field&gt;</Code.Root>. Access rules can use them.
+			In a <Code.Root>where</Code.Root> of app users,
+			<a href="{resolve('/docs/platform/collections')}#hidden-fields">hidden fields</a> don't exist,
+			also not through a path or as <Code.Root>$user.&lt;field&gt;</Code.Root>. Access rules can use
+			them.
 		</li>
 		<li>
-			Field names are lowercase letters, digits and underscores, starting with a letter;
-			<Code.Root>and</Code.Root>, <Code.Root>or</Code.Root> and <Code.Root>not</Code.Root> are keywords.
-			A field may share its name with a function (<Code.Root>date</Code.Root>,
-			<Code.Root>count</Code.Root>): without parentheses it is the field.
+			Lowercase <Code.Root>and</Code.Root>, <Code.Root>or</Code.Root> and <Code.Root>not</Code.Root>
+			can't be field names, so a slip such as <Code.Root>a == 1 and b == 2</Code.Root> fails. A field
+			may share its name with a function (<Code.Root>date</Code.Root>, <Code.Root>count</Code.Root
+			>): without parentheses it is the field.
 		</li>
 	</ul>
 
 	<p>
-		An invalid <Code.Root>where</Code.Root> fails with <Code.Root>invalid</Code.Root> (400), and the message
-		says what is wrong:
+		An invalid <Code.Root>where</Code.Root> fails with <Code.Root>400</Code.Root> and a message that says
+		what is wrong:
 	</p>
 
 	<CodeBlock.Root title="400 Bad Request">
@@ -314,9 +297,8 @@
 		<Callout.Body>
 			<Callout.Title>A broken rule locks the action</Callout.Title>
 			<Callout.Description>
-				The same mistakes in an access rule make the action fail with <Code.Root
-					>forbidden</Code.Root
-				>, for example after a field the rule uses was deleted. The rule editor underlines them.
+				The same mistakes in an access rule, for example after a field it uses was deleted, make the
+				action fail with <Code.Root>403</Code.Root>. The rule editor underlines them.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>

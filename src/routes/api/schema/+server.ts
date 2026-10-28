@@ -1,19 +1,19 @@
 import type { RequestHandler } from './$types';
 
-import { json, preflight, requestServiceKey } from '#lib/server/api.js';
+import { json, preflight, requestApiKey } from '#lib/server/api.js';
 import { readJsonObject } from '#lib/server/api-body.js';
 import { apiCreateCollectionSchema } from '#lib/schemas/collections.js';
 
-import { errorResponse, invalidBody, PURPOSE } from './responses';
+import { errorResponse, invalidBody } from './responses';
 
 /**
  * The collections API manages the schema: collections, their fields, indexes and API rules. It
- * needs an API key with the `service` scope (`Authorization: Bearer pbk_…`).
+ * needs an API key (`Authorization: Bearer pbk_…`).
  */
 
 /** Every collection with its fields, indexes, API rules and settings → `{ items }`. */
 export const GET: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;
@@ -33,7 +33,7 @@ export const GET: RequestHandler = async (event) => {
  * collection.
  */
 export const POST: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;

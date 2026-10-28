@@ -2,6 +2,6 @@ import type { PageServerLoad } from './$types';
 
 import { highlightAll } from '#lib/server/highlight.js';
 
-import { apiKeyClient, asService } from '../snippets';
+import { adminClient, apiKeyClient } from '../snippets';
 
-export const load: PageServerLoad = () => ({ code: highlightAll({ apiKeyClient, asService }) });
+export const load: PageServerLoad = () => ({ code: highlightAll({ adminClient, apiKeyClient }) });

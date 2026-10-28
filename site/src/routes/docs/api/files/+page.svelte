@@ -18,7 +18,7 @@
 	const params = [
 		[
 			'size',
-			'A thumbnail size from the settings of files, such as 100x100, 100x100:fit or 0x100; other sizes return the original',
+			'A thumbnail size from the settings of files: WxH, WxH:top, WxH:bottom, WxH:fit, Wx0 or 0xH; other sizes return the original',
 			'400x300'
 		],
 		['download', 'Serve the file as a download, also for images; takes no value', '(none)']
@@ -40,9 +40,8 @@
 
 	<p>
 		<Code.Root>GET /api/files/&lt;id&gt;</Code.Root> serves a file of the built-in
-		<a href={resolve('/docs/platform/collections/files')}>files collection</a>. It needs no token:
-		files are public to anyone who has their id, and ids are random, so URLs can't be guessed. Use
-		the URL as it is in an <Code.Root>&lt;img src&gt;</Code.Root> or a download link.
+		<a href={resolve('/docs/platform/collections/files')}>files collection</a>, without a token: ids
+		are random, so anyone with the URL can load the file, but nobody can guess it.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -53,24 +52,20 @@
 
 	<DocsTable head={['Parameter', 'Meaning', 'Example']} rows={params} />
 
-	<p>
-		Thumbnails are made of PNG, JPEG, GIF and WebP images, for the sizes listed in the settings of
-		<Code.Root>files</Code.Root>.
-	</p>
+	<p>Thumbnails are made of PNG, JPEG, GIF and WebP images.</p>
 
 	<h2 id="response">The response</h2>
 
 	<p>
-		The body is the file itself. PNG, JPEG, GIF, WebP and AVIF images are served inline; every other
-		type, and every file with <Code.Root>?download</Code.Root>, as an attachment with its original
-		name, so an uploaded HTML or SVG file can never run scripts:
+		PNG, JPEG, GIF, WebP and AVIF images are served inline. Every other type, and any file with
+		<Code.Root>?download</Code.Root>, is an <Code.Root>application/octet-stream</Code.Root> attachment
+		with its original name, so an uploaded HTML or SVG file can't run scripts. Browsers may cache it for
+		an hour:
 	</p>
 
 	<CodeBlock.Root title="Response headers">
 		<CodeBlock.Source code={data.code.headers} />
 	</CodeBlock.Root>
-
-	<p>Browsers may cache a file for an hour. Errors are JSON:</p>
 
 	<CodeBlock.Root title="404 Not Found">
 		<CodeBlock.Source code={data.code.notFound} />
@@ -83,9 +78,8 @@
 	<p>
 		Each file is also a record of <Code.Root>files</Code.Root>, with its
 		<Code.Root>name</Code.Root>, <Code.Root>mime_type</Code.Root> and <Code.Root>size</Code.Root>.
-		List, get and delete those through the <a href={resolve('/docs/api/records')}>records API</a>,
-		at
-		<Code.Root>/api/db/files</Code.Root>, as the access rules of <Code.Root>files</Code.Root> allow. Files
-		are uploaded in the dashboard; the API doesn't create them.
+		List, get and delete them through the <a href={resolve('/docs/api/records')}>records API</a> at
+		<Code.Root>/api/db/files</Code.Root>. Files are uploaded in the dashboard; the API doesn't
+		create them.
 	</p>
 </DocsPage>

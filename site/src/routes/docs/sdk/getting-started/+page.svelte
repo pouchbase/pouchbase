@@ -23,7 +23,7 @@
 		],
 		[
 			'apiKey',
-			'An API key (pbk_…) for server-side code; needed for pouch.mail, pouch.schema and pouch.asService()'
+			'An API key (pbk_…) for server-side code; the client then acts as an admin, and pouch.mail and pouch.schema work'
 		],
 		['headers', 'Headers sent with every request'],
 		[
@@ -37,14 +37,14 @@
 	];
 
 	const services = [
-		['pouch.auth', 'Sign-up, sign-in, OAuth, password resets and email verification'],
+		['pouch.auth', 'Register, login, OAuth, password resets and email verification'],
 		['pouch.session', 'The signed-in user, and their token'],
 		['pouch.db', 'The records of every collection'],
 		['pouch.realtime', 'Changes to records as they happen'],
 		['pouch.files', 'URLs of uploaded files and their thumbnails'],
 		['pouch.functions', 'Calls to your functions'],
 		['pouch.mail', 'Email templates, sent with an API key'],
-		['pouch.schema', 'Collections, fields, indexes and rules, with a service key']
+		['pouch.schema', 'Collections, fields, indexes and rules, with an API key']
 	];
 </script>
 
@@ -56,10 +56,9 @@
 	<h2 id="install">Install</h2>
 
 	<p>
-		<Code.Root>@pouchbasejs/js-sdk</Code.Root> is the TypeScript client for the Pouchbase API. It has
-		no dependencies and runs wherever <Code.Root>fetch</Code.Root> exists: browsers, Node 20 or later,
-		Deno, Bun and Cloudflare Workers. You need a running Pouchbase instance; see
-		<a href={resolve('/docs/platform/getting-started')}>Getting started</a> to install one.
+		The SDK has no dependencies and runs wherever <Code.Root>fetch</Code.Root> exists: browsers, Node
+		20 or later, Deno, Bun and Cloudflare Workers. You need a running instance; see
+		<a href={resolve('/docs/platform/getting-started')}>Getting started</a>.
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -69,7 +68,6 @@
 	<h2 id="create-a-client">Create a client</h2>
 
 	<p>
-		<Code.Root>createClient()</Code.Root> takes the URL of your instance and returns a client for it.
 		Make one client and share it, for example from a module of its own. Pass the
 		<a href={resolve('/docs/sdk/types')}>generated schema</a> to type your collections.
 	</p>
@@ -78,25 +76,18 @@
 		<CodeBlock.Source code={data.code.client} />
 	</CodeBlock.Root>
 
-	<p>The client has a property per part of the API:</p>
-
 	<DocsTable head={['Property', 'For']} rows={services} />
 
 	<h2 id="options">Options</h2>
 
-	<p>The second argument of <Code.Root>createClient()</Code.Root> takes these options:</p>
-
 	<DocsTable head={['Option', 'Meaning']} rows={options} />
 
 	<p>
-		<Code.Root>session</Code.Root> is explained under
-		<a href="{resolve('/docs/sdk/authentication')}#session-storage">Session storage</a>, and
-		<Code.Root>apiKey</Code.Root> under <a href={resolve('/docs/sdk/api-keys')}>API keys</a>.
+		See <a href="{resolve('/docs/sdk/authentication')}#session-storage">Session storage</a> and
+		<a href={resolve('/docs/sdk/api-keys')}>API keys</a>.
 	</p>
 
 	<h2 id="first-steps">First steps</h2>
-
-	<p>Sign a user in, then read records as that user:</p>
 
 	<CodeBlock.Root title="TypeScript">
 		<CodeBlock.Source code={data.code.firstSteps} />
@@ -112,12 +103,9 @@
 	<h2 id="other-requests">Other requests</h2>
 
 	<p>
-		For an endpoint the SDK doesn't wrap, such as a plugin's route, <Code.Root
-			>pouch.request()</Code.Root
-		>
-		calls any API path with the session's token, sends <Code.Root>body</Code.Root> as JSON and returns
-		the parsed answer. <Code.Root>pouch.url()</Code.Root> builds an absolute URL, and
-		<Code.Root>pouch.health()</Code.Root> checks that the instance serves requests.
+		For an endpoint the SDK doesn't wrap, such as a plugin's route,
+		<Code.Root>pouch.request()</Code.Root> calls any API path with the client's API key or session token,
+		sends <Code.Root>body</Code.Root> as JSON and returns the parsed answer.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

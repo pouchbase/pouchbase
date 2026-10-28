@@ -31,7 +31,7 @@ export const multiline = snippet(
 status == "published"
 
 # Drafts, only for their author
-or (status == "draft" and author == $user.id)`
+|| (status == "draft" && author == $user.id)`
 );
 
 export const filterError = snippet(
@@ -44,23 +44,23 @@ export const ruleUpdate = snippet(
 	'bash',
 	`
 # The author, who may leave the author out or keep it themselves
-author == $user.id and ($input.author == null or $input.author == $user.id)`
+author == $user.id && ($input.author == null || $input.author == $user.id)`
 );
 
 export const ruleRecipes = snippet(
 	'bash',
 	`
 # list and view: published posts for everyone, drafts for their author
-status == "published" or author == $user.id
+status == "published" || author == $user.id
 
 # create: signed in, and only with yourself as the author
-$user.id != null and author == $user.id
+$user.id != null && author == $user.id
 
 # update: only the author, who can't hand the post to someone else
-author == $user.id and ($input.author == null or $input.author == $user.id)
+author == $user.id && ($input.author == null || $input.author == $user.id)
 
 # delete: the author, or a user with the editor role
-author == $user.id or $user.role == "editor"`
+author == $user.id || $user.role == "editor"`
 );
 
 export const fileRecord = snippet(

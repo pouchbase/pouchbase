@@ -23,6 +23,14 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			return json({ message: 'Invalid or expired token' }, { status: 401 });
 		}
 
+		if (result.error.code === 22005) {
+			return json({ message: 'Invalid API key' }, { status: 401 });
+		}
+
+		if (result.error.code === 22006) {
+			return json({ message: 'A plugin key can only use the records API' }, { status: 401 });
+		}
+
 		console.error('[realtime] session failed', result.error);
 		return json({ message: result.error.message }, { status: 500 });
 	}

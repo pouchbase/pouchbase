@@ -1,7 +1,7 @@
 import type { ServiceError } from './base.service';
 import type { ResultAsync } from 'neverthrow';
 
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { generateToken, hashToken } from '../crypto';
@@ -11,18 +11,12 @@ import { Service } from './base.service';
 /**
  * API keys: secrets for server-side code (back-ends and functions) to call the parts of the API an
  * app user can't, such as `/api/mail/send`. Keys are sent as `Authorization: Bearer pbk_…`.
- * Admins create keys on the API keys page; every deployed function gets a key of its own as
- * `POUCHBASE_API_KEY`, renewed on each deploy. A key with the `service` scope also uses the
- * records API as an admin: the collections' API rules don't apply to it. The Worker of an
- * installed plugin has a key with the `plugin` scope, also renewed on each deploy, which only
- * reaches the records API of the collections the plugin may use; those keys aren't listed.
+ * Every key acts as an admin: it reaches the whole API, and the collections' API rules don't apply
+ * to it. Admins create keys on the API keys page; every deployed function gets a key of its own as
+ * `POUCHBASE_API_KEY`, renewed on each deploy. The Worker of an installed plugin has a key too,
+ * also renewed on each deploy, which only reaches the records API of the collections the plugin
+ * may use (see `PluginsService.grant`); those keys aren't listed.
  */
-
-/**
- * `standard`: the server-only endpoints; `service`: those and the records API without API rules;
- * `plugin`: the records API of a plugin's collections (see `PluginsService.grant`).
- */
-export type ApiKeyScope = (typeof apiKeys.$inferSelect)['scope'];
 
 /** An API key as the API keys page lists it; the key itself is only shown once. */
 export type ApiKey = {
@@ -30,7 +24,6 @@ export type ApiKey = {
 	name: string;
 	/** The first characters of the key. */
 	prefix: string;
-	scope: ApiKeyScope;
 	/** Set for the key of a function. */
 	functionName: string | null;
 	/** Set for the key of a plugin. */
@@ -49,7 +42,6 @@ const COLUMNS = {
 	id: apiKeys.id,
 	name: apiKeys.name,
 	prefix: apiKeys.prefix,
-	scope: apiKeys.scope,
 	functionName: functions.name,
 	pluginId: apiKeys.pluginId,
 	createdAt: apiKeys.createdAt,
@@ -75,28 +67,27 @@ export class ApiKeysService extends Service {
 				.select(COLUMNS)
 				.from(apiKeys)
 				.leftJoin(functions, eq(functions.id, apiKeys.functionId))
-				.where(ne(apiKeys.scope, 'plugin'))
+				.where(isNull(apiKeys.pluginId))
 				.orderBy(desc(apiKeys.createdAt)),
 			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
 		);
 	}
 
 	/** Creates a key; `key` can't be read back later. */
-	create(name: string, scope: ApiKeyScope): ResultAsync<ApiKey & { key: string }, QueryFailed> {
+	create(name: string): ResultAsync<ApiKey & { key: string }, QueryFailed> {
 		const { key, prefix } = newKey();
 
 		return fromPromise(
 			(async () => {
 				const [row] = await this.db
 					.insert(apiKeys)
-					.values({ name, prefix, scope, keyHash: await hashToken(key) })
+					.values({ name, prefix, keyHash: await hashToken(key) })
 					.returning();
 
 				return {
 					id: row.id,
 					name: row.name,
 					prefix: row.prefix,
-					scope: row.scope,
 					functionName: null,
 					pluginId: null,
 					createdAt: row.createdAt,
@@ -223,7 +214,6 @@ export class ApiKeysService extends Service {
 					.values({
 						name: `Plugin ${pluginId}`,
 						prefix,
-						scope: 'plugin',
 						keyHash: await hashToken(key),
 						pluginId
 					})

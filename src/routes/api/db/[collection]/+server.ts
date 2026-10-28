@@ -20,7 +20,7 @@ function integer(value: string | null, fallback: number, min: number) {
 
 /**
  * Lists the records of a collection that its list rule allows.
- * Query: `where` (`status == "published" and views > 10`), `order` (`created_at:desc,title`),
+ * Query: `where` (`status == "published" && views > 10`), `order` (`created_at:desc,title`),
  * `select` (`id,title`), `include` (`author,comments.author`: relation fields to replace by their
  * records), `limit` (default 30, at most 500) and `offset` (default 0) → `{ items, total, limit,
  * offset }`.

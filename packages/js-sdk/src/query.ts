@@ -147,7 +147,7 @@ function fieldName(name: string) {
  * users.
  *
  * ```ts
- * pouch.db.posts.findMany({ where: condition`author == $user.id or contains(title, ${search})` });
+ * pouch.db.posts.findMany({ where: condition`author == $user.id || contains(title, ${search})` });
  * ```
  */
 export function condition(strings: TemplateStringsArray, ...values: ConditionValue[]): Condition {
@@ -212,7 +212,7 @@ function fieldParts(name: string, comparisons: unknown): string[] {
 				// Nothing to match: no record matches.
 				return [
 					values.length
-						? `(${values.map((item) => `${name} == ${literal(item)}`).join(' or ')})`
+						? `(${values.map((item) => `${name} == ${literal(item)}`).join(' || ')})`
 						: NOTHING
 				];
 			case 'notIn':
@@ -227,7 +227,7 @@ function fieldParts(name: string, comparisons: unknown): string[] {
 				if (fn) {
 					const call = `${fn.name}(${name}, ${literal(value as ConditionValue)})`;
 
-					return [fn.not ? `not ${call}` : call];
+					return [fn.not ? `!${call}` : call];
 				}
 
 				const symbol = OPERATORS[operator];
@@ -264,13 +264,13 @@ export function compileWhere(where: object | undefined): string {
 
 			const filled = compiled.filter(Boolean);
 
-			return filled.length ? [`(${filled.join(key === '$or' ? ' or ' : ' and ')})`] : [];
+			return filled.length ? [`(${filled.join(key === '$or' ? ' || ' : ' && ')})`] : [];
 		}
 
 		return fieldParts(fieldName(key), comparisons);
 	});
 
-	return parts.join(' and ');
+	return parts.join(' && ');
 }
 
 /** An `orderBy` object as `order` (`created_at:desc,title:asc`). */

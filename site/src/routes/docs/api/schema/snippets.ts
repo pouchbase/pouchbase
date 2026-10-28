@@ -4,7 +4,7 @@ export const create = snippet(
 	'bash',
 	`
 curl -X POST https://pouchbase.example.com/api/schema \\
-	-H "Authorization: Bearer $POUCHBASE_SERVICE_KEY" \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
 	-H "Content-Type: application/json" \\
 	-d '{
 		"name": "posts",
@@ -52,7 +52,7 @@ export const update = snippet(
 	`
 # Only the rules change; the actions left out keep their rule
 curl -X PATCH https://pouchbase.example.com/api/schema/posts \\
-	-H "Authorization: Bearer $POUCHBASE_SERVICE_KEY" \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
 	-H "Content-Type: application/json" \\
 	-d '{ "rules": { "update": "author == $user.id" } }'`
 );
@@ -84,17 +84,17 @@ export const transfer = snippet(
 	`
 # Export some collections from one instance…
 curl "https://dev.example.com/api/schema/export?collections=posts,comments" \\
-	-H "Authorization: Bearer $DEV_SERVICE_KEY" > schema.json
+	-H "Authorization: Bearer $DEV_API_KEY" > schema.json
 
 # …see what importing them into another would change…
 curl -X POST "https://pouchbase.example.com/api/schema/import?dryRun=true" \\
-	-H "Authorization: Bearer $POUCHBASE_SERVICE_KEY" \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
 	-H "Content-Type: application/json" \\
 	--data @schema.json
 
 # …and import them
 curl -X POST "https://pouchbase.example.com/api/schema/import?force=true" \\
-	-H "Authorization: Bearer $POUCHBASE_SERVICE_KEY" \\
+	-H "Authorization: Bearer $POUCHBASE_API_KEY" \\
 	-H "Content-Type: application/json" \\
 	--data @schema.json`
 );

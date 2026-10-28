@@ -1,5 +1,7 @@
 {
-	"files.associations": {
-		"*.css": "tailwindcss"
-	}
+    "files.associations": {
+        "*.css": "tailwindcss"
+    },
+    // site/, test-app/ and registry/ have no tests; their SvelteKit Vite configs can't run Vitest
+    "vitest.configSearchPatternExclude": "{**/node_modules/**,**/.*/**,**/*.d.ts,site/**,test-app/**,registry/**}"
 }

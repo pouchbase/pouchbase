@@ -26,12 +26,12 @@
 	{sections}
 >
 	<p>
-		<Code.Root>@pouchbasejs/ui</Code.Root> holds the primitives of the dashboard, built on
+		<Code.Root>@pouchbasejs/ui</Code.Root> (MIT) holds the primitives of the dashboard, built on
 		<a href="https://svelte.dev">Svelte 5</a>, <a href="https://bits-ui.com">bits-ui</a>,
 		<a href="https://iconify.design">Iconify</a> and
 		<a href="https://tailwindcss.com">Tailwind CSS 4</a>. A
-		<a href={resolve('/docs/plugins')}>plugin</a> uses them so its pages and fields look like the rest
-		of the dashboard; an app can install them like any other package. The package is MIT licensed.
+		<a href={resolve('/docs/plugins')}>plugin</a> uses them to look like the rest of the dashboard; an
+		app can install them like any other package.
 	</p>
 
 	<h2 id="components">Components</h2>
@@ -60,9 +60,9 @@
 	<h2 id="install">Install</h2>
 
 	<p>
-		In an app, install the package with its peer dependencies. A plugin doesn't: see <a
+		In an app, install the package with its peer dependencies (a plugin doesn't: see <a
 			href="#in-a-plugin">In a plugin</a
-		>.
+		>).
 	</p>
 
 	<CodeBlock.Root title="Terminal">
@@ -74,8 +74,8 @@
 	<p>
 		Import the theme after Tailwind in your global stylesheet. It holds the design tokens (<Code.Root
 			>h-control</Code.Root
-		>, <Code.Root>h-row</Code.Root>, chart colors, animations) and the base styles the components
-		rely on, and tells Tailwind to generate the classes they use.
+		>, <Code.Root>h-row</Code.Root>, chart colors, animations) and the base styles, and tells
+		Tailwind to generate the classes the components use;
 		<Code.Root>@pouchbasejs/ui/tokens.css</Code.Root> holds only the tokens.
 	</p>
 
@@ -84,8 +84,14 @@
 	</CodeBlock.Root>
 
 	<p>
-		Add the Iconify Vite plugin. It bundles only the icons that are used, in your sources and in the
-		components, so icons render on the server and are never fetched from the Iconify API:
+		The components follow the system's color scheme; <Code.Root>data-theme="light"</Code.Root> or
+		<Code.Root>data-theme="dark"</Code.Root> on <Code.Root>&lt;html&gt;</Code.Root> overrides it, and
+		a <Code.Root>dark:</Code.Root> variant follows the same rules.
+	</p>
+
+	<p>
+		Add the Iconify Vite plugin. It bundles only the icons your sources and the components use, so
+		icons render on the server and are never fetched from the Iconify API:
 	</p>
 
 	<CodeBlock.Root title="vite.config.ts">
@@ -108,8 +114,8 @@
 
 	<p>
 		Every component is a set of parts used through a namespace, with a <Code.Root>Root</Code.Root> part.
-		Import a component from its own entry point, or all of them from the package root. Every part accepts
-		<Code.Root>class</Code.Root>, merged with its own classes, and the attributes of its element.
+		Import a component from its own entry point, or all of them from the package root. Parts take
+		<Code.Root>class</Code.Root>, merged with their own classes.
 	</p>
 
 	<CodeBlock.Root title="backups.svelte">
@@ -125,34 +131,35 @@
 	<h2 id="in-a-plugin">In a plugin</h2>
 
 	<p>
-		The dashboard provides the components at runtime, in its own version, so the install and setup
-		steps above are for apps only. A plugin:
+		The dashboard provides the components at runtime, in its own version, so a plugin skips the
+		install and setup above:
 	</p>
 
 	<ul>
 		<li>
-			installs <Code.Root>@pouchbasejs/ui</Code.Root> as a devDependency for type checking only (the plugin
-			templates do), and never bundles it, <Code.Root>bits-ui</Code.Root> or
-			<Code.Root>@iconify/svelte</Code.Root>;
+			it installs <Code.Root>@pouchbasejs/ui</Code.Root> 0.2 or later as a devDependency, for type checking
+			and the dashboard's tokens (the templates do), and never bundles it,
+			<Code.Root>bits-ui</Code.Root> or <Code.Root>@iconify/svelte</Code.Root>;
 		</li>
-		<li>imports components from their entry points or the package root, as above;</li>
 		<li>
-			needs no Vite plugin, <Code.Root>virtual:iconify</Code.Root> or
-			<Code.Root>theme.css</Code.Root>: the plugin CLI compiles the plugin's Tailwind classes with
-			the dashboard's tokens.
+			it needs no Vite plugin, <Code.Root>virtual:iconify</Code.Root> or
+			<Code.Root>theme.css</Code.Root>: the plugin CLI compiles its Tailwind classes with the
+			dashboard's tokens;
+		</li>
+		<li>
+			<Code.Root>Icon.Root icon="lucide:…"</Code.Root> only renders at once the icons the dashboard bundles
+			for itself, so use <Code.Root>src</Code.Root> with an SVG URL instead.
 		</li>
 	</ul>
 
 	<p>
-		In a plugin, <Code.Root>Icon.Root icon="lucide:…"</Code.Root> only renders at once the icons the dashboard
-		bundles for its own use; use <Code.Root>src</Code.Root> with an SVG URL instead. See
-		<a href={resolve('/docs/plugins/components')}>Components and icons</a> for what a plugin may import.
+		See <a href={resolve('/docs/plugins/components')}>Components and icons</a> for what a plugin may import.
 	</p>
 
 	<h2 id="versioning">Versioning</h2>
 
 	<p>
-		The component names, parts and props are part of the plugin API: within a major version they
-		only change in a backwards compatible way, with new components, parts, props or variants.
+		Component names, parts and props are part of the plugin API: within an API version they only
+		change in a backwards compatible way, with new components, parts, props or variants.
 	</p>
 </DocsPage>

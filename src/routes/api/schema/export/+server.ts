@@ -1,15 +1,15 @@
 import type { RequestHandler } from './$types';
 
-import { json, preflight, requestServiceKey } from '#lib/server/api.js';
+import { json, preflight, requestApiKey } from '#lib/server/api.js';
 
-import { errorResponse, PURPOSE } from '../responses';
+import { errorResponse } from '../responses';
 
 /**
  * An export file of every collection, or of `?collections=posts,comments`: their fields, indexes,
  * API rules and settings, without records. `POST /api/schema/import` takes it.
  */
 export const GET: RequestHandler = async (event) => {
-	const auth = await requestServiceKey(event, PURPOSE);
+	const auth = await requestApiKey(event);
 
 	if ('response' in auth) {
 		return auth.response;

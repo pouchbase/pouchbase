@@ -227,7 +227,7 @@ export type FieldChange = {
 	name: string;
 	required: boolean;
 	unique: boolean;
-	/** Whether only admins, service keys, plugins and API rules see the field; unchanged when missing. */
+	/** Whether only admins, API keys, plugins and API rules see the field; unchanged when missing. */
 	hidden?: boolean;
 	/** Drops the field, including its data. */
 	remove: boolean;

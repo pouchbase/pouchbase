@@ -1,6 +1,6 @@
 import type { PublishTokensRecord } from './pouchbase';
 
-import { pouchbase, service } from './pouchbase';
+import { admin, pouchbase } from './pouchbase';
 import { backendFailure } from './registry';
 
 /**
@@ -38,7 +38,7 @@ function toToken(record: PublishTokensRecord): PublishToken {
 
 /** The user's tokens, newest first. */
 export async function listPublishTokens(userId: string): Promise<PublishToken[]> {
-	const records = await service().db.publish_tokens.findAll({
+	const records = await admin().db.publish_tokens.findAll({
 		where: { user: userId },
 		orderBy: { created_at: 'desc' }
 	});
@@ -53,7 +53,7 @@ export async function createPublishToken(
 ): Promise<PublishToken & { token: string }> {
 	const bytes = crypto.getRandomValues(new Uint8Array(32));
 	const token = PUBLISH_TOKEN_PREFIX + btoa(String.fromCharCode(...bytes)).replace(/[+/=]/g, '');
-	const record = await service().db.publish_tokens.insert({
+	const record = await admin().db.publish_tokens.insert({
 		user: userId,
 		name,
 		prefix: token.slice(0, PUBLISH_TOKEN_PREFIX.length + 6),
@@ -66,7 +66,7 @@ export async function createPublishToken(
 
 /** Deletes one of the user's tokens; `false` when the user has no token with this id. */
 export async function deletePublishToken(userId: string, id: string): Promise<boolean> {
-	const db = service().db;
+	const db = admin().db;
 	const record = await db.publish_tokens.findFirst({ where: { id, user: userId } });
 
 	if (!record) {
@@ -92,7 +92,7 @@ export async function publisherOf(token: string): Promise<string | null> {
 		return user?.id ?? null;
 	}
 
-	const db = service().db;
+	const db = admin().db;
 	const record = await db.publish_tokens
 		.findFirst({ where: { token_hash: await hashToken(token) } })
 		.catch(backendFailure);

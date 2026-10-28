@@ -53,5 +53,13 @@ export async function fetchTypes(url: string, options: FetchTypesOptions = {}): 
 		throw new PouchbaseError(message, { status: response.status, data: body });
 	}
 
+	// A page of the admin instead of `/api/types`, e.g. for the URL of the instance without a token.
+	if (response.headers.get('Content-Type')?.includes('text/html')) {
+		throw new PouchbaseError(
+			'Got a web page instead of the types; pass the URL from the Types page (…/api/types?token=…)',
+			{ status: response.status, data: body }
+		);
+	}
+
 	return body;
 }

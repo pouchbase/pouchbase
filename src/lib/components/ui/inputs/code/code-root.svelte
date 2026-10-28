@@ -68,6 +68,7 @@
 	import * as Spinner from '../../spinner';
 	import {
 		FILTER_LANGUAGE,
+		FILTER_RULES,
 		registerFilterCompletions,
 		registerFilterLanguage,
 		setDiagnostics
@@ -191,10 +192,10 @@
 				monaco.editor.defineTheme(LIGHT_THEME, {
 					base: 'vs',
 					inherit: true,
-					// In conditions, `variable`: `$user.*` and `$input.*`; `predefined`: function names.
 					rules: [
 						{ token: 'variable', foreground: '7c3aed' },
-						{ token: 'predefined', foreground: '0369a1' }
+						{ token: 'predefined', foreground: '0369a1' },
+						...FILTER_RULES.light
 					],
 					colors: {
 						'scrollbar.shadow': '#00000000',
@@ -208,7 +209,8 @@
 					inherit: true,
 					rules: [
 						{ token: 'variable', foreground: 'a78bfa' },
-						{ token: 'predefined', foreground: '38bdf8' }
+						{ token: 'predefined', foreground: '38bdf8' },
+						...FILTER_RULES.dark
 					],
 					colors: {
 						'editor.background': '#111114',

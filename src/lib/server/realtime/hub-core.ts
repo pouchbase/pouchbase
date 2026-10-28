@@ -402,7 +402,13 @@ export class HubCore {
 			}
 
 			if (response.status === 401) {
-				this.#close(socket.id, CLOSE.UNAUTHORIZED, 'Invalid or expired token');
+				const { message } = (response.body ?? {}) as { message?: unknown };
+
+				this.#close(
+					socket.id,
+					CLOSE.UNAUTHORIZED,
+					typeof message === 'string' ? message : 'Invalid or expired token'
+				);
 				return;
 			}
 

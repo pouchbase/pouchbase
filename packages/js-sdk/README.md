@@ -153,13 +153,13 @@ post?.comments; // (CommentsRecord & { author: UsersRecord | null })[]
 
 A single relation becomes a record or `null`, a multiple one an array. Related records that the view rule of their collection hides are left out (`null`), and including a collection whose view rule is _Admins only_ fails with `invalid`.
 
-**Hand-written conditions.** For what `where` can't express, such as the signed-in user, write the condition with `condition` (the syntax of the API rules: `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(title, "x")`, `lower(title)`, `now()` and `date_add(now(), -7, "days")`, `any(field) == value`, `not`, `and`, `or`, `$user.<field>`); values in `${…}` are escaped:
+**Hand-written conditions.** For what `where` can't express, such as the signed-in user, write the condition with `condition` (the syntax of the API rules: `==`, `!=`, `>`, `>=`, `<`, `<=`, functions such as `contains(title, "x")`, `lower(title)`, `now()` and `date_add(now(), -7, "days")`, `any(field) == value`, `&&` (or `AND`), `||` (or `OR`), `!` (or `NOT`), `$user.<field>`); values in `${…}` are escaped:
 
 ```ts
 import { condition } from '@pouchbasejs/js-sdk';
 
 await pouch.db.posts.findMany({
-	where: condition`author == $user.id or contains(title, ${search})`
+	where: condition`author == $user.id || contains(title, ${search})`
 });
 ```
 
@@ -193,7 +193,7 @@ await subscription.ready; // rejects with `forbidden`, `not_found` or `invalid`
 subscription.unsubscribe();
 ```
 
-Pass `id` to subscribe to one record: `pouch.db.posts.subscribe(callback, { id })`, and `include` to get related records instead of ids, as with `find()`: `{ include: { author: true } }`. Without the schema, use `pouch.realtime.subscribe('posts', callback)` or `pouch.realtime.subscribe('posts/<id>', callback)`.
+Pass `id` to subscribe to one record: `pouch.db.posts.subscribe(callback, { id })`, and `include` to get related records instead of ids, as with `find()`: `{ include: { author: true } }`. `pouch.realtime.subscribe('posts', callback, options)` or `pouch.realtime.subscribe('posts/<id>', callback, options)` does the same by topic, typed by the schema as well (topics are completed; collections that aren't in it get untyped events).
 
 There is one connection per collection (`/api/realtime`). It opens with the first `subscribe()` and closes after the last `unsubscribe()`. It reconnects by itself, and when `pouch.session` changes it reconnects as the new user. `onError` in the options reports a subscription that fails later, for example when the rule changed. `pouch.realtime.onState()` reports the connection state, e.g. for a connection indicator.
 
@@ -224,36 +224,42 @@ The body comes back as parsed JSON, or as text when it isn't JSON. A non-2xx ans
 
 ### Mail
 
-Send the email templates from the **Mail** page of the Pouchbase admin. Sending needs an API key, so it only works from server-side code: a function has its own key in `env.POUCHBASE_API_KEY`; for another back-end, create one on the **API keys** page. Never ship a key to the browser.
+Send the email templates from the **Mail** page of the Pouchbase admin, or emails of your own. Sending needs an API key, so it only works from server-side code: a function has its own key in `env.POUCHBASE_API_KEY`; for another back-end, create one on the **API keys** page. Never ship a key to the browser.
 
 ```ts
 const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-const { sent } = await pouch.mail.send({
-	template: 'welcome',
+const { sent } = await pouch.mail.send('welcome', {
 	to: 'ada@example.com', // or a list of up to 50; everyone gets an email of their own
 	variables: { name: 'Ada', items: ['Create a project', 'Invite your team'] }
 });
+
+// Without a template: an object with the subject and the HTML (and optionally the plain text)
+await pouch.mail.send(
+	{ subject: 'Your order has shipped', html: '<p>It is on its way.</p>' },
+	{ to: 'ada@example.com' }
+);
 ```
 
-A missing required variable throws a `PouchbaseError` with status `422` and an issue per variable (`issues['variables.name']`); an unknown template is a `404`.
+With the generated `MailTemplates` (see [Types](#types)), template names and their variables are checked by TypeScript. A missing required variable throws a `PouchbaseError` with status `422` and an issue per variable (`issues['variables.name']`); an unknown template is a `404`.
 
-### Service access
+### Admin access
 
-A back-end that manages records past the collections' API rules (for example, writing fields users may not change) uses an API key with the **service** scope, created on the **API keys** page. `pouch.asService()` returns a client that sends the key instead of the user's token; its records calls act as an admin. Other keys get a `403` from the records API.
+A client created with an `apiKey` (a function's `env.POUCHBASE_API_KEY`, or a key created on the **API keys** page) acts as an admin: every request and realtime connection sends the key instead of the session's token, so the collections' API rules don't apply. A back-end can then manage records past them, for example writing fields users may not change. Without an `apiKey`, calls act for the session's user, or anonymously.
 
 ```ts
-const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_SERVICE_KEY });
+const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
-await pouch.asService().db.posts.patch(id, { featured: true });
+await pouch.db.posts.patch(id, { featured: true });
+pouch.realtime.subscribe('posts', (event) => console.log(event.record));
 ```
 
 ### Schema
 
-With an API key with the **service** scope, `pouch.schema` manages the schema (`/api/schema`): collections, their fields, indexes and API rules, and exports and imports them without records, for example in a deploy script.
+With an API key, `pouch.schema` manages the schema (`/api/schema`): collections, their fields, indexes and API rules, and exports and imports them without records, for example in a deploy script.
 
 ```ts
-const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_SERVICE_KEY });
+const pouch = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
 
 await pouch.schema.create({
 	name: 'posts',
@@ -279,7 +285,7 @@ The **Types** page of the Pouchbase admin shows TypeScript types for your collec
 npx @pouchbasejs/js-sdk types "https://pouchbase.example.com/api/types?token=…" --out src/pouchbase.ts
 ```
 
-The URL can also come from `POUCHBASE_TYPES_URL`; without `--out` the types are printed. Server-side code with an API key of the `service` scope can skip the token: pass the URL of the instance and the key instead (or set `POUCHBASE_URL` and `POUCHBASE_API_KEY`):
+The URL can also come from `POUCHBASE_TYPES_URL`; without `--out` the types are printed. Server-side code with an API key can skip the token: pass the URL of the instance and the key instead (or set `POUCHBASE_URL` and `POUCHBASE_API_KEY`):
 
 ```sh
 npx @pouchbasejs/js-sdk types https://pouchbase.example.com --api-key pbk_… --out src/pouchbase.ts
@@ -293,6 +299,15 @@ import type { Schema } from './pouchbase';
 const pouch = createClient<Schema>('https://pouchbase.example.com');
 const user = await pouch.auth.me(); // UsersRecord | null
 const post = await pouch.db.posts.find('RECORD_ID'); // PostsRecord | null
+```
+
+It also has `MailTemplates`: every email template the API can send, with its variables (required ones are required). Pass it as the second type to check the names and variables of `pouch.mail.send()`:
+
+```ts
+import type { MailTemplates, Schema } from './pouchbase';
+
+const pouch = createClient<Schema, MailTemplates>(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
+await pouch.mail.send('welcome', { to: 'ada@example.com', variables: { name: 'Ada' } });
 ```
 
 `fetchTypes(url)` downloads the types from code.

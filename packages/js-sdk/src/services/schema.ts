@@ -1,4 +1,4 @@
-import type { Pouchbase } from '../client.js';
+import type { PouchbaseClient } from '../client.js';
 import { PouchbaseError } from '../error.js';
 
 /** Field types, mirrored from `FIELD_TYPES` in the app (`src/lib/fields/field-types.ts`). */
@@ -71,7 +71,7 @@ export type CollectionField = {
 	required: boolean;
 	unique: boolean;
 	/**
-	 * Only admins, API keys with the service scope, plugins and API rules see the field: the records
+	 * Only admins, API keys, plugins and API rules see the field: the records
 	 * API leaves it out for app users, who can't filter, sort or write on it either.
 	 */
 	hidden: boolean;
@@ -174,14 +174,14 @@ type CallOptions = { signal?: AbortSignal };
 
 /**
  * The schema: collections, their fields, indexes and API rules (`/api/schema`). Every call
- * needs an API key with the `service` scope (`new Pouchbase(url, { apiKey })`), so only server-side
+ * needs an API key (`new Pouchbase(url, { apiKey })`), so only server-side
  * code, such as a deploy script, can change it.
  */
 export class SchemaService {
-	readonly #pouch: Pouchbase<object>;
+	readonly #pouch: PouchbaseClient;
 	readonly #apiKey: string | undefined;
 
-	constructor(pouch: Pouchbase<object>, apiKey: string | undefined) {
+	constructor(pouch: PouchbaseClient, apiKey: string | undefined) {
 		this.#pouch = pouch;
 		this.#apiKey = apiKey;
 	}
@@ -310,10 +310,9 @@ export class SchemaService {
 	): Promise<T> {
 		if (!this.#apiKey) {
 			return Promise.reject(
-				new PouchbaseError(
-					'Managing the schema needs an API key with the service scope: new Pouchbase(url, { apiKey })',
-					{ status: 401 }
-				)
+				new PouchbaseError('Managing the schema needs an API key: new Pouchbase(url, { apiKey })', {
+					status: 401
+				})
 			);
 		}
 
@@ -321,11 +320,7 @@ export class SchemaService {
 			method: options.method,
 			body: options.body,
 			query: options.query,
-			headers: {
-				Authorization: `Bearer ${this.#apiKey}`,
-				...(options.accept ? { Accept: options.accept } : {})
-			},
-			auth: false,
+			headers: options.accept ? { Accept: options.accept } : undefined,
 			signal: options.signal
 		});
 	}

@@ -4,32 +4,13 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import { resolve } from '$app/paths';
 	import DocsPage, { type Section } from '../../docs-page.svelte';
-	import DocsTable from '../../docs-table.svelte';
 
 	const sections: Section[] = [
 		{ id: 'keys-and-tokens', title: 'Keys and tokens' },
-		{ id: 'scopes', title: 'Scopes' },
+		{ id: 'admin-access', title: 'Admin access' },
 		{ id: 'creating-a-key', title: 'Creating a key' },
 		{ id: 'keys-of-functions-and-plugins', title: 'Keys of functions and plugins' },
 		{ id: 'using-a-key', title: 'Using a key' }
-	];
-
-	const scopes = [
-		[
-			'Standard',
-			'The endpoints only server-side code may call, such as sending email',
-			'The records API (403)'
-		],
-		[
-			'Service',
-			'Those too, the records API as an admin (the access rules don’t apply) and the schema API',
-			'–'
-		],
-		[
-			'Plugin',
-			'The records API of the collections a plugin may use; only the Worker of a plugin has one',
-			'Everything else (403)'
-		]
 	];
 </script>
 
@@ -44,30 +25,26 @@
 		An app acts for its signed-in user, with the user's
 		<a href="{resolve('/docs/platform/authentication')}#tokens">token</a>, and the
 		<a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> decide what that
-		user may do. Server-side code often has to do more: send an email, write a field users may not
-		change, or create a collection in a deploy script. For that it uses an <strong>API key</strong>,
-		which starts with <Code.Root>pbk_</Code.Root> and is sent the same way as a token:
-		<Code.Root>Authorization: Bearer pbk_…</Code.Root>.
+		user may do. Server-side code that needs more, such as sending email or creating a collection in
+		a deploy script, uses an <strong>API key</strong>. It starts with <Code.Root>pbk_</Code.Root> and
+		is sent like a token: <Code.Root>Authorization: Bearer pbk_…</Code.Root>.
 	</p>
 
-	<h2 id="scopes">Scopes</h2>
-
-	<p>The scope of a key sets what it may call:</p>
-
-	<DocsTable head={['Scope', 'May call', 'Refused']} rows={scopes} code={0} />
+	<h2 id="admin-access">Admin access</h2>
 
 	<p>
-		Choose <strong>Standard</strong> unless the code has to manage records or collections; a key can't
-		change its scope later, so create a new one when you need another.
+		Every key acts as an admin: it reads and writes records past the access rules, including hidden
+		fields, sees every change over realtime, manages the schema and sends email. The only exception
+		is the key of a plugin's Worker, which only reaches the records API of the collections the
+		plugin may use and gets <Code.Root>403</Code.Root> everywhere else.
 	</p>
 
 	<h2 id="creating-a-key">Creating a key</h2>
 
 	<p>
-		Create keys in the dashboard, under <strong>System → API keys</strong>, with a name that says
-		what uses it and a scope. The key is shown once: copy it into the environment of your server
-		then. Pouchbase only stores a hash of it, so a lost key can't be shown again; delete it and
-		create a new one. Deleting a key stops it from working right away.
+		Create keys in the dashboard under <strong>System → API keys</strong>, with a name that says
+		what uses it. The key is shown once, since Pouchbase only stores a hash: replace a lost key with
+		a new one. A deleted key stops working right away.
 	</p>
 
 	<Callout.Root variant="error">
@@ -75,9 +52,8 @@
 		<Callout.Body>
 			<Callout.Title>Never put a key in a browser</Callout.Title>
 			<Callout.Description>
-				Anyone who has a key can do everything its scope allows: send your templates to any address
-				and, with a service key, read and write every record. Keep keys in the environment of your
-				server, and use the user's token in code that runs in the browser.
+				Anyone with a key can do everything an admin can. Keep keys in the environment of your
+				server, and use the user's token in the browser.
 			</Callout.Description>
 		</Callout.Body>
 	</Callout.Root>
@@ -86,14 +62,15 @@
 
 	<ul>
 		<li>
-			Every <a href={resolve('/docs/platform/functions')}>function</a> gets a key of its own, with
-			the standard scope, in <Code.Root>env.POUCHBASE_API_KEY</Code.Root>. It is renewed on every
-			deploy, and the keys of older versions stop working once the new version runs. The API keys
-			page lists these keys, but they go with their function: deleting the function deletes its key.
+			Every <a href={resolve('/docs/platform/functions')}>function</a> gets a key of its own in
+			<Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an admin key like any other. It is renewed on
+			every deploy; the old one stops working once the new version runs. The API keys page lists it,
+			but it is deleted with its function, not on its own.
 		</li>
 		<li>
 			The Worker of an installed <a href={resolve('/docs/plugins')}>plugin</a> gets a plugin key, renewed
-			on every deploy too. These keys aren't listed on the API keys page.
+			on every install and update, which only reaches the records API of the collections the plugin may
+			use. These keys aren't listed.
 		</li>
 	</ul>
 

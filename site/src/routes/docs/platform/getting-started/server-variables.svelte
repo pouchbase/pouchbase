@@ -19,6 +19,7 @@
 			fallback: '–',
 			description: 'Public URL of the instance, used for redirects and OAuth callbacks'
 		},
+		{ name: 'HOST', fallback: '0.0.0.0', description: 'Address the server listens on' },
 		{ name: 'PORT', fallback: '3000', description: 'Port the server listens on' },
 		{
 			name: 'BODY_SIZE_LIMIT',
@@ -26,10 +27,16 @@
 			description: 'Largest accepted request body (uploads are limited to 10 MB by the app)'
 		},
 		{
+			name: 'POUCHBASE_INSTANCE',
+			fallback: 'pouchbase',
+			description:
+				'Name of the instance on the Cloudflare account: its system database and the prefix of its function Workers. Lowercase letters, digits and dashes, at most 19 characters'
+		},
+		{
 			name: 'POUCHBASE_ADMIN_EMAIL',
 			fallback: '–',
 			description:
-				'Email address of the first admin; with POUCHBASE_ADMIN_PASSWORD, Pouchbase installs itself on the first request, without the install page'
+				'Email address of the first admin; with POUCHBASE_ADMIN_PASSWORD, Pouchbase installs itself on the first request'
 		},
 		{
 			name: 'POUCHBASE_ADMIN_PASSWORD',
@@ -40,7 +47,7 @@
 			name: 'POUCHBASE_REGISTRY_URL',
 			fallback: 'https://api.pouchbase.io',
 			description:
-				'Plugin registry the Plugins page searches and installs from, such as the local registry of pouchbase-plugin dev'
+				'Plugin registry the Plugins page installs from, such as the local one of pouchbase-plugin dev'
 		},
 		{
 			name: 'POUCHBASE_LOG_TIMING',

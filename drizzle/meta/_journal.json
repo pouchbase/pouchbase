@@ -141,6 +141,20 @@
 			"when": 1792959492426,
 			"tag": "0019_plugin_bundle_parts",
 			"breakpoints": true
+		},
+		{
+			"idx": 20,
+			"version": "6",
+			"when": 1793122706415,
+			"tag": "0020_api_key_admin_scope",
+			"breakpoints": true
+		},
+		{
+			"idx": 21,
+			"version": "6",
+			"when": 1793124746844,
+			"tag": "0021_api_key_drop_scope",
+			"breakpoints": true
 		}
 	]
 }

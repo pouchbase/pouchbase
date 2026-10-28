@@ -54,6 +54,13 @@ function setup(replies: Partial<Record<InternalPath, Reply>> = {}) {
 					return { status: 200, body: { subject: { kind: 'user', auth: GRACE }, expiresAt: null } };
 				}
 
+				if (token === 'pbk_plugin') {
+					return {
+						status: 401,
+						body: { message: 'A plugin key can only use the records API' }
+					};
+				}
+
 				return token
 					? { status: 401, body: { message: 'Invalid or expired token' } }
 					: { status: 200, body: { subject: { kind: 'anonymous' }, expiresAt: null } };
@@ -136,6 +143,20 @@ describe('HubCore', () => {
 
 		expect(closed).toEqual([
 			{ socketId: 's1', code: CLOSE.UNAUTHORIZED, reason: 'Invalid or expired token' }
+		]);
+	});
+
+	it('closes a socket with the reason the session route gives', async () => {
+		const { closed, connect } = setup();
+
+		await connect('s1', 'pbk_plugin');
+
+		expect(closed).toEqual([
+			{
+				socketId: 's1',
+				code: CLOSE.UNAUTHORIZED,
+				reason: 'A plugin key can only use the records API'
+			}
 		]);
 	});
 

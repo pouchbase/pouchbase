@@ -298,7 +298,7 @@ export const updateFieldsSchema = z
 				name: fieldName,
 				required: z.boolean().default(false),
 				unique: z.boolean().default(false),
-				/** Only admins, service keys, plugins and API rules see the field. */
+				/** Only admins, API keys, plugins and API rules see the field. */
 				hidden: z.boolean().default(false),
 				/** Hidden field: drop the field when saving. */
 				remove: z.boolean().default(false)

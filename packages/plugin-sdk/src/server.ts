@@ -345,6 +345,12 @@ export type PageDefinition = {
 	/** Whether the page gets a link in the sidebar; default `true`. */
 	navigation?: boolean;
 	/**
+	 * How much of the dashboard the page takes, below the top bar: `default` (the dashboard's
+	 * reading width, with padding), `wide` (the full width, with padding) or `full` (all of the
+	 * space, without padding; the page scrolls itself, e.g. an editor that fills the screen).
+	 */
+	layout?: 'default' | 'wide' | 'full';
+	/**
 	 * The page's icon in the sidebar, drawn in one color like the dashboard's own links: an Iconify
 	 * name such as `lucide:chart-bar`, or an imported `.svg` file. Missing uses a puzzle piece.
 	 */

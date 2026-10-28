@@ -11,22 +11,22 @@
 	const commands = [
 		{
 			command: 'init <dir> [--template <name>]',
-			about: 'Create a plugin from a template: field, page, auth-provider or empty.'
+			about:
+				'Create a plugin from a template: field (default), page, auth-provider or empty. Without --template, it asks in a terminal.'
 		},
 		{
 			command: 'add <field|page|auth-provider|route> <id>',
 			about:
-				'Create the files of a field type, page, sign-in provider or route, never overwriting one, and add it with its import to definePlugin in plugin.ts.'
+				'Create the files of a field type, page, sign-in provider or route, never overwriting any, and add it with its import to plugin.ts.'
 		},
 		{
 			command: 'add setting <key> [--type <type>]',
-			about:
-				'Add a setting to definePlugin in plugin.ts: text (default), secret, number, boolean or url.'
+			about: 'Add a setting to plugin.ts: text (default), secret, number, boolean or url.'
 		},
 		{
 			command: 'dev [--port 4510] [--exact-version]',
 			about:
-				'Rebuild on every change and serve the plugin from a local registry. --exact-version serves the version of package.json instead of a -dev prerelease.'
+				'Rebuild on every change and serve the plugin from a local registry, as <version>-dev.<n> unless --exact-version.'
 		},
 		{
 			command: 'validate',
@@ -35,18 +35,22 @@
 		{ command: 'build', about: 'Write the bundle to dist/.' },
 		{
 			command: 'publish [--registry <url>] [--token <token>]',
-			about: 'Build the plugin and upload it to the registry.'
+			about: 'Check the token, build the plugin and upload it to the registry.'
 		},
 		{
 			command: 'manifest',
-			about: 'Print the full manifest the plugin builds into, with what plugin.ts adds, as JSON.'
+			about: 'Print the full manifest the plugin builds into, as JSON.'
 		},
 		{ command: 'schema', about: 'Print the JSON Schema of the manifest.' }
 	];
 
 	const options = [
 		{ option: '-q, --quiet', about: 'Print only results, warnings and errors, e.g. in CI.' },
-		{ option: '-v, --verbose', about: 'Add stack traces and every request to the dev registry.' },
+		{
+			option: '-v, --verbose',
+			about: 'Also print stack traces and every request to the dev registry.'
+		},
+		{ option: '-h, --help', about: 'Print the commands and options.' },
 		{ option: 'NO_COLOR', about: 'An environment variable that turns colors off.' },
 		{
 			option: 'POUCHBASE_REGISTRY_TOKEN',
