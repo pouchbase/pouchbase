@@ -1,6 +1,6 @@
 import type { ServiceError } from './base.service';
 
-import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
+import { fromPromise, okAsync, ResultAsync } from 'neverthrow';
 
 import {
 	attachDatabases,
@@ -86,14 +86,16 @@ export class DatabaseService extends Service {
 		| ServiceError<1005, 'DATABASE_ATTACH_FAILED'>
 		| ServiceError<5000, 'GET_SETTING_FAILED'>
 	> {
-		return ResultAsync.combine([
-			fromPromise(getDatabaseId(), (error) => this.error(1000, 'DATABASE_LOOKUP_FAILED', error)),
-			this.getApp()
-		]).andThen(([systemId, appDatabase]) =>
-			fromPromise(
-				attachDatabases([systemId, appDatabase?.id].filter((id): id is string => !!id)),
-				(error) => this.error(1005, 'DATABASE_ATTACH_FAILED', error)
-			)
+		return this.run(
+			async () => {
+				const [systemId, appDatabase] = await Promise.all([
+					getDatabaseId(),
+					this.must(this.getApp())
+				]);
+
+				await attachDatabases([systemId, appDatabase?.id].filter((id): id is string => !!id));
+			},
+			(error) => this.error(1005, 'DATABASE_ATTACH_FAILED', error)
 		);
 	}
 
@@ -120,8 +122,9 @@ export class DatabaseService extends Service {
 		AppDatabase,
 		ServiceError<1004, 'APP_DATABASE_MISSING'> | ServiceError<5000, 'GET_SETTING_FAILED'>
 	> {
-		return this.getApp().andThen((appDatabase) =>
-			appDatabase ? okAsync(appDatabase) : errAsync(this.error(1004, 'APP_DATABASE_MISSING'))
+		return this.run(
+			async () => (await this.must(this.getApp())) ?? this.fail(1004, 'APP_DATABASE_MISSING'),
+			(error) => this.error(1004, 'APP_DATABASE_MISSING', error)
 		);
 	}
 
@@ -152,23 +155,24 @@ export class DatabaseService extends Service {
 		| ServiceError<5000, 'GET_SETTING_FAILED'>
 		| ServiceError<5001, 'SET_SETTING_FAILED'>
 	> {
-		return this.getApp().andThen((existing) => {
-			if (existing) {
-				return okAsync(existing);
-			}
+		return this.run(
+			async () => {
+				const existing = await this.must(this.getApp());
 
-			const settings = this.services.settings();
+				if (existing) {
+					return existing;
+				}
 
-			return fromPromise(createDatabase(randomDatabaseName()), (error) =>
-				this.error(1003, 'APP_DATABASE_CREATE_FAILED', error)
-			)
-				.map((database): AppDatabase => ({ id: database.id, name: database.name }))
-				.andThen((database) =>
-					settings
-						.set('app_database_id', database.id)
-						.andThen(() => settings.set('app_database_name', database.name))
-						.map(() => database)
-				);
-		});
+				const created = await createDatabase(randomDatabaseName());
+				const database: AppDatabase = { id: created.id, name: created.name };
+				const settings = this.services.settings();
+
+				await this.must(settings.set('app_database_id', database.id));
+				await this.must(settings.set('app_database_name', database.name));
+
+				return database;
+			},
+			(error) => this.error(1003, 'APP_DATABASE_CREATE_FAILED', error)
+		);
 	}
 }

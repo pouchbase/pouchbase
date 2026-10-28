@@ -98,3 +98,49 @@ export function splitStatements(bytes: Uint8Array, final: boolean): SplitResult 
 
 	return { statements, consumed };
 }
+
+/** A value as a SQL literal, for the statements a restore appends to a dump. */
+export function literal(value: unknown): string {
+	if (value === null || value === undefined) {
+		return 'NULL';
+	}
+
+	if (typeof value === 'number' || typeof value === 'bigint') {
+		return String(value);
+	}
+
+	if (typeof value === 'boolean') {
+		return value ? '1' : '0';
+	}
+
+	return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+/** A table or column name, quoted. */
+export function identifier(name: string) {
+	return `"${name.replace(/"/g, '""')}"`;
+}
+
+/** An insert of `row`; with `condition` (a `WHERE`), only when it holds. */
+export function insertStatement(table: string, row: Record<string, unknown>, condition?: string) {
+	const columns = Object.keys(row);
+	const values = columns.map((column) => literal(row[column])).join(', ');
+	const source = condition ? `SELECT ${values} ${condition}` : `VALUES (${values})`;
+
+	return `INSERT INTO ${identifier(table)} (${columns.map(identifier).join(', ')}) ${source};`;
+}
+
+/** The parts as one byte array, e.g. a dump with statements before and after it. */
+export function encode(...parts: (string | Uint8Array)[]) {
+	const encoder = new TextEncoder();
+	const chunks = parts.map((part) => (typeof part === 'string' ? encoder.encode(part) : part));
+	const result = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
+	let offset = 0;
+
+	for (const chunk of chunks) {
+		result.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+
+	return result;
+}

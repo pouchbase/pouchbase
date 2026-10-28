@@ -44,14 +44,17 @@ export class InstallService extends Service {
 			return okAsync('done');
 		}
 
-		return this.services
-			.database()
-			.exists()
-			.andThen((exists) => (exists ? this.services.users().hasAny() : okAsync(false)))
-			.map((hasUsers): InstallState => {
+		return this.run(
+			async (): Promise<InstallState> => {
+				const exists = await this.must(this.services.database().exists());
+				const hasUsers = exists && (await this.must(this.services.users().hasAny()));
+
 				installed = hasUsers;
+
 				return hasUsers ? 'done' : 'account';
-			});
+			},
+			(error) => this.error(1000, 'DATABASE_LOOKUP_FAILED', error)
+		);
 	}
 
 	/**
@@ -59,21 +62,23 @@ export class InstallService extends Service {
 	 * database (random name) and the first admin. Signing in is up to the caller.
 	 */
 	install(input: CreateUserInput): ResultAsync<User, InstallError> {
-		return this.getState()
-			.andThen((state) =>
-				state === 'account'
-					? okAsync(undefined)
-					: errAsync(this.error(2000, 'ACCOUNT_ALREADY_EXISTS'))
-			)
-			.andThen(() => this.services.database().prepare())
-			.andThen(() => this.services.database().createApp())
-			.andThen(() => this.services.users().create(input))
-			.andThen((user) =>
-				this.services
-					.settings()
-					.set('installed_at', new Date().toISOString())
-					.map(() => user)
-			);
+		return this.run(
+			async () => {
+				if ((await this.must(this.getState())) !== 'account') {
+					this.fail(2000, 'ACCOUNT_ALREADY_EXISTS');
+				}
+
+				await this.must(this.services.database().prepare());
+				await this.must(this.services.database().createApp());
+
+				const user = await this.must(this.services.users().create(input));
+
+				await this.must(this.services.settings().set('installed_at', new Date().toISOString()));
+
+				return user;
+			},
+			(error) => this.error(1001, 'DATABASE_CREATE_FAILED', error)
+		);
 	}
 
 	/**
