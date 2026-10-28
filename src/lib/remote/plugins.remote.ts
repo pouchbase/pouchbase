@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { fail } from '#lib/server/errors.js';
 

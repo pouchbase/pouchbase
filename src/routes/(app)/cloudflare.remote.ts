@@ -10,7 +10,7 @@ import type {
 import { z } from 'zod';
 
 import { form, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { USAGE_RANGES } from '#lib/cloudflare/limits.js';
 import { cloudflarePlanSchema } from '#lib/schemas/cloudflare.js';

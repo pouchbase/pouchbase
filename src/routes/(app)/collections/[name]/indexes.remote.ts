@@ -2,7 +2,7 @@ import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { command, form, getRequestEvent, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { createIndexSchema, deleteIndexSchema, updateIndexSchema } from '#lib/schemas/indexes.js';
 import { fail } from '#lib/server/errors.js';

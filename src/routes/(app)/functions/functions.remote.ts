@@ -2,7 +2,7 @@ import { error, invalid, redirect } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { command, form, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import {
 	createFunctionSchema,

@@ -1,7 +1,7 @@
 import { invalid } from '@sveltejs/kit';
 
 import { form, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { passwordProviderSchema } from '#lib/schemas/password-auth.js';
 import { oauthProviderSchema } from '#lib/schemas/settings.js';

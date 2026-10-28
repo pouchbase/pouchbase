@@ -3,7 +3,7 @@ import { formatCompileIssue } from '@pouchbasejs/plugin-sdk';
 import { z } from 'zod';
 
 import { form, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { pluginIdSchema, pluginSettingsSchema, searchPluginsSchema } from '#lib/schemas/plugins.js';
 import { listPluginFieldTypes, listPluginPages } from '#lib/remote/plugins.remote.js';

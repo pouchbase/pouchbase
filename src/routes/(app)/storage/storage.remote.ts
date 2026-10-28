@@ -1,7 +1,7 @@
 import { error, invalid } from '@sveltejs/kit';
 
 import { command, form, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { storageSettingsSchema } from '#lib/schemas/storage.js';
 import { fail } from '#lib/server/errors.js';

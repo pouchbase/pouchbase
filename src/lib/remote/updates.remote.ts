@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 
 import { command, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { version } from '../../../package.json';
 import { fail } from '#lib/server/errors.js';

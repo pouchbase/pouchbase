@@ -2,7 +2,7 @@ import { error, invalid } from '@sveltejs/kit';
 import { z } from 'zod';
 
 import { command, form, getRequestEvent, query } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { USERS_COLLECTION } from '#lib/auth/users.js';
 import { FILES_COLLECTION, formatFileSize, MAX_FILE_SIZE } from '#lib/files/files.js';

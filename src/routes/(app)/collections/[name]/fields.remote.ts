@@ -3,7 +3,7 @@ import type { FieldsError } from '#lib/server/services/fields.service.js';
 import { error, invalid } from '@sveltejs/kit';
 
 import { command, form } from '$app/server';
-import { requireUser } from '#lib/server/remote.js';
+import { requireUser } from '#lib/server/require-user.js';
 
 import { isPluginFieldType } from '#lib/fields/field-types.js';
 import {
