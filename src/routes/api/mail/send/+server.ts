@@ -1,13 +1,10 @@
 import type { RequestEvent, RequestHandler } from './$types';
-import type { MailService } from '#lib/server/services/mail.service.js';
-import type { ErrorOf } from '#lib/server/services/base.service.js';
+import type { MailTemplatesError } from '#lib/server/services/mail-templates.service.js';
 import type { z } from 'zod';
 
 import { json, preflight, requestApiKey } from '#lib/server/api.js';
 import { readJsonObject } from '#lib/server/api-body.js';
 import { sendCustomMailSchema, sendMailTemplateSchema } from '#lib/schemas/mail-templates.js';
-
-type SendError = ErrorOf<ReturnType<MailService['send']>>;
 
 /**
  * Sends an email template, or an email of your own. Needs an API key (`Authorization: Bearer
@@ -106,7 +103,7 @@ function invalidBody(message: string, error: z.ZodError) {
 	);
 }
 
-function sendFailed(error: SendError) {
+function sendFailed(error: MailTemplatesError) {
 	switch (error.code) {
 		case 15001:
 			return json({ message: 'Sending email is not set up' }, 503);

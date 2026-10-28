@@ -28,7 +28,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 			error(400, 'This instance does not run as a Cloudflare Worker');
 		}
 
-		error(502, `Could not upload the files: ${result.error.data.reason}`);
+		error(502, `Could not upload the files: ${result.error.reason ?? result.error.message}`);
 	}
 
 	return json({ jwt: result.value });

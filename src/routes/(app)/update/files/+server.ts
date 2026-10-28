@@ -20,7 +20,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	const result = await locals.services.updates().workerFiles(version);
 
 	if (result.isErr()) {
-		error(502, `Could not download the update: ${result.error.data.reason}`);
+		error(502, `Could not download the update: ${result.error.reason ?? result.error.message}`);
 	}
 
 	return new Response(result.value.body, {

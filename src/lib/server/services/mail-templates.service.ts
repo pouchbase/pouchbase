@@ -1,9 +1,8 @@
-import type { ErrorOf, ServiceError } from './base.service';
-import type { MailService } from './mail.service';
+import type { ServiceError } from './base.service';
+import type { MailError } from './mail.service';
 import type { ResultAsync } from 'neverthrow';
 
 import { asc, eq } from 'drizzle-orm';
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import type {
 	MailEditor,
@@ -74,16 +73,14 @@ export type SendableMailTemplate = {
 
 type Row = typeof mailTemplates.$inferSelect;
 
-type QueryFailed = ServiceError<24000, 'MAIL_TEMPLATES_QUERY_FAILED'>;
-type NotFound = ServiceError<24001, 'MAIL_TEMPLATE_NOT_FOUND'>;
-type NameTaken = ServiceError<24002, 'MAIL_TEMPLATE_NAME_TAKEN'>;
-type SystemTemplate = ServiceError<24003, 'SYSTEM_TEMPLATE'>;
-type MissingVariables = ServiceError<24004, 'MISSING_VARIABLES'> & { data: { missing: string[] } };
-type InvalidTemplate = ServiceError<24005, 'INVALID_TEMPLATE'> & {
-	data: { problems: SourceProblem[] };
-};
-
-type SendError = ErrorOf<ReturnType<MailService['send']>>;
+export type MailTemplatesError =
+	| MailError
+	| ServiceError<24000, 'MAIL_TEMPLATES_FAILED'>
+	| ServiceError<24001, 'MAIL_TEMPLATE_NOT_FOUND'>
+	| ServiceError<24002, 'MAIL_TEMPLATE_NAME_TAKEN'>
+	| ServiceError<24003, 'SYSTEM_TEMPLATE'>
+	| (ServiceError<24004, 'MISSING_VARIABLES'> & { data: { missing: string[] } })
+	| (ServiceError<24005, 'INVALID_TEMPLATE'> & { data: { problems: SourceProblem[] } });
 
 function contentOf(row: Row): MailTemplateContent {
 	return {
@@ -108,10 +105,10 @@ function detail(info: MailTemplateInfo, content: MailTemplateContent, sampleData
 
 export class MailTemplatesService extends Service {
 	/** The system templates first, then the others by name. */
-	list(): ResultAsync<MailTemplateInfo[], QueryFailed> {
-		return this.rows().map((rows) => {
+	list(): ResultAsync<MailTemplateInfo[], MailTemplatesError> {
+		return this.run(async () => {
+			const rows = await this.rows();
 			const byName = new Map(rows.map((row) => [row.name, row]));
-
 			const system = SYSTEM_TEMPLATES.map((template) => {
 				const row = byName.get(template.name);
 
@@ -124,7 +121,6 @@ export class MailTemplatesService extends Service {
 					updatedAt: row?.updatedAt ?? null
 				};
 			});
-
 			const own = rows
 				.filter((row) => !systemTemplate(row.name))
 				.map((row) => ({
@@ -137,13 +133,15 @@ export class MailTemplatesService extends Service {
 				}));
 
 			return [...system, ...own];
-		});
+		}, this.failed);
 	}
 
 	/** The templates the API can send (not the system ones), by name, with their variables. */
-	sendable(): ResultAsync<SendableMailTemplate[], QueryFailed> {
-		return this.rows().map((rows) =>
-			rows
+	sendable(): ResultAsync<SendableMailTemplate[], MailTemplatesError> {
+		return this.run(async () => {
+			const rows = await this.rows();
+
+			return rows
 				.filter((row) => !systemTemplate(row.name))
 				.map((row) => {
 					const compiled = compileTemplate(contentOf(row));
@@ -153,146 +151,102 @@ export class MailTemplatesService extends Service {
 						description: row.description,
 						variables: compiled.ok ? compiled.variables : null
 					};
-				})
-		);
+				});
+		}, this.failed);
 	}
 
-	get(name: string): ResultAsync<MailTemplate | null, QueryFailed> {
-		const builtIn = systemTemplate(name);
-
-		return this.findRow(name).map((row) => {
-			if (builtIn) {
-				return detail(
-					{
-						name,
-						description: builtIn.description,
-						editor: row?.editor ?? builtIn.content.editor,
-						system: true,
-						customized: !!row,
-						updatedAt: row?.updatedAt ?? null
-					},
-					row ? contentOf(row) : builtIn.content,
-					builtIn.sampleData
-				);
-			}
-
-			if (!row) {
-				return null;
-			}
-
-			return detail(
-				{
-					name: row.name,
-					description: row.description,
-					editor: row.editor,
-					system: false,
-					customized: false,
-					updatedAt: row.updatedAt
-				},
-				contentOf(row),
-				row.sampleData
-			);
-		});
+	get(name: string): ResultAsync<MailTemplate | null, MailTemplatesError> {
+		return this.run(() => this.find(name), this.failed);
 	}
 
 	/** A new template with starter content for its editor. */
-	create(input: CreateMailTemplateInput): ResultAsync<void, QueryFailed | NameTaken> {
-		if (systemTemplate(input.name)) {
-			return errAsync(this.error(24002, 'MAIL_TEMPLATE_NAME_TAKEN'));
-		}
+	create(input: CreateMailTemplateInput): ResultAsync<void, MailTemplatesError> {
+		return this.run(async () => {
+			if (systemTemplate(input.name) || (await this.findRow(input.name))) {
+				this.fail(24002, 'MAIL_TEMPLATE_NAME_TAKEN');
+			}
 
-		return this.findRow(input.name)
-			.andThen((existing) =>
-				existing ? errAsync(this.error(24002, 'MAIL_TEMPLATE_NAME_TAKEN')) : okAsync(undefined)
-			)
-			.andThen(() =>
-				fromPromise(
-					this.db.insert(mailTemplates).values({
-						name: input.name,
-						description: input.description,
-						...starterTemplate(input.editor),
-						sampleData: starterSampleData(input.editor)
-					}),
-					(error) => this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-				)
-			)
-			.map(() => undefined);
+			await this.db.insert(mailTemplates).values({
+				name: input.name,
+				description: input.description,
+				...starterTemplate(input.editor),
+				sampleData: starterSampleData(input.editor)
+			});
+		}, this.failed);
 	}
 
 	/** Saves a template; a template with problems in its tags isn't saved. */
-	update(
-		name: string,
-		input: UpdateMailTemplateInput
-	): ResultAsync<void, QueryFailed | NotFound | InvalidTemplate> {
-		const compiled = compileTemplate(input);
+	update(name: string, input: UpdateMailTemplateInput): ResultAsync<void, MailTemplatesError> {
+		return this.run(async () => {
+			const compiled = compileTemplate(input);
 
-		if (!compiled.ok) {
-			return errAsync({
-				...this.error(24005, 'INVALID_TEMPLATE'),
-				data: { problems: compiled.problems }
-			});
-		}
+			if (!compiled.ok) {
+				this.fail(24005, 'INVALID_TEMPLATE', { data: { problems: compiled.problems } });
+			}
 
-		const builtIn = systemTemplate(name);
-		const values = {
-			subject: input.subject,
-			preheader: input.preheader,
-			editor: input.editor,
-			body: input.body,
-			style: normalizeStyle(input.style),
-			updatedAt: new Date()
-		};
+			const builtIn = systemTemplate(name);
+			const row = await this.findRow(name);
 
-		return this.findRow(name).andThen((row) => {
 			if (!row && !builtIn) {
-				return errAsync(this.error(24001, 'MAIL_TEMPLATE_NOT_FOUND'));
+				this.fail(24001, 'MAIL_TEMPLATE_NOT_FOUND');
+			}
+
+			const values = {
+				subject: input.subject,
+				preheader: input.preheader,
+				editor: input.editor,
+				body: input.body,
+				style: normalizeStyle(input.style),
+				updatedAt: new Date()
+			};
+
+			if (!row) {
+				await this.db.insert(mailTemplates).values({
+					name,
+					...values,
+					description: '',
+					sampleData: builtIn?.sampleData ?? {}
+				});
+
+				return;
 			}
 
 			// A system template's description and variables are Pouchbase's.
 			const own = builtIn ? {} : { description: input.description, sampleData: input.sampleData };
 
-			return fromPromise(
-				row
-					? this.db
-							.update(mailTemplates)
-							.set({ ...values, ...own })
-							.where(eq(mailTemplates.id, row.id))
-					: this.db.insert(mailTemplates).values({
-							name,
-							...values,
-							description: '',
-							sampleData: builtIn?.sampleData ?? {}
-						}),
-				(error) => this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-			).map(() => undefined);
-		});
+			await this.db
+				.update(mailTemplates)
+				.set({ ...values, ...own })
+				.where(eq(mailTemplates.id, row.id));
+		}, this.failed);
 	}
 
-	delete(name: string): ResultAsync<void, QueryFailed | NotFound | SystemTemplate> {
-		if (systemTemplate(name)) {
-			return errAsync(this.error(24003, 'SYSTEM_TEMPLATE'));
-		}
+	delete(name: string): ResultAsync<void, MailTemplatesError> {
+		return this.run(async () => {
+			if (systemTemplate(name)) {
+				this.fail(24003, 'SYSTEM_TEMPLATE');
+			}
 
-		return fromPromise(
-			this.db
+			const rows = await this.db
 				.delete(mailTemplates)
 				.where(eq(mailTemplates.name, name))
-				.returning({ id: mailTemplates.id }),
-			(error) => this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-		).andThen((rows) =>
-			rows.length ? okAsync(undefined) : errAsync(this.error(24001, 'MAIL_TEMPLATE_NOT_FOUND'))
-		);
+				.returning({ id: mailTemplates.id });
+
+			if (!rows.length) {
+				this.fail(24001, 'MAIL_TEMPLATE_NOT_FOUND');
+			}
+		}, this.failed);
 	}
 
 	/** Puts a system template back to the built-in one. */
-	reset(name: string): ResultAsync<void, QueryFailed | NotFound> {
-		if (!systemTemplate(name)) {
-			return errAsync(this.error(24001, 'MAIL_TEMPLATE_NOT_FOUND'));
-		}
+	reset(name: string): ResultAsync<void, MailTemplatesError> {
+		return this.run(async () => {
+			if (!systemTemplate(name)) {
+				this.fail(24001, 'MAIL_TEMPLATE_NOT_FOUND');
+			}
 
-		return fromPromise(this.db.delete(mailTemplates).where(eq(mailTemplates.name, name)), (error) =>
-			this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-		).map(() => undefined);
+			await this.db.delete(mailTemplates).where(eq(mailTemplates.name, name));
+		}, this.failed);
 	}
 
 	/**
@@ -305,20 +259,20 @@ export class MailTemplatesService extends Service {
 		to: string[],
 		variables: Variables,
 		options: { system?: boolean } = {}
-	): ResultAsync<
-		{ sent: number },
-		QueryFailed | NotFound | SystemTemplate | MissingVariables | InvalidTemplate | SendError
-	> {
-		if (systemTemplate(name) && !options.system) {
-			return errAsync(this.error(24003, 'SYSTEM_TEMPLATE'));
-		}
+	): ResultAsync<{ sent: number }, MailTemplatesError> {
+		return this.run(async () => {
+			if (systemTemplate(name) && !options.system) {
+				this.fail(24003, 'SYSTEM_TEMPLATE');
+			}
 
-		return this.get(name)
-			.andThen((template) =>
-				template ? okAsync(template) : errAsync(this.error(24001, 'MAIL_TEMPLATE_NOT_FOUND'))
-			)
-			.andThen((template) => this.render(template.content, variables))
-			.andThen((mail) => this.sendAll(to, mail));
+			const template = await this.find(name);
+
+			if (!template) {
+				this.fail(24001, 'MAIL_TEMPLATE_NOT_FOUND');
+			}
+
+			return this.sendAll(to, this.render(template.content, variables));
+		}, this.failed);
 	}
 
 	/**
@@ -328,12 +282,16 @@ export class MailTemplatesService extends Service {
 	sendCustom(
 		to: string[],
 		mail: { subject: string; html: string; text?: string }
-	): ResultAsync<{ sent: number }, SendError> {
-		return this.sendAll(to, {
-			subject: mail.subject,
-			html: mail.html,
-			text: mail.text || htmlToText(mail.html)
-		});
+	): ResultAsync<{ sent: number }, MailTemplatesError> {
+		return this.run(
+			() =>
+				this.sendAll(to, {
+					subject: mail.subject,
+					html: mail.html,
+					text: mail.text || htmlToText(mail.html)
+				}),
+			this.failed
+		);
 	}
 
 	/** Sends the content from the editor, saved or not, with its sample data. */
@@ -341,59 +299,85 @@ export class MailTemplatesService extends Service {
 		content: MailTemplateContent,
 		to: string,
 		sampleData: Variables
-	): ResultAsync<void, MissingVariables | InvalidTemplate | SendError> {
-		return this.render(content, sampleData).andThen((mail) => this.services.mail().send(to, mail));
+	): ResultAsync<void, MailTemplatesError> {
+		return this.run(async () => {
+			await this.must(this.services.mail().send(to, this.render(content, sampleData)));
+		}, this.failed);
+	}
+
+	private failed = (error: unknown) => this.error(24000, 'MAIL_TEMPLATES_FAILED', error);
+
+	private async find(name: string): Promise<MailTemplate | null> {
+		const builtIn = systemTemplate(name);
+		const row = await this.findRow(name);
+
+		if (builtIn) {
+			return detail(
+				{
+					name,
+					description: builtIn.description,
+					editor: row?.editor ?? builtIn.content.editor,
+					system: true,
+					customized: !!row,
+					updatedAt: row?.updatedAt ?? null
+				},
+				row ? contentOf(row) : builtIn.content,
+				builtIn.sampleData
+			);
+		}
+
+		if (!row) {
+			return null;
+		}
+
+		return detail(
+			{
+				name: row.name,
+				description: row.description,
+				editor: row.editor,
+				system: false,
+				customized: false,
+				updatedAt: row.updatedAt
+			},
+			contentOf(row),
+			row.sampleData
+		);
 	}
 
 	/** Sends the same email to every recipient, each an email of their own, one after another. */
-	private sendAll(to: string[], mail: RenderedMail): ResultAsync<{ sent: number }, SendError> {
-		return to
-			.reduce<ResultAsync<number, SendError>>(
-				(chain, address) =>
-					chain.andThen((sent) =>
-						this.services
-							.mail()
-							.send(address, mail)
-							.map(() => sent + 1)
-					),
-				okAsync(0)
-			)
-			.map((sent) => ({ sent }));
+	private async sendAll(to: string[], mail: RenderedMail) {
+		const mailer = this.services.mail();
+
+		for (const address of to) {
+			await this.must(mailer.send(address, mail));
+		}
+
+		return { sent: to.length };
 	}
 
-	private render(
-		content: MailTemplateContent,
-		variables: Variables
-	): ResultAsync<RenderedMail, MissingVariables | InvalidTemplate> {
+	private render(content: MailTemplateContent, variables: Variables): RenderedMail {
 		const compiled = compileTemplate({ ...content, style: normalizeStyle(content.style) });
 
 		if (!compiled.ok) {
-			return errAsync({
-				...this.error(24005, 'INVALID_TEMPLATE'),
-				data: { problems: compiled.problems }
-			});
+			this.fail(24005, 'INVALID_TEMPLATE', { data: { problems: compiled.problems } });
 		}
 
 		const missing = missingVariables(compiled.variables, variables);
 
 		if (missing.length) {
-			return errAsync({ ...this.error(24004, 'MISSING_VARIABLES'), data: { missing } });
+			this.fail(24004, 'MISSING_VARIABLES', { data: { missing } });
 		}
 
-		return okAsync(compiled.render(variables));
+		return compiled.render(variables);
 	}
 
-	private rows(): ResultAsync<Row[], QueryFailed> {
-		return fromPromise(
-			this.db.select().from(mailTemplates).orderBy(asc(mailTemplates.name)),
-			(error) => this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-		);
+	private rows(): Promise<Row[]> {
+		return this.db.select().from(mailTemplates).orderBy(asc(mailTemplates.name));
 	}
 
-	private findRow(name: string): ResultAsync<Row | null, QueryFailed> {
-		return fromPromise(
-			this.db.select().from(mailTemplates).where(eq(mailTemplates.name, name)),
-			(error) => this.error(24000, 'MAIL_TEMPLATES_QUERY_FAILED', error)
-		).map(([row]) => row ?? null);
+	private async findRow(name: string): Promise<Row | null> {
+		const [row] = await this.db.select().from(mailTemplates).where(eq(mailTemplates.name, name));
+
+		return row ?? null;
 	}
 }

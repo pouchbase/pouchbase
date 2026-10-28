@@ -36,45 +36,32 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	5001: 'Could not save the settings',
 
 	// Collections
-	6000: 'Could not load the collections',
-	6001: 'Could not load the collection',
+	6000: 'Could not load or save the collections',
 	6002: [400, 'This collection name is not allowed'],
 	6003: [409, 'A collection with this name already exists'],
-	6005: 'Could not create the collection',
 	6006: [404, 'Collection not found'],
-	6007: 'Could not rename the collection',
-	6008: 'Could not delete the collection',
 	6009: [
 		409,
 		'Relation fields of other collections point to this collection; delete those fields first'
 	],
-	6010: 'Could not load the collection',
 	6011: [403, "Built-in collections can't be renamed or deleted"],
-	6012: 'Could not create the built-in collections',
-	6013: 'Could not save the collection settings',
 	6014: [400, 'The API rules are invalid'],
 	6015: [422, 'Relation fields point at collections this instance does not have'],
 	6016: [409, 'The changes delete collections, fields or their data; confirm them first'],
 
 	// Fields
-	7000: 'Could not load the fields',
+	7000: 'Could not load or save the fields',
 	7001: [400, 'This field name is not allowed'],
 	7002: [409, 'A field with this name already exists'],
 	7003: [400, 'The default value does not fit the field'],
-	7004: 'Could not create the field',
-	7005: 'Could not load the field',
 	7006: [404, 'Field not found'],
-	7007: 'Could not rename the field',
-	7008: 'Could not delete the field',
 	7009: [400, 'The relation points at a collection that does not exist'],
 	7010: [403, "Built-in fields can't be changed"],
 	7011: [400, 'The formula of the computed field is invalid'],
 	7012: [409, 'Other fields still use this field'],
 	7013: 'The files collection is not available',
-	7014: 'Could not save the fields',
 	7015: [409, 'Records have duplicate values in this field, so it cannot be unique'],
 	7016: 'Could not compute the values of the field',
-	7017: 'Could not update the computed values',
 	7018: [400, 'The list items are invalid'],
 	7019: [400, 'This field type does not exist'],
 	7020: [409, 'Relation fields still point to this id field'],
@@ -83,40 +70,27 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	7024: [400, 'A field with multiple values cannot be unique'],
 	7025: [409, 'Records have more than one value in this field'],
 	7026: [409, 'Records still use the list items you removed'],
-	7027: 'Could not save the field',
 
 	// Records
-	8000: 'Could not load the records',
+	8000: 'Could not read or write the records',
 	8001: [400, 'The record is invalid'],
 	8002: [409, 'A record with this value already exists'],
 	8003: [404, 'Record not found'],
-	8004: 'Could not create the record',
-	8005: 'Could not save the record',
-	8006: 'Could not delete the records',
-	8007: 'Could not load the options of the relation',
-	8008: 'Could not load the file fields',
-	8009: 'Could not refresh the computed values',
-	8010: 'Could not preview the computed value',
-	8011: 'Could not load the record',
 	8012: [400, 'The collection has no fields yet'],
 	8013: [403, 'This is not available for this collection'],
 	8014: [403, 'Only admins can do this: the API rule is locked'],
 	8015: [400, 'The filter or sort is invalid'],
 	8016: [400, 'The API rule is invalid'],
 	8017: [403, 'The API rule does not allow this'],
-	8018: 'Could not load the linked records',
 	8019: [409, 'Other records still link to this record'],
 	8020: [409, 'Deleting would cascade to too many linked records'],
 	8021: [409, 'This record is the default value of a relation field'],
 
 	// Indexes
-	9000: 'Could not load the indexes',
+	9000: 'Could not load or save the indexes',
 	9001: [400, 'The columns of the index are invalid'],
 	9002: [409, 'Records have duplicate values, so the index cannot be unique'],
-	9003: 'Could not create the index',
 	9004: [404, 'Index not found'],
-	9005: 'Could not delete the index',
-	9006: 'Could not save the index',
 
 	// OAuth providers
 	10000: 'Could not load the sign-in providers',
@@ -160,17 +134,16 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	13008: 'Could not edit the image',
 
 	// Cloudflare
-	14000: 'Could not load the resources from Cloudflare',
-	14001: 'Could not load the Worker from Cloudflare',
+	14000: 'Could not load the data from Cloudflare',
 	14002: [403, 'The Cloudflare API token is not allowed to read the Worker'],
 	14003: [400, 'This is only available when Pouchbase runs as a Cloudflare Worker'],
-	14010: 'Could not load the usage from Cloudflare',
 	14011: [403, 'The Cloudflare API token is not allowed to read Account Analytics'],
 
 	// Mail
 	15000: 'Sending mail needs the Cloudflare connection',
 	15001: [409, 'Sending mail is not set up'],
 	15004: 'Could not send the email',
+	15005: 'Could not load the mail settings',
 
 	// Backups
 	16000: 'Could not complete the backup operation',
@@ -187,12 +160,10 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	16012: 'Could not transfer the backup',
 
 	// Types
-	17000: 'Could not load the collections for the types',
-	17001: 'Could not load the fields for the types',
-	17002: 'Could not check the token',
+	17000: 'Could not generate the types',
 
 	// Functions
-	18000: 'Could not load the functions',
+	18000: 'Something went wrong with the functions',
 	18001: [404, 'Function not found'],
 	18002: [409, 'A function with this name already exists'],
 	18003: [413, 'The code of the function is too large'],
@@ -202,7 +173,6 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	18007: [404, 'Version not found'],
 	18008: 'Could not save the secrets of the function',
 	18009: [409, 'The function is not deployed yet'],
-	18010: 'Could not load the logs of the function',
 	18011: [403, 'The Cloudflare API token is not allowed to read the logs'],
 	18012: 'Could not run the function',
 
@@ -247,21 +217,21 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	20011: 'A step of the deployment failed',
 
 	// Updates
-	21000: 'Could not check for updates',
+	21000: 'Could not update Pouchbase',
 	21001: [400, 'This instance cannot update itself'],
 	21002: [409, 'There is no newer version to install'],
 	21003: 'Could not prepare the update',
-	21004: 'Could not download the update',
-	21005: 'Could not upload the assets of the update',
 	21006: 'The update contains invalid modules',
 	21007: 'Could not deploy the update to Cloudflare',
-	21008: 'Could not update the binary',
 
 	// Realtime
 	22000: 'Could not send the realtime event',
+	22001: 'Could not identify the realtime connection',
 	22002: [403, 'This subscription is not allowed'],
 	22003: [400, 'The subscription is invalid'],
 	22004: 'Could not authorize the realtime connection',
+	22005: [401, 'The API key is invalid'],
+	22006: [403, 'The API key of a plugin can’t open a realtime connection'],
 
 	// API keys
 	23000: 'Could not load the API keys',

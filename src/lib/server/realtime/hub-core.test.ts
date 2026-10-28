@@ -4,7 +4,9 @@ import type { InternalPath, RecordEvent } from './hub-core';
 import { describe, expect, it } from 'vitest';
 
 import { CLOSE, LIMITS } from '../../realtime/protocol';
-import { contextKey, HubCore, MemoryStore, parseClientMessage } from './hub-core';
+import { parseClientMessage } from './client-message';
+import { contextKey, HubCore } from './hub-core';
+import { MemoryStore } from './memory-store';
 
 type Call = { path: InternalPath; body: unknown; cookie?: string | null };
 type Reply =

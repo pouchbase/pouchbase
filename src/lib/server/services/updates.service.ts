@@ -1,16 +1,15 @@
-import type { ServiceError } from './base.service';
+import type { ContextError, ServiceError } from './base.service';
 import type { Release, UpdateStatus, WorkerManifest } from '#lib/updates.js';
 import type { ResultAsync } from 'neverthrow';
-
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
 
 import { compareVersions, WORKER_FILES_ASSET } from '#lib/updates.js';
 
 import { version as CURRENT_VERSION } from '../../../../package.json';
+import { reasonOf } from '../errors';
 import { selfUpdate } from '../platform';
 import { latestRelease, releaseFile, workerManifest } from '../releases';
 import { nodeRuntime, runtime } from '../runtime';
-import { Service } from './base.service';
+import { Failure, Service } from './base.service';
 
 /** How long the latest release from GitHub is reused before it is looked up again. */
 const CHECK_INTERVAL = 6 * 60 * 60 * 1000;
@@ -20,19 +19,15 @@ interface UpdateCheck {
 	latest: Release | null;
 }
 
-type StatusFailed = ServiceError<21000, 'GET_UPDATE_STATUS_FAILED'>;
-type NotSupported = ServiceError<21001, 'UPDATE_NOT_SUPPORTED'>;
-type NoUpdate = ServiceError<21002, 'NO_UPDATE_AVAILABLE'>;
-type PrepareFailed = ServiceError<21003, 'PREPARE_UPDATE_FAILED'> & { data: { reason: string } };
-type DownloadFailed = ServiceError<21004, 'DOWNLOAD_UPDATE_FAILED'> & { data: { reason: string } };
-type UploadFailed = ServiceError<21005, 'UPLOAD_ASSETS_FAILED'> & { data: { reason: string } };
-type InvalidModules = ServiceError<21006, 'INVALID_MODULES'>;
-type DeployFailed = ServiceError<21007, 'DEPLOY_UPDATE_FAILED'> & { data: { reason: string } };
-type BinaryFailed = ServiceError<21008, 'BINARY_UPDATE_FAILED'> & { data: { reason: string } };
-
-function reason(error: unknown) {
-	return error instanceof Error ? error.message : String(error);
-}
+export type UpdatesError =
+	| ContextError
+	| ServiceError<5001, 'SET_SETTING_FAILED'>
+	| ServiceError<21000, 'UPDATES_FAILED'>
+	| ServiceError<21001, 'UPDATE_NOT_SUPPORTED'>
+	| ServiceError<21002, 'NO_UPDATE_AVAILABLE'>
+	| (ServiceError<21003, 'PREPARE_UPDATE_FAILED'> & { data: { reason: string } })
+	| ServiceError<21006, 'INVALID_MODULES'>
+	| (ServiceError<21007, 'DEPLOY_UPDATE_FAILED'> & { data: { reason: string } });
 
 function parseCheck(value: string | null): UpdateCheck | null {
 	if (!value) {
@@ -52,6 +47,19 @@ async function sha256(blob: Blob) {
 	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
+/** Whether every module matches its SHA-256 in the manifest. */
+async function modulesMatch(manifest: WorkerManifest, modules: Map<string, Blob>) {
+	for (const module of manifest.modules) {
+		const contents = modules.get(module.name);
+
+		if (!contents || (await sha256(contents)) !== module.sha256) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 /**
  * Updates of Pouchbase itself. The latest release is looked up on GitHub at most every six hours
  * (`update_check` in the settings). How an instance updates depends on where it runs (see
@@ -61,64 +69,18 @@ async function sha256(blob: Blob) {
  */
 export class UpdatesService extends Service {
 	/** The running version, the latest release and whether this instance can install it. */
-	status({ refresh = false } = {}): ResultAsync<UpdateStatus, StatusFailed> {
-		const settings = this.services.settings();
+	status({ refresh = false } = {}): ResultAsync<UpdateStatus, UpdatesError> {
+		return this.run(async () => {
+			const check = await this.check(refresh);
 
-		return settings
-			.get('update_check')
-			.mapErr((error) => this.error(21000, 'GET_UPDATE_STATUS_FAILED', error))
-			.andThen((value) => {
-				const cached = parseCheck(value);
-				const fresh =
-					cached?.checkedAt && Date.now() - new Date(cached.checkedAt).getTime() < CHECK_INTERVAL;
-
-				if (fresh && !refresh) {
-					return okAsync(cached);
-				}
-
-				// GitHub being unreachable isn't an error here: the previous answer is kept.
-				return fromPromise(latestRelease(), (error) => error)
-					.map((latest): UpdateCheck | null => ({ checkedAt: new Date().toISOString(), latest }))
-					.orElse((error) => {
-						console.error('[pouchbase] Could not look up the latest release', error);
-
-						return okAsync(null);
-					})
-					.andThen((check) =>
-						check
-							? settings
-									.set('update_check', JSON.stringify(check))
-									.map(() => check)
-									.mapErr((error) => this.error(21000, 'GET_UPDATE_STATUS_FAILED', error))
-							: okAsync(cached ?? { checkedAt: null, latest: null })
-					);
-			})
-			.map((check) => ({
+			return {
 				current: CURRENT_VERSION,
 				runtime: runtime(),
 				latest: check.latest,
 				available: !!check.latest && compareVersions(check.latest.version, CURRENT_VERSION) > 0,
 				checkedAt: check.checkedAt
-			}));
-	}
-
-	/**
-	 * The version to install: the latest release, when it is newer than this one. With `refresh`,
-	 * GitHub is asked again instead of using the answer of the last six hours, which may name a
-	 * release that has been superseded since.
-	 */
-	private target({ refresh = false } = {}): ResultAsync<string, StatusFailed | NoUpdate> {
-		return this.status({ refresh }).andThen((status) =>
-			status.available && status.latest
-				? okAsync(status.latest.version)
-				: errAsync(this.error(21002, 'NO_UPDATE_AVAILABLE'))
-		);
-	}
-
-	private requireRuntime(kind: UpdateStatus['runtime']): ResultAsync<void, NotSupported> {
-		return runtime() === kind
-			? okAsync(undefined)
-			: errAsync(this.error(21001, 'UPDATE_NOT_SUPPORTED'));
+			};
+		}, this.failed);
 	}
 
 	/**
@@ -130,35 +92,33 @@ export class UpdatesService extends Service {
 	 */
 	prepareWorker(): ResultAsync<
 		{ version: string; jwt: string; buckets: string[][] },
-		NotSupported | StatusFailed | NoUpdate | PrepareFailed
+		UpdatesError
 	> {
-		return this.requireRuntime('workers')
-			.andThen(() => this.target({ refresh: true }))
-			.andThen((version) =>
-				fromPromise(
-					(async () => {
-						const manifest = await workerManifest(version);
-						const session = await selfUpdate.startAssetUpload(manifest);
+		return this.run(async () => {
+			this.requireRuntime('workers');
 
-						return { version, ...session };
-					})(),
-					(error): PrepareFailed => ({
-						...this.error(21003, 'PREPARE_UPDATE_FAILED', error),
-						data: { reason: reason(error) }
-					})
-				)
-			);
+			const version = await this.target(true);
+
+			try {
+				const manifest = await workerManifest(version);
+				const session = await selfUpdate.startAssetUpload(manifest);
+
+				return { version, ...session };
+			} catch (error) {
+				this.fail(21003, 'PREPARE_UPDATE_FAILED', {
+					cause: error,
+					data: { reason: reasonOf(error) ?? String(error) }
+				});
+			}
+		}, this.failed);
 	}
 
 	/**
 	 * The contents of the modules and assets of a release (`pouchbase-worker-files.json.gz`), as
 	 * GitHub serves it, so the dialog can read them without depending on GitHub's CORS headers.
 	 */
-	workerFiles(version: string): ResultAsync<Response, DownloadFailed> {
-		return fromPromise(releaseFile(version, WORKER_FILES_ASSET), (error): DownloadFailed => ({
-			...this.error(21004, 'DOWNLOAD_UPDATE_FAILED', error),
-			data: { reason: reason(error) }
-		}));
+	workerFiles(version: string): ResultAsync<Response, UpdatesError> {
+		return this.run(() => releaseFile(version, WORKER_FILES_ASSET), this.failed);
 	}
 
 	/**
@@ -169,88 +129,122 @@ export class UpdatesService extends Service {
 		jwt: string,
 		body: ArrayBuffer,
 		contentType: string
-	): ResultAsync<string | null, NotSupported | UploadFailed> {
-		return this.requireRuntime('workers').andThen(() =>
-			fromPromise(selfUpdate.uploadAssets(jwt, body, contentType), (error): UploadFailed => ({
-				...this.error(21005, 'UPLOAD_ASSETS_FAILED', error),
-				data: { reason: reason(error) }
-			}))
-		);
+	): ResultAsync<string | null, UpdatesError> {
+		return this.run(async () => {
+			this.requireRuntime('workers');
+
+			return selfUpdate.uploadAssets(jwt, body, contentType);
+		}, this.failed);
 	}
 
 	/**
 	 * Deploys the latest release to the Worker with the uploaded assets. The modules come from the
 	 * dialog, which read them from the release; each must match its SHA-256 in the manifest.
 	 */
-	deployWorker(
-		assetsJwt: string,
-		modules: Map<string, Blob>
-	): ResultAsync<string, NotSupported | StatusFailed | NoUpdate | InvalidModules | DeployFailed> {
-		return this.requireRuntime('workers')
-			.andThen(() => this.target())
-			.andThen((version) =>
-				fromPromise(workerManifest(version), (error): DeployFailed => ({
-					...this.error(21007, 'DEPLOY_UPDATE_FAILED', error),
-					data: { reason: reason(error) }
-				}))
-			)
-			.andThen((manifest) => this.verifyModules(manifest, modules).map(() => manifest))
-			.andThen((manifest) =>
-				fromPromise(
-					selfUpdate.deployWorker(manifest, assetsJwt, modules).then(() => manifest.version),
-					(error): DeployFailed => ({
-						...this.error(21007, 'DEPLOY_UPDATE_FAILED', error),
-						data: { reason: reason(error) }
-					})
-				)
+	deployWorker(assetsJwt: string, modules: Map<string, Blob>): ResultAsync<string, UpdatesError> {
+		return this.run(async () => {
+			this.requireRuntime('workers');
+
+			const version = await this.target(false);
+			const manifest = await workerManifest(version).catch((error: unknown) =>
+				this.deployFailed(error)
 			);
-	}
 
-	private verifyModules(
-		manifest: WorkerManifest,
-		modules: Map<string, Blob>
-	): ResultAsync<void, InvalidModules> {
-		return fromPromise(
-			(async () => {
-				for (const module of manifest.modules) {
-					const contents = modules.get(module.name);
+			if (!(await modulesMatch(manifest, modules))) {
+				this.fail(21006, 'INVALID_MODULES');
+			}
 
-					if (!contents || (await sha256(contents)) !== module.sha256) {
-						throw new Error(`Module ${module.name} doesn't match the release`);
-					}
-				}
-			})(),
-			(error) => this.error(21006, 'INVALID_MODULES', error)
-		);
+			await selfUpdate
+				.deployWorker(manifest, assetsJwt, modules)
+				.catch((error: unknown) => this.deployFailed(error));
+
+			return manifest.version;
+		}, this.failed);
 	}
 
 	/**
 	 * Replaces the single binary with the latest release and restarts it right after the response.
 	 * Returns the installed version.
 	 */
-	updateBinary(): ResultAsync<string, NotSupported | NoUpdate | BinaryFailed> {
-		const node = nodeRuntime();
+	updateBinary(): ResultAsync<string, UpdatesError> {
+		return this.run(async () => {
+			this.requireRuntime('binary');
 
-		return this.requireRuntime('binary')
-			.andThen(() =>
-				node?.update && node.restart
-					? okAsync({ update: node.update, restart: node.restart })
-					: errAsync(this.error(21001, 'UPDATE_NOT_SUPPORTED'))
-			)
-			.andThen(({ update, restart }) =>
-				fromPromise(update(), (error): BinaryFailed => ({
-					...this.error(21008, 'BINARY_UPDATE_FAILED', error),
-					data: { reason: reason(error) }
-				})).andThen((installed) => {
-					if (!installed) {
-						return errAsync(this.error(21002, 'NO_UPDATE_AVAILABLE'));
-					}
+			const node = nodeRuntime();
 
-					// After the response is out; the dialog waits for the new version to answer.
-					setTimeout(restart, 1000);
+			if (!node?.update || !node.restart) {
+				this.fail(21001, 'UPDATE_NOT_SUPPORTED');
+			}
 
-					return okAsync(installed);
-				})
-			);
+			const installed = await node.update();
+
+			if (!installed) {
+				this.fail(21002, 'NO_UPDATE_AVAILABLE');
+			}
+
+			// After the response is out; the dialog waits for the new version to answer.
+			setTimeout(node.restart, 1000);
+
+			return installed;
+		}, this.failed);
+	}
+
+	private failed = (error: unknown) => this.error(21000, 'UPDATES_FAILED', error);
+
+	/** The last answer of GitHub, looked up again when it is older than six hours or `refresh`. */
+	private async check(refresh: boolean): Promise<UpdateCheck> {
+		const settings = this.services.settings();
+		const cached = parseCheck(await this.must(settings.get('update_check')));
+		const fresh =
+			cached?.checkedAt && Date.now() - new Date(cached.checkedAt).getTime() < CHECK_INTERVAL;
+
+		if (fresh && !refresh) {
+			return cached;
+		}
+
+		try {
+			const check = { checkedAt: new Date().toISOString(), latest: await latestRelease() };
+
+			await this.must(settings.set('update_check', JSON.stringify(check)));
+
+			return check;
+		} catch (error) {
+			if (error instanceof Failure) {
+				throw error;
+			}
+
+			// GitHub being unreachable isn't an error here: the previous answer is kept.
+			console.error('[pouchbase] Could not look up the latest release', error);
+
+			return cached ?? { checkedAt: null, latest: null };
+		}
+	}
+
+	/**
+	 * The version to install: the latest release, when it is newer than this one. With `refresh`,
+	 * GitHub is asked again instead of using the answer of the last six hours, which may name a
+	 * release that has been superseded since.
+	 */
+	private async target(refresh: boolean) {
+		const { latest } = await this.check(refresh);
+
+		if (!latest || compareVersions(latest.version, CURRENT_VERSION) <= 0) {
+			this.fail(21002, 'NO_UPDATE_AVAILABLE');
+		}
+
+		return latest.version;
+	}
+
+	private requireRuntime(kind: UpdateStatus['runtime']) {
+		if (runtime() !== kind) {
+			this.fail(21001, 'UPDATE_NOT_SUPPORTED');
+		}
+	}
+
+	private deployFailed(error: unknown): never {
+		this.fail(21007, 'DEPLOY_UPDATE_FAILED', {
+			cause: error,
+			data: { reason: reasonOf(error) ?? String(error) }
+		});
 	}
 }

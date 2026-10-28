@@ -6,7 +6,8 @@ import { randomUUID } from 'node:crypto';
 import { WebSocket, WebSocketServer } from 'ws';
 
 import { CLOSE, LIMITS, PING_FRAME, PONG_FRAME, REALTIME_PATH } from '../../realtime/protocol.ts';
-import { HubCore, MemoryStore } from './hub-core.ts';
+import { HubCore } from './hub-core.ts';
+import { MemoryStore } from './memory-store.ts';
 import { internalSecret } from './internal-secret.ts';
 
 /**
