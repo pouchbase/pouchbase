@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { HTMLAttributes } from 'svelte/elements';
-	import * as ScrollArea from '../scroll-area/index.js';
+	import * as ScrollArea from '@pouchbasejs/ui/scroll-area';
 
 	type Props = HTMLAttributes<HTMLDivElement> & {
 		/** Shown in the window bar, e.g. the file name or `Terminal`. */
@@ -33,6 +33,7 @@
 	<ScrollArea.Root
 		orientation="horizontal"
 		variant="dark"
+		overlay
 		viewportClass="p-5 font-mono leading-7 whitespace-nowrap"
 	>
 		<code class="block w-max min-w-full">{@render children?.()}</code>

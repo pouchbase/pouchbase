@@ -1,7 +1,7 @@
 <script lang="ts">
-	import * as Button from '#lib/components/ui/button/index.js';
+	import * as Button from '@pouchbasejs/ui/button';
 	import * as Icon from '@pouchbasejs/ui/icon';
-	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import * as Sheet from '@pouchbasejs/ui/sheet';
 	import { page } from '$app/state';
 	import type { LayoutProps } from './$types';
 	import { docsLink, docsTab } from './docs-nav';

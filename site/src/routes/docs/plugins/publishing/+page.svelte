@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as Callout from '#lib/components/ui/callout/index.js';
+	import * as Callout from '@pouchbasejs/ui/callout';
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
 	import * as Icon from '@pouchbasejs/ui/icon';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';
 	import DocsPage, { type Section } from '../../docs-page.svelte';

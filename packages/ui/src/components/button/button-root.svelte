@@ -1,7 +1,8 @@
 <script module lang="ts">
 	import { Button } from 'bits-ui';
 
-	export type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
+	/** `brand` uses the host's `--color-brand-*` tokens, e.g. for the main call to action of a site. */
+	export type Variant = 'primary' | 'brand' | 'secondary' | 'ghost' | 'danger';
 
 	export type Size = 'default' | 'icon' | 'icon-sm';
 
@@ -45,6 +46,8 @@
 	const variants = {
 		primary:
 			'border-transparent bg-zinc-900 text-white hover:bg-zinc-700 focus-visible:outline-zinc-900',
+		brand:
+			'border-transparent bg-brand-500 text-white hover:bg-brand-600 focus-visible:outline-brand-500',
 		secondary:
 			'border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-100 focus-visible:outline-zinc-400',
 		ghost:

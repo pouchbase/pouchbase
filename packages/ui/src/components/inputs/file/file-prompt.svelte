@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Icon from '../../icon';
+	import * as Icon from '../../icon/index.js';
 
 	interface Props {
 		/** Id of the file input the prompt opens. */

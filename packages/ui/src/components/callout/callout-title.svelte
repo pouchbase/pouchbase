@@ -4,6 +4,6 @@
 	let { children, class: className, ...rest }: HTMLAttributes<HTMLParagraphElement> = $props();
 </script>
 
-<p {...rest} class={['font-medium', className]}>
+<p {...rest} data-callout-title class={['font-medium', className]}>
 	{@render children?.()}
 </p>

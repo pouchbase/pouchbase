@@ -1,8 +1,8 @@
 <script lang="ts">
-	import * as Badge from '#lib/components/ui/badge/index.js';
+	import * as Badge from '@pouchbasejs/ui/badge';
 	import * as Empty from '@pouchbasejs/ui/empty';
 	import * as Icon from '@pouchbasejs/ui/icon';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 	import { categoryLabel } from '#lib/plugin-categories.js';
 	import { getMyPlugins } from './account.remote';
 

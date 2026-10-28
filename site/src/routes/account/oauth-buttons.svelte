@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { createClient, isPouchbaseError } from '@pouchbasejs/js-sdk';
 	import type { OAuthProvider } from '@pouchbasejs/js-sdk';
-	import * as Button from '#lib/components/ui/button/index.js';
+	import * as Button from '@pouchbasejs/ui/button';
 	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as Separator from '#lib/components/ui/separator/index.js';
-	import { toast } from '#lib/components/ui/toast/index.js';
+	import { toast } from '@pouchbasejs/ui/toast';
 	import { isHttpError } from '@sveltejs/kit';
 	import { goto } from '$app/navigation';
 	import { POUCHBASE_URL } from '$app/env/public';

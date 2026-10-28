@@ -2,7 +2,7 @@
 	import { resolve } from '$app/paths';
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 	import type { PageProps } from './$types';
 	import DocsPage, { type Section } from '../../docs-page.svelte';
 

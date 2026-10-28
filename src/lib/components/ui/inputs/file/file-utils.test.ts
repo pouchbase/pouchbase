@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { describeAccept, filterFiles, iconFor, matchesAccept } from './file-utils.js';
+import {
+	describeAccept,
+	filterFiles,
+	iconFor,
+	matchesAccept
+} from '../../../../../../packages/ui/src/components/inputs/file/file-utils.js';
 
 const file = (name: string, type: string, size = 10) => ({ name, type, size });
 

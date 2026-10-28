@@ -16,9 +16,9 @@
 </script>
 
 <script lang="ts">
-	import * as Button from '../button';
-	import * as Icon from '../icon';
-	import { toast } from '../toast';
+	import * as Button from '../button/index.js';
+	import * as Icon from '../icon/index.js';
+	import { toast } from '../toast/index.js';
 
 	let {
 		value,

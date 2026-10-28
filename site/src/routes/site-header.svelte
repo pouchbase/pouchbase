@@ -1,9 +1,9 @@
 <script lang="ts">
-	import * as Button from '#lib/components/ui/button/index.js';
+	import * as Button from '@pouchbasejs/ui/button';
 	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as Logo from '#lib/components/ui/logo/index.js';
 	import * as NavigationMenu from '#lib/components/ui/navigation-menu/index.js';
-	import * as Sheet from '#lib/components/ui/sheet/index.js';
+	import * as Sheet from '@pouchbasejs/ui/sheet';
 	import { resolve } from '$app/paths';
 	import { GITHUB_URL, isGroup, navigation } from './site-nav';
 

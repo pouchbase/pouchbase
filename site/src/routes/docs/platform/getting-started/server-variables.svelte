@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Code from '#lib/components/ui/code/index.js';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 
 	// The environment variables of the Node server, which Docker and the single binary both run.
 	const variables = [

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import { Dialogs, setDialogs } from './dialog-context.svelte';
+	import { Dialogs, setDialogs } from './dialog-context.svelte.js';
 	import Root from './dialog-root.svelte';
 
 	let { children }: { children?: Snippet } = $props();

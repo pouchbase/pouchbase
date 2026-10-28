@@ -31,6 +31,10 @@
 			"types": "./src/vite/iconify.ts",
 			"default": "./src/vite/iconify.ts"
 		},
+		"./format": {
+			"types": "./src/format.ts",
+			"default": "./src/format.ts"
+		},
 		"./package.json": "./package.json",
 		"./*": {
 			"types": "./src/components/*/index.ts",
@@ -51,6 +55,10 @@
 			"./vite": {
 				"types": "./dist/vite/iconify.d.ts",
 				"default": "./dist/vite/iconify.js"
+			},
+			"./format": {
+				"types": "./dist/format.d.ts",
+				"default": "./dist/format.js"
 			},
 			"./package.json": "./package.json",
 			"./*": {

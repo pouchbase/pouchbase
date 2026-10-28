@@ -1,7 +1,8 @@
 <script module lang="ts">
 	import type { HTMLAnchorAttributes, HTMLAttributes } from 'svelte/elements';
 
-	export type Variant = 'neutral' | 'outline' | 'success' | 'warning' | 'danger';
+	/** `brand` uses the host's `--color-brand-*` tokens. */
+	export type Variant = 'neutral' | 'outline' | 'brand' | 'success' | 'warning' | 'danger';
 
 	export type Props = HTMLAttributes<HTMLElement> &
 		Pick<HTMLAnchorAttributes, 'href' | 'target' | 'rel'> & {
@@ -17,6 +18,7 @@
 	const variants = {
 		neutral: 'border-transparent bg-zinc-100 text-zinc-700',
 		outline: 'border-zinc-300 text-zinc-600',
+		brand: 'border-transparent bg-brand-50 text-brand-700',
 		success: 'border-transparent bg-emerald-50 text-emerald-700',
 		warning: 'border-transparent bg-amber-50 text-amber-800',
 		danger: 'border-transparent bg-red-50 text-red-700'
@@ -25,6 +27,7 @@
 	const links = {
 		neutral: 'hover:bg-zinc-200 hover:text-zinc-900',
 		outline: 'hover:border-zinc-400 hover:text-zinc-900',
+		brand: 'hover:bg-brand-100',
 		success: 'hover:bg-emerald-100',
 		warning: 'hover:bg-amber-100',
 		danger: 'hover:bg-red-100'

@@ -1,11 +1,16 @@
 <script module lang="ts">
 	import { ScrollArea as ScrollAreaPrimitive } from 'bits-ui';
+	import type { Variant } from './scroll-area-scrollbar.svelte';
 
 	export type Props = ScrollAreaPrimitive.RootProps & {
 		/** Classes for the scrolling element, e.g. a `max-h-*` that limits its height. */
 		viewportClass?: string;
 		/** Which scrollbars to show. */
 		orientation?: 'vertical' | 'horizontal' | 'both';
+		/** `dark` for a dark background, such as a code block. */
+		variant?: Variant;
+		/** Scrollbars over the content instead of next to it, so showing them never shifts the layout. */
+		overlay?: boolean;
 	};
 </script>
 
@@ -16,6 +21,8 @@
 		ref = $bindable(null),
 		viewportClass,
 		orientation = 'vertical',
+		variant = 'default',
+		overlay = false,
 		type = 'hover',
 		class: className,
 		children,
@@ -34,11 +41,11 @@
 	</ScrollAreaPrimitive.Viewport>
 
 	{#if orientation !== 'horizontal'}
-		<ScrollAreaScrollbar orientation="vertical" />
+		<ScrollAreaScrollbar orientation="vertical" {variant} {overlay} />
 	{/if}
 
 	{#if orientation !== 'vertical'}
-		<ScrollAreaScrollbar orientation="horizontal" />
+		<ScrollAreaScrollbar orientation="horizontal" {variant} {overlay} />
 	{/if}
 
 	<ScrollAreaPrimitive.Corner />

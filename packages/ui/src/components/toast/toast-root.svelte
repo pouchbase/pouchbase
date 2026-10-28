@@ -2,7 +2,7 @@
 	import type { HTMLAttributes } from 'svelte/elements';
 	import { flip } from 'svelte/animate';
 	import ToastItem from './toast-item.svelte';
-	import { toasts } from './toast-state.svelte';
+	import { toasts } from './toast-state.svelte.js';
 
 	let { class: className, ...rest }: HTMLAttributes<HTMLOListElement> = $props();
 </script>

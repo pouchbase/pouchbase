@@ -17,9 +17,11 @@ src/
 ├── theme.css           # @theme tokens, base layer, `@source './components'`
 ├── vite/iconify.ts     # `iconify({ sets, srcDirs? })` Vite plugin, exposes `virtual:iconify`
 └── components/
-    ├── badge/ button/ callout/ card/ empty/ icon/ link/ meter/ progress/ scroll-area/
-    ├── segmented/ skeleton/ spinner/ swatch/ table/ thumbnail/ tile/ tooltip/
-    └── inputs/{checkbox,input,select,slider,textarea}/
+    ├── badge/ button/ callout/ card/ code-block/ copy-button/ dialog/ empty/ error-state/ icon/
+    ├── link/ meter/ progress/ scroll-area/ segmented/ sheet/ skeleton/ spinner/ swatch/ table/
+    ├── thumbnail/ tile/ toast/ tooltip/
+    └── inputs/{checkbox,file,input,select,slider,textarea}/
+├── format.ts           # `formatFileSize`, used by the file input (`@pouchbasejs/ui/format`)
 ```
 
 - Exports point at the sources (`./<name>` → `./src/components/<name>/index.ts`); `publishConfig.exports` swaps them for `dist/` when the package is packed. The app at the repository root uses the sources through `workspace:*`.
@@ -28,7 +30,7 @@ src/
 ## Rules
 
 - Follow the component rules of the app (`.claude/skills/pouchbase-components/SKILL.md` at the repository root): compound parts with a `Root`, lowercase kebab-case file names prefixed with the component name, `class` merged with the array syntax, `...rest` on the element, Tailwind utilities only.
-- **Only primitives belong here.** A component may import `svelte`, `svelte/*`, `bits-ui`, `@iconify/svelte` and other components of this package, nothing else: no `$app`, `$lib`, `#lib`, `virtual:` modules or app code. Components that need the app (forms with remote functions, navigation, editors, toasts, dialogs, ...) stay in `src/lib/components/ui/` of the app.
+- **Only primitives belong here.** A component may import `svelte`, `svelte/*`, `bits-ui`, `@iconify/svelte` and other components of this package, nothing else: no `$app`, `$lib`, `#lib`, `virtual:` modules or app code. Components that need the app (forms with remote functions, navigation, editors, ...) stay in `src/lib/components/ui/` of the app; dialogs, sheets, toasts and the file input live here because the site uses them too.
 - Relative imports are explicit (`'../icon/index.js'`, `'./spinner-icon.js'`), so the published `dist/` resolves without a bundler's directory lookup.
 - `Icon.Root` doesn't register icons: the host imports `virtual:iconify` once (the app does in `src/routes/+layout.svelte`). Icon names must be literal strings; the Vite plugin always scans `src/components` (or `dist/components`) of this package as well as the host's `srcDirs`.
 - Design tokens (`--spacing-control`, `--spacing-row`, chart colors, animations) live in `src/theme.css`; the host imports it after `tailwindcss`.

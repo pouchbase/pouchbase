@@ -83,31 +83,38 @@ Every component is a set of parts used through a namespace, with a `Root` part. 
 
 Icon names must appear literally in the source (`icon="lucide:plus"`, not ``icon={`lucide:${name}`}``) so the Vite plugin can find them. For an icon that is a file, such as a plugin's icon of a field type, `<Icon.Root src={url} icon="lucide:puzzle" />` draws the SVG at `url` in the text color (`currentColor`, as a CSS mask, so only its shape counts) at the size of the Iconify icons; `icon` is shown when `src` is empty. The `Select` items take the same as `iconSrc`. A button whose `onclick` returns a promise shows a spinner until it settles.
 
-| Entry point                       | Parts                                                                       |
-| --------------------------------- | --------------------------------------------------------------------------- |
-| `@pouchbasejs/ui/badge`           | `Root`                                                                      |
-| `@pouchbasejs/ui/button`          | `Root`                                                                      |
-| `@pouchbasejs/ui/callout`         | `Root`, `Icon`, `Body`, `Title`, `Description`                              |
-| `@pouchbasejs/ui/card`            | `Root`, `Header`, `Title`, `Description`, `Content`                         |
-| `@pouchbasejs/ui/empty`           | `Root`, `Icon`, `Title`, `Description`                                      |
-| `@pouchbasejs/ui/icon`            | `Root`                                                                      |
-| `@pouchbasejs/ui/link`            | `Root`                                                                      |
-| `@pouchbasejs/ui/meter`           | `Root`                                                                      |
-| `@pouchbasejs/ui/progress`        | `Root`                                                                      |
-| `@pouchbasejs/ui/scroll-area`     | `Root`, `Scrollbar`                                                         |
-| `@pouchbasejs/ui/segmented`       | `Root`, `Item`                                                              |
-| `@pouchbasejs/ui/skeleton`        | `Root`                                                                      |
-| `@pouchbasejs/ui/spinner`         | `Root`                                                                      |
-| `@pouchbasejs/ui/swatch`          | `Root`                                                                      |
-| `@pouchbasejs/ui/table`           | `Root`, `Header`, `Body`, `Row`, `Head`, `Cell`                             |
-| `@pouchbasejs/ui/thumbnail`       | `Root`                                                                      |
-| `@pouchbasejs/ui/tile`            | `Root`, `Grid`, `Header`, `Icon`, `Title`, `Value`, `Description`, `Footer` |
-| `@pouchbasejs/ui/tooltip`         | `Root`, `Trigger`, `Content`                                                |
-| `@pouchbasejs/ui/inputs/checkbox` | `Root`                                                                      |
-| `@pouchbasejs/ui/inputs/input`    | `Root`                                                                      |
-| `@pouchbasejs/ui/inputs/select`   | `Root`                                                                      |
-| `@pouchbasejs/ui/inputs/slider`   | `Root`                                                                      |
-| `@pouchbasejs/ui/inputs/textarea` | `Root`                                                                      |
+| Entry point                       | Parts                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------- |
+| `@pouchbasejs/ui/badge`           | `Root`                                                                             |
+| `@pouchbasejs/ui/button`          | `Root`                                                                             |
+| `@pouchbasejs/ui/callout`         | `Root`, `Icon`, `Body`, `Title`, `Description`                                     |
+| `@pouchbasejs/ui/card`            | `Root`, `Header`, `Title`, `Description`, `Content`                                |
+| `@pouchbasejs/ui/code-block`      | `Root`                                                                             |
+| `@pouchbasejs/ui/copy-button`     | `Root`                                                                             |
+| `@pouchbasejs/ui/dialog`          | `Root`, `Content`, `Header`, `Title`, `Description`, `Footer`, `Close`, `Provider` |
+| `@pouchbasejs/ui/empty`           | `Root`, `Icon`, `Title`, `Description`                                             |
+| `@pouchbasejs/ui/error-state`     | `Root`, `Icon`, `Status`, `Title`, `Description`, `Details`, `Actions`             |
+| `@pouchbasejs/ui/icon`            | `Root`                                                                             |
+| `@pouchbasejs/ui/link`            | `Root`                                                                             |
+| `@pouchbasejs/ui/meter`           | `Root`                                                                             |
+| `@pouchbasejs/ui/progress`        | `Root`                                                                             |
+| `@pouchbasejs/ui/scroll-area`     | `Root`, `Scrollbar`                                                                |
+| `@pouchbasejs/ui/segmented`       | `Root`, `Item`                                                                     |
+| `@pouchbasejs/ui/sheet`           | `Root`, `Content`, `Header`, `Title`, `Description`, `Body`, `Footer`              |
+| `@pouchbasejs/ui/skeleton`        | `Root`                                                                             |
+| `@pouchbasejs/ui/spinner`         | `Root`                                                                             |
+| `@pouchbasejs/ui/swatch`          | `Root`                                                                             |
+| `@pouchbasejs/ui/table`           | `Root`, `Header`, `Body`, `Row`, `Head`, `Cell`                                    |
+| `@pouchbasejs/ui/thumbnail`       | `Root`                                                                             |
+| `@pouchbasejs/ui/tile`            | `Root`, `Grid`, `Header`, `Icon`, `Title`, `Value`, `Description`, `Footer`        |
+| `@pouchbasejs/ui/toast`           | `Root`, and `toast.success()` / `toast.error()`                                    |
+| `@pouchbasejs/ui/tooltip`         | `Root`, `Trigger`, `Content`                                                       |
+| `@pouchbasejs/ui/inputs/checkbox` | `Root`                                                                             |
+| `@pouchbasejs/ui/inputs/file`     | `Root`                                                                             |
+| `@pouchbasejs/ui/inputs/input`    | `Root`                                                                             |
+| `@pouchbasejs/ui/inputs/select`   | `Root`                                                                             |
+| `@pouchbasejs/ui/inputs/slider`   | `Root`                                                                             |
+| `@pouchbasejs/ui/inputs/textarea` | `Root`                                                                             |
 
 Every part accepts `class` and the native attributes of its element.
 

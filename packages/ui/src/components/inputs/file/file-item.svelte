@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { formatFileSize } from '#lib/files/files.js';
-	import * as Button from '../../button';
-	import * as Icon from '../../icon';
-	import * as Thumbnail from '../../thumbnail';
+	import { formatFileSize } from '../../../format.js';
+	import * as Button from '../../button/index.js';
+	import * as Icon from '../../icon/index.js';
+	import * as Thumbnail from '../../thumbnail/index.js';
 	import { iconFor } from './file-utils.js';
 
 	interface Props {

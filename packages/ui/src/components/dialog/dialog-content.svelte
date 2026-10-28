@@ -10,8 +10,8 @@
 </script>
 
 <script lang="ts">
-	import * as Icon from '../icon';
-	import * as Button from '../button';
+	import * as Icon from '../icon/index.js';
+	import * as Button from '../button/index.js';
 	import * as ScrollArea from '../scroll-area/index.js';
 
 	let {

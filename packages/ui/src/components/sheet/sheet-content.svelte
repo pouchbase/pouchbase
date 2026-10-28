@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { Dialog } from 'bits-ui';
-	import * as Button from '../button';
-	import * as Icon from '../icon';
+	import * as Button from '../button/index.js';
+	import * as Icon from '../icon/index.js';
 
 	type Props = Omit<Dialog.ContentProps, 'child'> & {
 		/** `wide` for content that needs room, such as code examples. */

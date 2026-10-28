@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
-	import * as Button from '#lib/components/ui/button/index.js';
-	import * as Callout from '#lib/components/ui/callout/index.js';
+	import * as Button from '@pouchbasejs/ui/button';
+	import * as Callout from '@pouchbasejs/ui/callout';
 	import * as Icon from '@pouchbasejs/ui/icon';
 
 	type Props = {

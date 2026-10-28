@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Input from '../inputs/input/index.js';
+	import * as Input from '@pouchbasejs/ui/inputs/input';
 	import { getFieldContext } from './form-context';
 
 	type Props = Omit<Input.RootProps, 'type' | 'name' | 'value' | 'id'> & {

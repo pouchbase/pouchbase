@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 	import { uiComponentHref } from '#lib/ui-components.js';
 	import { resolve } from '$app/paths';
 	import type { PageProps } from './$types';

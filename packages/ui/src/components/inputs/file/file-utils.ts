@@ -1,4 +1,4 @@
-import { formatFileSize } from '#lib/files/files.js';
+import { formatFileSize } from '../../../format.js';
 
 /** The comma-separated rules of an `accept` attribute, trimmed and without empty entries. */
 function acceptRules(accept: string) {

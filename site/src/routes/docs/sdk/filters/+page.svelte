@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Callout from '#lib/components/ui/callout/index.js';
+	import * as Callout from '@pouchbasejs/ui/callout';
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
 	import * as Icon from '@pouchbasejs/ui/icon';

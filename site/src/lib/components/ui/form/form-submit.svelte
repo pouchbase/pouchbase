@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { HTMLButtonAttributes } from 'svelte/elements';
-	import * as Button from '../button';
+	import * as Button from '@pouchbasejs/ui/button';
 	import { getFormContext } from './form-context';
 
 	type Props = Omit<HTMLButtonAttributes, 'type'> & {

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Button from '#lib/components/ui/button/index.js';
+	import * as Button from '@pouchbasejs/ui/button';
 	import * as ChipGroup from '#lib/components/ui/chip-group/index.js';
 	import * as Empty from '@pouchbasejs/ui/empty';
 	import * as Icon from '@pouchbasejs/ui/icon';

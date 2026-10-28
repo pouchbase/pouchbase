@@ -1,12 +1,12 @@
 <script lang="ts">
-	import * as Callout from '#lib/components/ui/callout/index.js';
+	import * as Callout from '@pouchbasejs/ui/callout';
 	import * as Card from '@pouchbasejs/ui/card';
 	import * as Code from '#lib/components/ui/code/index.js';
-	import * as CopyButton from '#lib/components/ui/copy-button/index.js';
+	import * as CopyButton from '@pouchbasejs/ui/copy-button';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as Input from '@pouchbasejs/ui/inputs/input';
-	import * as Table from '#lib/components/ui/table/index.js';
+	import * as Table from '@pouchbasejs/ui/table';
 	import { publishTokenSchema } from '#lib/schemas/account.js';
 	import { createToken, deleteToken, getPublishTokens } from './account.remote';
 

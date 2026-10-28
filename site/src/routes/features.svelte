@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Badge from '#lib/components/ui/badge/index.js';
+	import * as Badge from '@pouchbasejs/ui/badge';
 	import * as Icon from '@pouchbasejs/ui/icon';
 
 	const providers = ['Google', 'GitHub', 'Microsoft', 'Discord', 'Twitch'];

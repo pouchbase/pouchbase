@@ -2,7 +2,7 @@
 	import type { RemoteFormEnhanceCallback } from '$app/server';
 	import { tick } from 'svelte';
 	import type { HTMLFormAttributes } from 'svelte/elements';
-	import { toast } from '../toast';
+	import { toast } from '@pouchbasejs/ui/toast';
 	import { setFormContext, type AnyRemoteForm } from './form-context';
 
 	type Props = Omit<HTMLFormAttributes, 'method' | 'action'> & {

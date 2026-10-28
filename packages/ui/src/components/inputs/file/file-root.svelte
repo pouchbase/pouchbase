@@ -11,7 +11,7 @@
 </script>
 
 <script lang="ts">
-	import * as Icon from '../../icon';
+	import * as Icon from '../../icon/index.js';
 	import FileFooter from './file-footer.svelte';
 	import FileItem from './file-item.svelte';
 	import FilePrompt from './file-prompt.svelte';

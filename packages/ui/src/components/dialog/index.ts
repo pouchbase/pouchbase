@@ -6,4 +6,4 @@ export { default as Description } from './dialog-description.svelte';
 export { default as Footer } from './dialog-footer.svelte';
 export { default as Close } from './dialog-close.svelte';
 export { default as Provider } from './dialog-provider.svelte';
-export { getDialogs, type DialogProps, type Dialogs } from './dialog-context.svelte';
+export { getDialogs, type DialogProps, type Dialogs } from './dialog-context.svelte.js';

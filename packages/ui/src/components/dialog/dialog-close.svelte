@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { HTMLButtonAttributes } from 'svelte/elements';
 	import { Dialog } from 'bits-ui';
-	import * as Button from '../button';
+	import * as Button from '../button/index.js';
 
 	type Props = Omit<HTMLButtonAttributes, 'type'> & {
 		variant?: Button.Variant;

@@ -46,6 +46,7 @@ import {
 	renameColumns
 } from '../fields/ddl';
 import { pluginSnapshot } from '../fields/plugin-snapshot';
+import { readableColumns } from '../records/values';
 import { Service } from './base.service';
 
 export { uniqueIndexName } from '../fields/ddl';

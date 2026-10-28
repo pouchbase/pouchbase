@@ -23,7 +23,8 @@
 <div
 	role={variant === 'error' ? 'alert' : 'status'}
 	{...rest}
-	class={['flex gap-3 rounded-lg border p-4 text-sm', variants[variant], className]}
+	data-callout={variant}
+	class={['not-prose flex gap-3 rounded-lg border p-4 text-sm', variants[variant], className]}
 >
 	{@render children?.()}
 </div>

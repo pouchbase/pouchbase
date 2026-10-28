@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
-	import * as Icon from '../icon';
-	import { toasts, type ToastEntry, type Variant } from './toast-state.svelte';
+	import * as Icon from '../icon/index.js';
+	import { toasts, type ToastEntry, type Variant } from './toast-state.svelte.js';
 
 	type Props = {
 		item: ToastEntry;
