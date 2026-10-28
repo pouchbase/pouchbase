@@ -2,19 +2,19 @@ import { describe, expect, it } from 'vitest';
 
 import {
 	API_VERSION,
-	BUNDLE_FORMAT,
-	BUNDLE_VERSION,
 	RegistryError,
 	computeIntegrity,
 	contributionSummary,
 	createRegistryClient,
 	parseBundle,
 	parseManifest,
-	pluginVersionSchema,
 	serializeBundle,
 	type PluginBundle,
 	type PluginVersion
 } from '../src/index.js';
+
+import { BUNDLE_FORMAT, BUNDLE_VERSION } from '../src/bundle.js';
+import { pluginVersionSchema } from '../src/registry.js';
 
 const manifest = parseManifest({
 	apiVersion: API_VERSION,

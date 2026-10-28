@@ -152,7 +152,7 @@ The CLI bundles `plugin.ts` and runs it in Node.js to read the plugin, so keep t
 | `permissions.network`     | Hosts the server code may reach over HTTPS; `*.example.com` matches its subdomains, not `example.com` itself. Shown to the admin before installing.                                     |
 | `permissions.collections` | `{ read, write }`: the app's collections `ctx.pouch` may use, by name, or `*` for all; `write` includes reading. See [Collections](#collections). Shown to the admin before installing. |
 
-`name`, `version`, `description`, `license`, `author`, `homepage`, `repository` and `keywords` may be left out when the plugin's `package.json` has them; the CLI fills them in (`withPackageDefaults`), and a value in the manifest wins. So `version` can live in `package.json` alone. `author` may use npm's `Name <email> (url)` form, and `repository` is turned into a browsable URL (`git+https://github.com/me/plugin.git` → `https://github.com/me/plugin`).
+`name`, `version`, `description`, `license`, `author`, `homepage`, `repository` and `keywords` may be left out when the plugin's `package.json` has them; the CLI fills them in, and a value in the manifest wins. So `version` can live in `package.json` alone. `author` may use npm's `Name <email> (url)` form, and `repository` is turned into a browsable URL (`git+https://github.com/me/plugin.git` → `https://github.com/me/plugin`).
 
 The CLI turns `plugin.ts` into the full manifest that hosts and the registry see, with a `contributes` list and every path a bundle path. `pouchbase-plugin manifest` prints it:
 
@@ -530,7 +530,7 @@ It returns `ctx`, the `requests` that reached `ctx.fetch` and the `logs` of `ctx
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Bundle                | 25 MiB (`MAX_BUNDLE_SIZE`)                                                                                                  |
 | Call                  | 10 seconds for a field hook or `profile`, and until a route's response starts                                               |
-| Contributions         | 20 field types, 20 pages, 10 auth providers, 20 collections, 30 settings (`MAX_PLUGIN_SETTINGS`)                            |
+| Contributions         | 20 field types, 20 pages, 10 auth providers, 20 collections, 30 settings                                                    |
 | Collections           | The name with its prefix up to 63 characters; up to 50 names in each of `permissions.collections.read` and `write`          |
 | Names                 | Plugin id up to 64 characters, field type up to 32, setting key up to 63                                                    |
 | Icons                 | 32 KiB each (`MAX_ICON_SIZE`)                                                                                               |

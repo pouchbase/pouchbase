@@ -39,7 +39,7 @@ export type CompiledUi = {
 };
 
 /** The options a host compiles every component with. */
-export const SVELTE_COMPILE_OPTIONS = {
+const SVELTE_COMPILE_OPTIONS = {
 	generate: 'client',
 	runes: true,
 	css: 'injected',

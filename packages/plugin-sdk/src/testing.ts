@@ -8,7 +8,7 @@ import type {
 import { Pouchbase } from '@pouchbasejs/js-sdk';
 
 import { blockedReason } from './network.js';
-import { createPluginSettings } from './server.js';
+import { createPluginSettings } from './settings.js';
 
 /**
  * Helpers for testing a plugin's server code with vitest (or any test runner) in Node.js, without a

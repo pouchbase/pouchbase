@@ -28,11 +28,12 @@
  * those in `permissions.collections`. The Worker has no access to the database, the storage or
  * Pouchbase's secrets, and its global `fetch` has the same limits as `ctx.fetch`.
  *
- * This module imports only types and uses only `fetch`-style Web APIs, so it bundles into the
- * sandboxed server code as is.
+ * This module and the ones it re-exports (`settings.ts`, `oidc.ts`, `plugin-file.ts`) import only
+ * types and use only `fetch`-style Web APIs, so they bundle into the sandboxed server code as is.
  */
 
 import type { Pouchbase } from '@pouchbasejs/js-sdk';
+import type { PluginComponent, PluginIcon } from './plugin-file.js';
 import type { FieldInputProps, FieldPreviewProps, PageProps } from './ui.js';
 
 export type PluginLogger = {
@@ -128,62 +129,6 @@ export type PluginSettings<V extends object = PluginSettingValues> = {
 	/** Every setting's value, the way `get` returns it. */
 	getAll(): Promise<V>;
 };
-
-/**
- * A saved value (always a string, as `plugin_settings` stores it) as `ctx.settings.get` returns it:
- * a number for `number`, a boolean for `boolean`, the string for the other types. Without a value
- * (`raw` `null` or `undefined`) the setting's `default`, else `null`; so is a value that doesn't
- * parse (a `number` that isn't one).
- */
-export function parseSettingValue(
-	setting: Pick<PluginSettingDefinition, 'type' | 'default'>,
-	raw: string | null | undefined
-): string | number | boolean | null {
-	if (raw === null || raw === undefined) {
-		return setting.default ?? null;
-	}
-
-	switch (setting.type) {
-		case 'number': {
-			const number = raw.trim() ? Number(raw) : Number.NaN;
-
-			return Number.isFinite(number) ? number : (setting.default ?? null);
-		}
-		case 'boolean':
-			return raw === 'true';
-		default:
-			return raw;
-	}
-}
-
-/**
- * `ctx.settings` for the setting definitions and their values (`key` → string): the host builds
- * the plugin context with it, and so can tests. Keys without a definition read as `null`.
- */
-export function createPluginSettings(
-	definitions: readonly Pick<PluginSettingDefinition, 'key' | 'type' | 'default'>[] | undefined,
-	values: Readonly<Record<string, string>> = {}
-): PluginSettings {
-	const all = () =>
-		Object.fromEntries(
-			(definitions ?? []).map((setting) => [
-				setting.key,
-				parseSettingValue(
-					setting,
-					Object.hasOwn(values, setting.key) ? values[setting.key] : undefined
-				)
-			])
-		);
-
-	return {
-		get: async (key: string) => {
-			const current = all();
-
-			return Object.hasOwn(current, key) ? current[key] : null;
-		},
-		getAll: async () => all()
-	} as PluginSettings;
-}
 
 /**
  * The app user a route request is made for: the user of the request's
@@ -484,144 +429,17 @@ export function defineAuthProvider<T extends AuthProviderDefinition>(definition:
 	return definition;
 }
 
-// Files
-
-/** The key of a `PluginFile`'s path; from `Symbol.for`, so every copy of the SDK has the same one. */
-export const PLUGIN_FILE: unique symbol = Symbol.for('pouchbase.plugin-file') as never;
-
-/**
- * A file of the plugin that its server code imports but doesn't run: what an import of a
- * `.svelte` or `.svg` file is when the CLI bundles `plugin.ts`, and in tests with the Vite plugin
- * of `@pouchbasejs/plugin-sdk/vite`. `[PLUGIN_FILE]` is its path in the plugin, e.g.
- * `fields/rating/input.svelte`.
- */
-export type PluginFile = { readonly [PLUGIN_FILE]: string };
-
-/**
- * A Svelte component of the plugin with props `Props`, imported in its server code
- * (`import Stats from './stats.svelte'`): typed like the component, so its props are checked, and
- * a `PluginFile` once bundled.
- */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type PluginComponent<Props = any> =
-	PluginFile | ((internals: never, props: Props) => unknown);
-
-/** An Iconify name such as `lucide:palette`, or an imported `.svg` file. */
-export type PluginIcon = string | PluginFile;
-
-/** The path in the plugin of a `PluginFile`, e.g. `pages/stats.svelte`; `null` for anything else. */
-export function pluginFilePath(value: unknown): string | null {
-	if ((typeof value !== 'object' && typeof value !== 'function') || value === null) {
-		return null;
-	}
-
-	const path = (value as Partial<PluginFile>)[PLUGIN_FILE];
-
-	return typeof path === 'string' ? path : null;
-}
-
-/**
- * GETs JSON from an API with the user's access token, through `ctx.fetch`; for the profile of
- * an auth provider, e.g. `fetchJson<GitHubUser>(ctx, 'https://api.github.com/user', token)`.
- * Sends `Authorization: Bearer <token>`, `Accept: application/json` and a `User-Agent` (some
- * APIs require one); `headers` adds to or overrides them. Throws when the response is not 2xx.
- */
-export async function fetchJson<T>(
-	ctx: Pick<PluginContext, 'fetch'>,
-	url: string,
-	accessToken: string,
-	headers: Record<string, string> = {}
-): Promise<T> {
-	const response = await ctx.fetch(url, {
-		headers: {
-			Authorization: `Bearer ${accessToken}`,
-			Accept: 'application/json',
-			'User-Agent': 'Pouchbase',
-			...headers
-		}
-	});
-
-	if (!response.ok) {
-		throw new Error(`Request failed (${response.status}): ${url}`);
-	}
-
-	return (await response.json()) as T;
-}
-
-/** The standard claims of an OpenID Connect userinfo response, plus whatever else it has. */
-export type OidcClaims = {
-	sub: string;
-	email?: string;
-	/** Some providers send it as a string. */
-	email_verified?: boolean | string;
-	name?: string;
-	preferred_username?: string;
-	picture?: string;
-	[claim: string]: unknown;
-};
-
-export type OidcProviderOptions = {
-	authorizeUrl: string;
-	tokenUrl: string;
-	/** The provider's OpenID Connect userinfo endpoint. */
-	userinfoUrl: string;
-	/** Default `['openid', 'email', 'profile']`. */
-	scopes?: string[];
-	/** Send a PKCE code challenge; default `true`. */
-	pkce?: boolean;
-	/**
-	 * Adjusts the profile mapped from the standard claims, e.g. to distrust `email_verified` or
-	 * to read a custom claim. Missing returns `profile` as is.
-	 */
-	mapProfile?(
-		claims: OidcClaims,
-		profile: OAuthProfile,
-		ctx: PluginContext
-	): OAuthProfile | Promise<OAuthProfile>;
-};
-
-/**
- * An auth provider for an OpenID Connect provider: its profile comes from the userinfo endpoint
- * (`sub`, `email`, `email_verified`, `name`, `picture`).
- *
- * ```ts
- * export default definePlugin({
- * 	authProviders: {
- * 		google: createOidcProvider({
- * 			authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
- * 			tokenUrl: 'https://oauth2.googleapis.com/token',
- * 			userinfoUrl: 'https://openidconnect.googleapis.com/v1/userinfo'
- * 		})
- * 	}
- * });
- * ```
- *
- * The host of `userinfoUrl` must be in `permissions.network`.
- */
-export function createOidcProvider(options: OidcProviderOptions): AuthProviderHandler {
-	return {
-		authorizeUrl: options.authorizeUrl,
-		tokenUrl: options.tokenUrl,
-		scopes: options.scopes ?? ['openid', 'email', 'profile'],
-		pkce: options.pkce ?? true,
-		async profile(accessToken, _credentials, ctx) {
-			const claims = await fetchJson<OidcClaims>(ctx, options.userinfoUrl, accessToken);
-
-			if (typeof claims?.sub !== 'string' || !claims.sub) {
-				throw new Error(`The userinfo response has no sub claim: ${options.userinfoUrl}`);
-			}
-
-			const email = typeof claims.email === 'string' && claims.email ? claims.email : null;
-			const profile: OAuthProfile = {
-				id: claims.sub,
-				email,
-				emailVerified:
-					email !== null && (claims.email_verified === true || claims.email_verified === 'true'),
-				name: claims.name || claims.preferred_username || null,
-				avatarUrl: typeof claims.picture === 'string' && claims.picture ? claims.picture : null
-			};
-
-			return options.mapProfile ? options.mapProfile(claims, profile, ctx) : profile;
-		}
-	};
-}
+export {
+	PLUGIN_FILE,
+	pluginFilePath,
+	type PluginComponent,
+	type PluginFile,
+	type PluginIcon
+} from './plugin-file.js';
+export { createPluginSettings, parseSettingValue } from './settings.js';
+export {
+	createOidcProvider,
+	fetchJson,
+	type OidcClaims,
+	type OidcProviderOptions
+} from './oidc.js';

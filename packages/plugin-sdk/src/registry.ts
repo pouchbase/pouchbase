@@ -31,7 +31,7 @@ export const DEFAULT_REGISTRY_URL = 'https://api.pouchbase.io';
 
 const pluginId = z.string().regex(PLUGIN_ID_PATTERN);
 
-export const pluginSummarySchema = z.object({
+const pluginSummarySchema = z.object({
 	id: pluginId,
 	name: z.string(),
 	description: z.string(),
@@ -54,7 +54,7 @@ export const pluginSummarySchema = z.object({
  * What a version adds to Pouchbase, shown to the admin before installing; see
  * `contributionSummary`. Every list may be missing (older registries leave out the whole summary).
  */
-export const contributionSummarySchema = z.object({
+const contributionSummarySchema = z.object({
 	fields: z.array(z.object({ type: z.string(), label: z.string() })).default([]),
 	pages: z.array(z.object({ path: z.string(), title: z.string() })).default([]),
 	authProviders: z.array(z.object({ id: z.string(), label: z.string() })).default([]),
@@ -82,7 +82,7 @@ export const pluginVersionSchema = z.object({
 	publishedAt: z.iso.datetime()
 });
 
-export const pluginDetailsSchema = pluginSummarySchema.extend({
+const pluginDetailsSchema = pluginSummarySchema.extend({
 	license: z.string(),
 	homepage: z.url().nullable(),
 	repository: z.url().nullable(),
@@ -92,14 +92,14 @@ export const pluginDetailsSchema = pluginSummarySchema.extend({
 	versions: z.array(pluginVersionSchema)
 });
 
-export const pluginListSchema = z.object({
+const pluginListSchema = z.object({
 	items: z.array(pluginSummarySchema),
 	page: z.number().int().positive(),
 	perPage: z.number().int().positive(),
 	total: z.number().int().nonnegative()
 });
 
-export const registryErrorBodySchema = z.object({
+const registryErrorBodySchema = z.object({
 	error: z.object({
 		/** Machine-readable, e.g. `not_found`, `version_exists`, `invalid_bundle`, `unauthorized`. */
 		code: z.string(),

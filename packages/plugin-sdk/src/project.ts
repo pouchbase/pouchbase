@@ -25,7 +25,7 @@ export {
 	type DiscoverOptions,
 	type DiscoveredProject,
 	type ProjectContents
-} from './cli/discover.js';
+} from './cli/discover/index.js';
 export {
 	PLUGIN_FILE_IMPORT,
 	pluginFileOfId,

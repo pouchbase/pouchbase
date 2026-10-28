@@ -1,5 +1,5 @@
 import type { ManifestIssue } from '../manifest.js';
-import type { DiscoveredProject } from './discover.js';
+import type { DiscoveredProject } from './discover/index.js';
 import type { Logger } from './output.js';
 
 import { createRequire } from 'node:module';

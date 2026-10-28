@@ -10,7 +10,7 @@ import {
 	isTemplate,
 	projectFiles,
 	type PluginTemplate
-} from './templates.js';
+} from './templates/index.js';
 
 /** `pouchbase-plugin init`: a new plugin from one of the templates. */
 

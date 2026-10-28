@@ -6,14 +6,11 @@ export {
 	MAX_CATEGORIES,
 	isPluginCategory,
 	unknownCategoryIssues,
-	impliedCategories,
 	effectiveCategories,
 	type PluginCategory
 } from './categories.js';
 export {
-	MANIFEST_FILE,
 	MANIFEST_SCHEMA_URL,
-	PACKAGE_DEFAULT_KEYS,
 	UI_DIR,
 	PLUGIN_ID_PATTERN,
 	PLUGIN_FIELD_TYPE_PATTERN,
@@ -21,53 +18,29 @@ export {
 	splitPluginFieldType,
 	PROVIDER_ID_PATTERN,
 	RESERVED_PROVIDER_IDS,
-	manifestSchema,
-	fieldContributionSchema,
-	pageContributionSchema,
 	PAGE_LAYOUTS,
-	authProviderContributionSchema,
-	collectionContributionSchema,
-	collectionFieldSchema,
-	collectionIndexSchema,
-	COLLECTION_NAME_PATTERN,
-	COLLECTION_RULE_ACTIONS,
-	MAX_COLLECTION_NAME_LENGTH,
-	pluginCollectionPrefix,
-	pluginCollectionName,
-	permissionsSchema,
-	pluginSettingSchema,
-	pluginSettingsSchema,
-	PLUGIN_SETTING_TYPES,
-	SETTING_KEY_PATTERN,
-	MAX_PLUGIN_SETTINGS,
-	resolveSettings,
 	parseManifest,
-	defineManifest,
 	checkCompatibility,
-	withPackageDefaults,
-	manifestJsonSchema,
-	GENERATED_MANIFEST_KEYS,
-	type PackageJson,
 	type PluginManifest,
-	type PluginManifestInput,
 	type FieldContribution,
 	type PageContribution,
 	type PageLayout,
 	type AuthProviderContribution,
-	type CollectionContribution,
 	type PluginPermissions,
-	type PluginSetting,
-	type PluginSettingType,
 	type ManifestIssue,
 	type ManifestResult
 } from './manifest.js';
 export {
-	BUNDLE_FORMAT,
-	BUNDLE_VERSION,
+	COLLECTION_NAME_PATTERN,
+	pluginCollectionName,
+	type CollectionContribution
+} from './collections.js';
+export { pluginSettingsSchema, type PluginSetting } from './settings-schema.js';
+export { resolveSettings } from './settings.js';
+export { manifestJsonSchema } from './manifest-json-schema.js';
+export {
 	MAX_BUNDLE_SIZE,
-	BUNDLE_PART_LENGTH,
 	SERVER_FILE,
-	bundleSchema,
 	parseBundle,
 	serverCodeIssues,
 	serializeBundle,
@@ -81,13 +54,7 @@ export { MAX_ICON_SIZE, svgIconIssues } from './svg.js';
 export {
 	REGISTRY_API_PREFIX,
 	DEFAULT_REGISTRY_URL,
-	pluginSummarySchema,
-	pluginVersionSchema,
-	contributionSummarySchema,
 	contributionSummary,
-	pluginDetailsSchema,
-	pluginListSchema,
-	registryErrorBodySchema,
 	createRegistryClient,
 	RegistryError,
 	type PluginSummary,
@@ -101,7 +68,6 @@ export {
 	type RegistryClientOptions
 } from './registry.js';
 export {
-	SVELTE_COMPILE_OPTIONS,
 	compileUi,
 	formatCompileIssue,
 	resolveRelative,

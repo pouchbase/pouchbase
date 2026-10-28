@@ -52,30 +52,33 @@ export function unknownCategoryIssues(categories: readonly string[]): ManifestIs
 	);
 }
 
-/** The categories that follow from what a plugin contributes. */
-export function impliedCategories(
-	contributes: Partial<Pick<PluginManifest['contributes'], 'authProviders' | 'fields' | 'pages'>>
-): PluginCategory[] {
+/**
+ * The categories a plugin is listed under: the declared ones, or else those that follow from what
+ * it contributes (`auth` for auth providers, `fields` for field types, `pages` for pages).
+ */
+export function effectiveCategories(
+	manifest: Pick<PluginManifest, 'categories'> & {
+		contributes: Partial<Pick<PluginManifest['contributes'], 'authProviders' | 'fields' | 'pages'>>;
+	}
+): string[] {
+	if (manifest.categories.length) {
+		return manifest.categories;
+	}
+
+	const { authProviders, fields, pages } = manifest.contributes;
 	const categories: PluginCategory[] = [];
 
-	if (contributes.authProviders?.length) {
+	if (authProviders?.length) {
 		categories.push('auth');
 	}
 
-	if (contributes.fields?.length) {
+	if (fields?.length) {
 		categories.push('fields');
 	}
 
-	if (contributes.pages?.length) {
+	if (pages?.length) {
 		categories.push('pages');
 	}
 
 	return categories.slice(0, MAX_CATEGORIES);
-}
-
-/** The categories a plugin is listed under: the declared ones, or else the implied ones. */
-export function effectiveCategories(
-	manifest: Pick<PluginManifest, 'categories' | 'contributes'>
-): string[] {
-	return manifest.categories.length ? manifest.categories : impliedCategories(manifest.contributes);
 }

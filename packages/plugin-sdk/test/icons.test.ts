@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { parseBundle, serializeBundle } from '../src/bundle.js';
-import { discoverProject } from '../src/cli/discover.js';
+import { discoverProject } from '../src/cli/discover/index.js';
 import { ICON_CACHE_DIR, iconSetSvg, isIconifyName } from '../src/cli/icons.js';
 import { initProject } from '../src/cli/init.js';
 import { createLogger } from '../src/cli/output.js';

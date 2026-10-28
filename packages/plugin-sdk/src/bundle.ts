@@ -26,7 +26,7 @@ export const MAX_BUNDLE_SIZE = 25 * 1024 * 1024;
  * Length of the parts `splitBundle` cuts a bundle's text into, in UTF-16 code units: at most 1.5 MB
  * of UTF-8 each, so a part fits in one row of a D1 database (2 MB).
  */
-export const BUNDLE_PART_LENGTH = 512 * 1024;
+const BUNDLE_PART_LENGTH = 512 * 1024;
 
 /** Path of the server code in a bundle. */
 export const SERVER_FILE = 'server.js';
@@ -48,7 +48,7 @@ export function serverCodeIssues(code: string): ManifestIssue[] {
 /** File types allowed in the `ui/` directory of a bundle. */
 const UI_FILE = /\.(?:svelte|js|css|json|svg)$/;
 
-export const bundleSchema = z
+const bundleSchema = z
 	.object({
 		format: z.literal(BUNDLE_FORMAT),
 		bundleVersion: z.literal(BUNDLE_VERSION),

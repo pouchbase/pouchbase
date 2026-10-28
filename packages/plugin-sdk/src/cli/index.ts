@@ -4,7 +4,7 @@ import { join, relative } from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { computeIntegrity } from '../bundle.js';
-import { manifestJsonSchema } from '../manifest.js';
+import { manifestJsonSchema } from '../manifest-json-schema.js';
 import { DEFAULT_REGISTRY_URL, createRegistryClient } from '../registry.js';
 import { CONTRIBUTION_KINDS, addContribution, isContributionKind } from './add.js';
 import { startDevServer } from './dev-server.js';
@@ -13,7 +13,7 @@ import { askTemplate, initProject, parseTemplate } from './init.js';
 import { printManifest } from './manifest-command.js';
 import { CliError, createLogger, type Logger } from './output.js';
 import { buildBundle, bundleFileName } from './project.js';
-import { TEMPLATES } from './templates.js';
+import { TEMPLATES } from './templates/index.js';
 
 const HELP = `Usage: pouchbase-plugin <command> [options]
 

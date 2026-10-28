@@ -1,4 +1,5 @@
-import type { ManifestIssue, PackageJson, PluginManifest } from '../manifest.js';
+import type { ManifestIssue, PluginManifest } from '../manifest.js';
+import type { PackageJson } from './package-defaults.js';
 import type { Logger } from './output.js';
 
 import { readFile } from 'node:fs/promises';
@@ -14,13 +15,13 @@ import {
 	type PluginBundle
 } from '../bundle.js';
 import { compileComponents } from './components.js';
-import { discoverProject, type DiscoveredProject } from './discover.js';
+import { discoverProject, type DiscoveredProject } from './discover/index.js';
 import { kib } from './format.js';
 import { ProjectError } from './project-error.js';
 import { TAILWIND_FILE, compileTailwind } from './tailwind.js';
 
 /**
- * Loading, checking and building a plugin project on disk; `discover.ts` finds what the project
+ * Loading, checking and building a plugin project on disk; `discover/` finds what the project
  * contributes. Functions throw `ProjectError`.
  */
 

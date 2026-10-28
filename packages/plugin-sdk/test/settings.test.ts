@@ -5,12 +5,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 
-import { addContribution, appendSetting } from '../src/cli/add.js';
-import { discoverProject } from '../src/cli/discover.js';
+import { addContribution } from '../src/cli/add.js';
+import { discoverProject } from '../src/cli/discover/index.js';
 import { initProject } from '../src/cli/init.js';
+import { appendSetting } from '../src/cli/plugin-source.js';
 import { buildBundle } from '../src/cli/project.js';
 import { generateServerEntry, importServerCode } from '../src/cli/server-entry.js';
-import { pluginFileSource, type PluginTemplate } from '../src/cli/templates.js';
+import { pluginFileSource, type PluginTemplate } from '../src/cli/templates/index.js';
 import {
 	createPluginSettings,
 	definePlugin,

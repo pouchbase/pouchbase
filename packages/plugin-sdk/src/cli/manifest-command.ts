@@ -2,7 +2,7 @@ import type { PluginManifest } from '../manifest.js';
 import type { Logger } from './output.js';
 
 import { buildBundle } from './project.js';
-import { json } from './templates.js';
+import { json } from './templates/index.js';
 
 /**
  * `pouchbase-plugin manifest`: builds the plugin like `validate` and prints the manifest it
