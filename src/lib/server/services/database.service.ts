@@ -1,6 +1,6 @@
 import type { ServiceError } from './base.service';
 
-import { fromPromise, okAsync, ResultAsync } from 'neverthrow';
+import { okAsync, ResultAsync } from 'neverthrow';
 
 import {
 	attachDatabases,
@@ -38,9 +38,10 @@ function randomDatabaseName() {
 export class DatabaseService extends Service {
 	/** Whether the system database exists (it is created during installation). */
 	exists(): ResultAsync<boolean, ServiceError<1000, 'DATABASE_LOOKUP_FAILED'>> {
-		return fromPromise(getDatabaseId(), (error) =>
-			this.error(1000, 'DATABASE_LOOKUP_FAILED', error)
-		).map((id) => id !== null);
+		return this.run(
+			async () => (await getDatabaseId()) !== null,
+			(error) => this.error(1000, 'DATABASE_LOOKUP_FAILED', error)
+		);
 	}
 
 	/** Creates the system database if needed, then runs pending migrations. */
@@ -48,9 +49,13 @@ export class DatabaseService extends Service {
 		void,
 		ServiceError<1001, 'DATABASE_CREATE_FAILED'> | ServiceError<1002, 'DATABASE_MIGRATION_FAILED'>
 	> {
-		return fromPromise(ensureDatabase(), (error) =>
-			this.error(1001, 'DATABASE_CREATE_FAILED', error)
-		).andThen(() => this.migrate());
+		return this.run(
+			async () => {
+				await ensureDatabase();
+				await this.must(this.migrate());
+			},
+			(error) => this.error(1001, 'DATABASE_CREATE_FAILED', error)
+		);
 	}
 
 	/** Applies pending migrations to the system database (once per isolate). */
@@ -61,7 +66,12 @@ export class DatabaseService extends Service {
 			throw error;
 		});
 
-		return fromPromise(migration, (error) => this.error(1002, 'DATABASE_MIGRATION_FAILED', error));
+		const pending = migration;
+
+		return this.run(
+			() => pending,
+			(error) => this.error(1002, 'DATABASE_MIGRATION_FAILED', error)
+		);
 	}
 
 	/**
@@ -133,15 +143,21 @@ export class DatabaseService extends Service {
 	 * before it becomes the app database.
 	 */
 	createSpare(): ResultAsync<AppDatabase, ServiceError<1003, 'APP_DATABASE_CREATE_FAILED'>> {
-		return fromPromise(createDatabase(randomDatabaseName()), (error) =>
-			this.error(1003, 'APP_DATABASE_CREATE_FAILED', error)
-		).map((database) => ({ id: database.id, name: database.name }));
+		return this.run(
+			async () => {
+				const database = await createDatabase(randomDatabaseName());
+
+				return { id: database.id, name: database.name };
+			},
+			(error) => this.error(1003, 'APP_DATABASE_CREATE_FAILED', error)
+		);
 	}
 
 	/** Deletes a database that is no longer used, e.g. the app database a restore replaced. */
 	delete(id: string): ResultAsync<void, ServiceError<1006, 'DATABASE_DELETE_FAILED'>> {
-		return fromPromise(deleteDatabase(id), (error) =>
-			this.error(1006, 'DATABASE_DELETE_FAILED', error)
+		return this.run(
+			() => deleteDatabase(id),
+			(error) => this.error(1006, 'DATABASE_DELETE_FAILED', error)
 		);
 	}
 
