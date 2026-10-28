@@ -21,7 +21,7 @@ export const GET: RequestHandler = async (event) => {
 		.map((name) => name.trim())
 		.filter(Boolean);
 
-	const result = await event.locals.services.collections().export(names);
+	const result = await event.locals.services.schema().export(names);
 
 	if (result.isErr()) {
 		return errorResponse(result.error, 'Could not export the collections');

@@ -13,7 +13,7 @@ export const GET: RequestHandler = async ({ url, locals }) => {
 	}
 
 	const names = url.searchParams.get('collections')?.split(',').filter(Boolean);
-	const result = await locals.services.collections().export(names);
+	const result = await locals.services.schema().export(names);
 
 	if (result.isErr()) {
 		fail(result.error);

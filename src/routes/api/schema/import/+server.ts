@@ -29,7 +29,7 @@ export const POST: RequestHandler = async (event) => {
 	}
 
 	const { url } = event;
-	const result = await event.locals.services.collections().import(parsed.data, {
+	const result = await event.locals.services.schema().import(parsed.data, {
 		removeMissing: flag(url, 'removeMissing'),
 		force: flag(url, 'force'),
 		dryRun: flag(url, 'dryRun')

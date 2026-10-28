@@ -52,6 +52,12 @@ export const fieldOptionsSchema = z
 	})
 	.strict();
 
+/** The thumbnail settings of a collection (`files`): whether to make them, and the sizes. */
+export const thumbnailsSchema = z.object({
+	enabled: z.boolean(),
+	sizes: z.array(z.string().min(1)).max(50)
+});
+
 export const snapshotFieldSchema = z.object({
 	id,
 	name,
@@ -78,7 +84,7 @@ export const snapshotCollectionSchema = z.object({
 	name,
 	system: z.boolean(),
 	settings: z.object({
-		thumbnails: z.object({ enabled: z.boolean(), sizes: z.array(z.string()) }).optional(),
+		thumbnails: thumbnailsSchema.optional(),
 		rules: z.partialRecord(z.enum(API_RULE_ACTIONS), z.string().nullable()).optional()
 	}),
 	fields: z.array(snapshotFieldSchema),

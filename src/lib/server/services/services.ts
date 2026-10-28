@@ -18,6 +18,7 @@ import { OAuthProvidersService } from './oauth-providers.service';
 import { PluginsService } from './plugins.service';
 import { RealtimeService } from './realtime.service';
 import { RecordsService } from './records.service';
+import { SchemaService } from './schema.service';
 import { SessionsService } from './sessions.service';
 import { SettingsService } from './settings.service';
 import { StorageService } from './storage.service';
@@ -104,6 +105,10 @@ export class Services {
 
 	records() {
 		return new RecordsService();
+	}
+
+	schema() {
+		return new SchemaService();
 	}
 
 	sessions() {

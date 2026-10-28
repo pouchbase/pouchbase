@@ -6,19 +6,16 @@ import {
 	COMPUTED_TRANSFORM_IDS,
 	FIELD_NAME_PATTERN,
 	FIELD_TYPE_IDS,
+	fieldSettings,
 	hasComputedSource,
 	ID_GENERATOR_IDS,
-	MAX_LIST_VALUE_LENGTH,
-	MAX_LIST_VALUES,
 	MAX_SCRIPT_LENGTH,
 	isPluginFieldType,
 	isReservedFieldName,
 	parseListValues,
 	RELATION_ON_DELETE_IDS,
-	RICH_TEXT_FORMATS,
-	validateDefaultValue
+	RICH_TEXT_FORMATS
 } from '#lib/fields/field-types.js';
-import { checkSqlExpression, SQL_DEFAULT_TYPES } from '#lib/fields/sql-expression.js';
 import { FILE_TYPE_PRESET_IDS, FILE_TYPE_PRESETS, parseFileTypes } from '#lib/files/accept.js';
 import { MAX_FILE_SIZE } from '#lib/files/files.js';
 
@@ -148,15 +145,21 @@ type SettingsData = {
 	idGenerator?: (typeof ID_GENERATOR_IDS)[number];
 	defaultValue?: string;
 	defaultSql?: boolean;
+	multiple?: boolean;
 	listValues?: string;
 	customFileTypes?: string;
 };
 
-function checkSettings(data: SettingsData, ctx: z.RefinementCtx) {
-	if (data.type === 'id' && !data.idGenerator) {
-		ctx.addIssue({ code: 'custom', path: ['idGenerator'], message: 'Choose a generator' });
-	}
+/** Where an issue of the settings goes in the form. */
+const SETTINGS_PATHS = {
+	generator: 'idGenerator',
+	list: 'listValues',
+	default: 'defaultValue',
+	expression: 'defaultValue'
+} as const;
 
+/** Checks the settings the same way the fields service does (see `fieldSettings`). */
+function checkSettings(data: SettingsData, ctx: z.RefinementCtx) {
 	if (data.type === 'file') {
 		const { invalid } = parseFileTypes(data.customFileTypes ?? '');
 
@@ -169,43 +172,15 @@ function checkSettings(data: SettingsData, ctx: z.RefinementCtx) {
 		}
 	}
 
-	if (data.type === 'list') {
-		const values = parseListValues(data.listValues);
-		const tooLong = values.find((value) => value.length > MAX_LIST_VALUE_LENGTH);
+	const { issues } = fieldSettings(data.type, data.defaultValue, {
+		generator: data.idGenerator,
+		defaultSql: data.defaultSql,
+		multiple: data.multiple,
+		values: parseListValues(data.listValues)
+	});
 
-		if (!values.length) {
-			ctx.addIssue({ code: 'custom', path: ['listValues'], message: 'Add at least one item' });
-		} else if (values.length > MAX_LIST_VALUES) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['listValues'],
-				message: `A list can have at most ${MAX_LIST_VALUES} items`
-			});
-		} else if (tooLong) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['listValues'],
-				message: `Items can be at most ${MAX_LIST_VALUE_LENGTH} characters: ${tooLong.slice(0, 20)}…`
-			});
-		} else if (data.defaultValue && !values.includes(data.defaultValue)) {
-			ctx.addIssue({
-				code: 'custom',
-				path: ['defaultValue'],
-				message: 'Choose one of the items'
-			});
-		}
-	}
-
-	const message = !data.defaultValue
-		? null
-		: data.defaultSql
-			? SQL_DEFAULT_TYPES.has(data.type)
-				? checkSqlExpression(data.defaultValue)
-				: 'This type has no SQL default'
-			: validateDefaultValue(data.type, data.defaultValue);
-
-	if (message) {
-		ctx.addIssue({ code: 'custom', path: ['defaultValue'], message });
+	for (const issue of issues) {
+		ctx.addIssue({ code: 'custom', path: [SETTINGS_PATHS[issue.kind]], message: issue.message });
 	}
 }
 

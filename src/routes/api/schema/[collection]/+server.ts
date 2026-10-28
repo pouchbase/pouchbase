@@ -14,7 +14,7 @@ export const GET: RequestHandler = async (event) => {
 		return auth.response;
 	}
 
-	const result = await event.locals.services.collections().schema(event.params.collection);
+	const result = await event.locals.services.schema().schema(event.params.collection);
 
 	if (result.isErr()) {
 		return errorResponse(result.error, 'Could not read the collection');
@@ -50,8 +50,8 @@ export const PATCH: RequestHandler = async (event) => {
 	}
 
 	const result = await event.locals.services
-		.collections()
-		.updateFromApi(event.params.collection, parsed.data, flag(event.url, 'force'));
+		.schema()
+		.update(event.params.collection, parsed.data, flag(event.url, 'force'));
 
 	if (result.isErr()) {
 		return errorResponse(result.error, 'Could not update the collection');

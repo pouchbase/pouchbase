@@ -1,8 +1,12 @@
 import { z } from 'zod';
 
 import { parseThumbnailSize, splitThumbnailSizes } from '#lib/files/thumbnails.js';
-import { FilterError, MAX_FILTER_LENGTH, parseFilter } from '#lib/filter/filter.js';
+import { MAX_FILTER_LENGTH } from '#lib/filter/filter.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
+
+import { ruleSyntaxIssue } from './collections';
+
+export { imageEditsSchema } from './images';
 
 export const thumbnailSettingsSchema = z
 	.object({
@@ -27,47 +31,6 @@ export const thumbnailSettingsSchema = z
 			ctx.addIssue({ code: 'custom', path: ['sizes'], message: 'Add at least one size' });
 		}
 	});
-
-/** Edits from the image editor; see `ImageEdits` in `src/lib/server/images.ts`. */
-export const imageEditsSchema = z.object({
-	id: z.string().min(1),
-	edits: z.object({
-		rotate: z.union([z.literal(0), z.literal(90), z.literal(180), z.literal(270)]).optional(),
-		flipHorizontal: z.boolean().optional(),
-		flipVertical: z.boolean().optional(),
-		crop: z
-			.object({
-				x: z.number().min(0),
-				y: z.number().min(0),
-				width: z.number().positive(),
-				height: z.number().positive()
-			})
-			.optional(),
-		resize: z
-			.object({
-				width: z.number().int().min(1).max(8000),
-				height: z.number().int().min(1).max(8000)
-			})
-			.optional(),
-		adjustments: z
-			.object({
-				brightness: z.number().min(-100).max(100),
-				contrast: z.number().min(-100).max(100),
-				saturation: z.number().min(-100).max(100),
-				hue: z.number().min(-180).max(180),
-				grayscale: z.number().min(0).max(100),
-				sepia: z.number().min(0).max(100)
-			})
-			.partial()
-			.optional(),
-		output: z
-			.object({
-				format: z.enum(['image/jpeg', 'image/png', 'image/webp']).optional(),
-				quality: z.number().int().min(1).max(100).optional()
-			})
-			.optional()
-	})
-});
 
 const ruleSchema = z.string().max(MAX_FILTER_LENGTH).default('');
 const lockedSchema = z.boolean().default(false);
@@ -99,14 +62,10 @@ export const apiRulesSchema = z
 				continue;
 			}
 
-			try {
-				parseFilter(rule);
-			} catch (error) {
-				ctx.addIssue({
-					code: 'custom',
-					path: [action],
-					message: error instanceof FilterError ? error.message : 'Invalid rule'
-				});
+			const message = ruleSyntaxIssue(rule);
+
+			if (message) {
+				ctx.addIssue({ code: 'custom', path: [action], message });
 			}
 		}
 	});

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { FilterError, MAX_FILTER_LENGTH, parseFilter } from '#lib/filter/filter.js';
 import { API_RULE_ACTIONS } from '#lib/filter/rules.js';
 
-import { fieldOptionsSchema, snapshotCollectionSchema } from './environments';
+import { fieldOptionsSchema, snapshotCollectionSchema, thumbnailsSchema } from './environments';
 import { fieldTypeIdSchema } from './fields';
 
 /**
@@ -14,6 +14,15 @@ export const COLLECTION_NAME_PATTERN = /^[a-z][a-z0-9_]{0,62}$/;
 
 /** Names taken by the collections API itself (`/api/schema/export` and `/import`). */
 export const RESERVED_COLLECTION_NAMES = ['export', 'import'];
+
+/** Whether `name` can be a collection (table) name; checked here and in the services. */
+export function isValidCollectionName(name: string) {
+	return (
+		COLLECTION_NAME_PATTERN.test(name) &&
+		!name.startsWith('sqlite_') &&
+		!RESERVED_COLLECTION_NAMES.includes(name)
+	);
+}
 
 export const collectionName = z
 	.string()
@@ -61,22 +70,26 @@ export const collectionExportSchema = z.object({
 
 export type CollectionExport = z.infer<typeof collectionExportSchema>;
 
+/** Why an API rule doesn't parse, or `null`; only the syntax is checked, the server checks the fields. */
+export function ruleSyntaxIssue(rule: string): string | null {
+	try {
+		parseFilter(rule);
+
+		return null;
+	} catch (error) {
+		return error instanceof FilterError ? error.message : 'Invalid rule';
+	}
+}
+
 const ruleSchema = z
 	.string()
 	.max(MAX_FILTER_LENGTH)
 	.nullable()
 	.superRefine((rule, ctx) => {
-		if (!rule?.trim()) {
-			return;
-		}
+		const message = rule?.trim() ? ruleSyntaxIssue(rule) : null;
 
-		try {
-			parseFilter(rule);
-		} catch (error) {
-			ctx.addIssue({
-				code: 'custom',
-				message: error instanceof FilterError ? error.message : 'Invalid rule'
-			});
+		if (message) {
+			ctx.addIssue({ code: 'custom', message });
 		}
 	});
 
@@ -108,10 +121,7 @@ const apiCollectionFields = {
 	indexes: z.array(apiIndexSchema).max(100),
 	/** A rule per action: `null` is admins only, `""` everyone. On update, other actions are kept. */
 	rules: z.partialRecord(z.enum(API_RULE_ACTIONS), ruleSchema),
-	thumbnails: z.object({
-		enabled: z.boolean(),
-		sizes: z.array(z.string().min(1)).max(50)
-	})
+	thumbnails: thumbnailsSchema
 };
 
 /** Body of `POST /api/schema`. */

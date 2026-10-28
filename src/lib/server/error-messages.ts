@@ -203,14 +203,11 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	19023: [409, "Another collection links to one of the plugin's collections"],
 
 	// Environments
-	20000: 'Could not read the schema of this environment',
-	20001: 'Could not load the deploy tokens',
+	20000: 'Could not complete the environments operation',
 	20002: [404, 'Deploy token not found'],
-	20003: 'Could not load the deployments',
 	20004: [409, 'The target environment changed since the plan was made; make a new plan'],
 	20005: [409, 'The changes delete collections, fields or their data; confirm them first'],
 	20006: [409, 'A deployment is already running'],
-	20007: 'A step of the deployment failed',
 	20008: [409, 'No other environment is linked yet'],
 	20009: [502, 'The linked environment did not answer'],
 	20010: [409, 'The source environment changed since the plan was made; make a new plan'],

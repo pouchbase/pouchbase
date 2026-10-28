@@ -19,7 +19,7 @@ export const GET: RequestHandler = async (event) => {
 		return auth.response;
 	}
 
-	const result = await event.locals.services.collections().schemas();
+	const result = await event.locals.services.schema().schemas();
 
 	if (result.isErr()) {
 		return errorResponse(result.error, 'Could not list the collections');
@@ -48,7 +48,7 @@ export const POST: RequestHandler = async (event) => {
 		);
 	}
 
-	const result = await event.locals.services.collections().createFromApi(parsed.data);
+	const result = await event.locals.services.schema().create(parsed.data);
 
 	if (result.isErr()) {
 		return errorResponse(result.error, 'Could not create the collection');

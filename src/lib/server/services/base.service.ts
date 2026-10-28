@@ -5,38 +5,15 @@ import { fromPromise, type ResultAsync } from 'neverthrow';
 import { getRequestEvent } from '$app/server';
 
 import { reasonOf } from '../errors';
+import { Failure, unwrap, type AnyServiceError, type ServiceError } from '../failure';
 import { PlatformError } from '../platform';
 import { db } from '../db';
 
 /** The error union of a service method, e.g. `ErrorOf<ReturnType<FieldsService['create']>>`. */
 export type ErrorOf<T> = T extends ResultAsync<unknown, infer E> ? E : never;
 
-export type ServiceError<Code extends number, Message extends string> = {
-	code: Code;
-	message: Message;
-	data?: unknown;
-	/**
-	 * What went wrong underneath, e.g. the message of D1 or the Cloudflare API. `fail()` shows it
-	 * to admins next to the message of the code.
-	 */
-	reason?: string;
-};
-
-export type AnyServiceError = ServiceError<number, string>;
-
-/** The errors a method can return that come from loading the app database and the settings. */
-export type ContextError =
-	ServiceError<1004, 'APP_DATABASE_MISSING'> | ServiceError<5000, 'GET_SETTING_FAILED'>;
-
-/**
- * An expected failure inside `Service.run()`: thrown by a helper, it becomes the `Err` of the
- * method. Throw it through `this.fail(...)` or `this.must(...)`.
- */
-export class Failure extends Error {
-	constructor(readonly error: AnyServiceError) {
-		super(error.message);
-	}
-}
+export type { AnyServiceError, ContextError, ServiceError } from '../failure';
+export { Failure, unwrap } from '../failure';
 
 export class Service {
 	protected readonly ctx: RequestEvent;
@@ -125,14 +102,8 @@ export class Service {
 	 * The value of another service's (or a private method's) result, inside `run()`; its error
 	 * becomes this method's error. Include that service's codes in the method's error union.
 	 */
-	protected async must<T>(result: ResultAsync<T, AnyServiceError>): Promise<T> {
-		const settled = await result;
-
-		if (settled.isErr()) {
-			throw new Failure(settled.error);
-		}
-
-		return settled.value;
+	protected must<T>(result: ResultAsync<T, AnyServiceError>): Promise<T> {
+		return unwrap(result);
 	}
 
 	/**

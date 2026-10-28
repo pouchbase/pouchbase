@@ -1,3 +1,5 @@
+import type { FieldsError } from '#lib/server/services/fields.service.js';
+
 import { error, invalid } from '@sveltejs/kit';
 
 import { command, form } from '$app/server';
@@ -18,21 +20,76 @@ import {
 } from '#lib/schemas/fields.js';
 import { fail } from '#lib/server/errors.js';
 
-/** Why a default value was refused; a plugin says why for its own types. */
-function defaultValueMessage(failure: { data?: unknown }) {
-	const message = (failure.data as { message?: unknown } | undefined)?.message;
-
-	return typeof message === 'string' && message
-		? message
-		: 'This default value is not valid for the type';
-}
-
 /** The plugin field type isn't installed (any more). */
 const PLUGIN_NOT_INSTALLED = 'This field type comes from a plugin that is not installed';
 
-/** Relation fields store the `id` of the records they link to, so that field must stay. */
-function idInUseMessage(relations: string[]) {
-	return `The id field is used by relation ${relations.length === 1 ? 'field' : 'fields'} ${relations.join(', ')}. Delete ${relations.length === 1 ? 'it' : 'them'} first.`;
+/** `data.message` of an error, when it has one. */
+function dataMessage(failure: { data?: unknown }) {
+	const message = (failure.data as { message?: unknown } | undefined)?.message;
+
+	return typeof message === 'string' && message ? message : undefined;
+}
+
+function listOf(names: string[], one: string, many: string) {
+	return `${names.join(', ')} ${names.length === 1 ? one : many}`;
+}
+
+/** What to tell the form for a field error, by code; the handler says which input it belongs to. */
+const MESSAGES: Partial<Record<FieldsError['code'], (failure: FieldsError) => string>> = {
+	7001: () => 'This name is not allowed',
+	7002: () => 'A field with this name already exists',
+	7003: (failure) => dataMessage(failure) ?? 'This default value is not valid for the type',
+	7009: () => 'Choose an existing collection that has an id field',
+	7011: () => 'Choose a text, number or date field of this collection',
+	7012: (failure) =>
+		listOf(
+			(failure.data as { computed: string[] }).computed,
+			'is computed from this field. Delete it first.',
+			'are computed from this field. Delete them first.'
+		),
+	7016: (failure) => dataMessage(failure) ?? 'The script failed',
+	7018: (failure) => dataMessage(failure) ?? 'Add at least one item',
+	7020: (failure) => {
+		const { relations } = failure.data as { relations: string[] };
+
+		return `The id field is used by relation ${relations.length === 1 ? 'field' : 'fields'} ${relations.join(', ')}. Delete ${relations.length === 1 ? 'it' : 'them'} first.`;
+	},
+	7022: () => 'This collection already has an id field',
+	7023: (failure) => dataMessage(failure) ?? 'The default value expression is invalid',
+	7024: () => 'Turn off Unique for this field first',
+	7025: () => 'Some records have more than one value; remove them first',
+	7026: (failure) => {
+		const { items } = failure.data as { items: string[] };
+
+		return `Records still use ${items.length === 1 ? 'this item' : 'these items'}: ${items.join(', ')}`;
+	},
+	19016: () => 'The plugin could not check the default value',
+	19017: () => 'The plugin could not check the default value'
+};
+
+type Issue = (message: string) => Parameters<typeof invalid>[0];
+
+/**
+ * Answers a field error: "not found" and "system field" as errors, the codes in `inputs` as an
+ * issue of that input (or of the form, with `true`), everything else through `fail()`.
+ */
+function fieldFailure(failure: FieldsError, inputs: Partial<Record<number, Issue | true>>): never {
+	if (failure.code === 6006 || failure.code === 7006) {
+		error(404, failure.code === 6006 ? 'Collection not found' : 'Field not found');
+	}
+
+	if (failure.code === 7010) {
+		error(403, "Built-in fields can't be changed");
+	}
+
+	const input = inputs[failure.code];
+	const message = MESSAGES[failure.code]?.(failure);
+
+	if (input && message) {
+		invalid(input === true ? message : input(message));
+	}
+
+	fail(failure);
 }
 
 export const createField = form(createFieldSchema, async (data, issue) => {
@@ -59,59 +116,36 @@ export const createField = form(createFieldSchema, async (data, issue) => {
 	});
 
 	if (result.isErr()) {
-		switch (result.error.code) {
-			case 6006:
-				error(404, 'Collection not found');
-				break;
-			case 7001:
-				invalid(issue.name('This name is not allowed'));
-				break;
-			case 7002:
-				invalid(issue.name('A field with this name already exists'));
-				break;
-			case 7003:
-				invalid(issue.defaultValue(defaultValueMessage(result.error)));
-				break;
-			case 19016:
-			case 19017:
-				invalid(issue.defaultValue('The plugin could not check the default value'));
-				break;
-			case 7009:
-				invalid(issue.relationCollection('Choose an existing collection that has an id field'));
-				break;
-			case 7019:
-				invalid(
-					isPluginFieldType(data.type)
-						? issue.type(PLUGIN_NOT_INSTALLED)
-						: issue.idGenerator('Choose a generator')
-				);
-				break;
-			case 7022:
-				invalid(issue.type('This collection already has an id field'));
-				break;
-			case 7023:
-				invalid(issue.defaultValue(result.error.data.message));
-				break;
-			case 7018:
-				invalid(issue.listValues('Add at least one item'));
-				break;
-			case 7011:
-				invalid(issue.computeSource('Choose a text, number or date field of this collection'));
-				break;
-			case 7016:
-				invalid(issue.computeScript(result.error.data.message));
-				break;
-			case 7004:
-				// Usually a unique index on a column that already has duplicate values.
-				invalid(
-					data.type === 'computed' && data.unique
-						? "Existing records would get the same value, so this field can't be unique"
-						: 'The field could not be added to the table'
-				);
-				break;
+		if (result.error.code === 7019) {
+			invalid(
+				isPluginFieldType(data.type)
+					? issue.type(PLUGIN_NOT_INSTALLED)
+					: issue.idGenerator('Choose a generator')
+			);
 		}
 
-		fail(result.error);
+		if (result.error.code === 7000) {
+			// Usually a unique index on a column that already has duplicate values.
+			invalid(
+				data.type === 'computed' && data.unique
+					? "Existing records would get the same value, so this field can't be unique"
+					: 'The field could not be added to the table'
+			);
+		}
+
+		fieldFailure(result.error, {
+			7001: issue.name,
+			7002: issue.name,
+			7003: issue.defaultValue,
+			7009: issue.relationCollection,
+			7011: issue.computeSource,
+			7016: issue.computeScript,
+			7018: issue.listValues,
+			7022: issue.type,
+			7023: issue.defaultValue,
+			19016: issue.defaultValue,
+			19017: issue.defaultValue
+		});
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -136,57 +170,26 @@ export const updateField = form(updateFieldSchema, async (data, issue) => {
 	});
 
 	if (result.isErr()) {
-		switch (result.error.code) {
-			case 6006:
-			case 7006:
-				error(404, 'Field not found');
-				break;
-			case 7003:
-				invalid(issue.defaultValue(defaultValueMessage(result.error)));
-				break;
-			case 19016:
-			case 19017:
-				invalid(issue.defaultValue('The plugin could not check the default value'));
-				break;
-			case 7010:
-				error(403, "Built-in fields can't be changed");
-				break;
-			case 7018:
-				invalid(issue.listValues('Add at least one item'));
-				break;
-			case 7019:
-				invalid(
-					data.type === 'id'
-						? issue.idGenerator(
-								"Auto-increment ids can't change to text ids, or the other way round"
-							)
-						: isPluginFieldType(data.type)
-							? PLUGIN_NOT_INSTALLED
-							: 'This field has no settings to change here'
-				);
-				break;
-			case 7023:
-				invalid(issue.defaultValue(result.error.data.message));
-				break;
-			case 7024:
-				invalid(issue.multiple('Turn off Unique for this field first'));
-				break;
-			case 7025:
-				invalid(issue.multiple('Some records have more than one value; remove them first'));
-				break;
-			case 7026: {
-				const { items } = result.error.data;
-
-				invalid(
-					issue.listValues(
-						`Records still use ${items.length === 1 ? 'this item' : 'these items'}: ${items.join(', ')}`
-					)
-				);
-				break;
-			}
+		if (result.error.code === 7019) {
+			invalid(
+				data.type === 'id'
+					? issue.idGenerator("Auto-increment ids can't change to text ids, or the other way round")
+					: isPluginFieldType(data.type)
+						? PLUGIN_NOT_INSTALLED
+						: 'This field has no settings to change here'
+			);
 		}
 
-		fail(result.error);
+		fieldFailure(result.error, {
+			7003: issue.defaultValue,
+			7018: issue.listValues,
+			7023: issue.defaultValue,
+			7024: issue.multiple,
+			7025: issue.multiple,
+			7026: issue.listValues,
+			19016: issue.defaultValue,
+			19017: issue.defaultValue
+		});
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -199,20 +202,7 @@ export const renameField = form(renameFieldSchema, async (data, issue) => {
 	const result = await services.fields().rename(data.collection, data.name, data.newName);
 
 	if (result.isErr()) {
-		switch (result.error.code) {
-			case 6006:
-			case 7006:
-				error(404, 'Field not found');
-				break;
-			case 7001:
-				invalid(issue.newName('This name is not allowed'));
-				break;
-			case 7002:
-				invalid(issue.newName('A field with this name already exists'));
-				break;
-		}
-
-		fail(result.error);
+		fieldFailure(result.error, { 7001: issue.newName, 7002: issue.newName });
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
@@ -225,26 +215,7 @@ export const deleteField = form(deleteFieldSchema, async (data) => {
 	const result = await services.fields().delete(data.collection, data.name);
 
 	if (result.isErr()) {
-		if (result.error.code === 6006 || result.error.code === 7006) {
-			error(404, 'Field not found');
-		}
-
-		if (result.error.code === 7012) {
-			const { computed } = result.error.data;
-			const names = computed.join(', ');
-
-			invalid(
-				computed.length === 1
-					? `${names} is computed from this field. Delete it first.`
-					: `${names} are computed from this field. Delete them first.`
-			);
-		}
-
-		if (result.error.code === 7020) {
-			invalid(idInUseMessage(result.error.data.relations));
-		}
-
-		fail(result.error);
+		fieldFailure(result.error, { 7012: true, 7020: true });
 	}
 });
 
@@ -257,20 +228,7 @@ export const updateComputedField = form(updateComputedSchema, async (data, issue
 		.updateComputed(data.collection, data.name, computeOptions(data));
 
 	if (result.isErr()) {
-		switch (result.error.code) {
-			case 6006:
-			case 7006:
-				error(404, 'Field not found');
-				break;
-			case 7011:
-				invalid(issue.computeSource('Choose a text, number or date field of this collection'));
-				break;
-			case 7016:
-				invalid(issue.computeScript(result.error.data.message));
-				break;
-		}
-
-		fail(result.error);
+		fieldFailure(result.error, { 7011: issue.computeSource, 7016: issue.computeScript });
 	}
 
 	return { name: result.value.name };
@@ -300,43 +258,33 @@ export const updateFields = form(updateFieldsSchema, async (data, issue) => {
 	const result = await services.fields().updateAll(data.collection, data.fields);
 
 	if (result.isErr()) {
+		const failure = result.error;
 		const index = (id: string) => data.fields.findIndex((field) => field.id === id);
+		const named = (id: string | undefined) => issue.fields[id ? index(id) : -1]?.name;
 
-		switch (result.error.code) {
-			case 6006:
-				error(404, 'Collection not found');
-				break;
-			case 7001:
-				invalid(issue.fields[index(result.error.data.id)].name('This name is not allowed'));
-				break;
-			case 7002:
-				invalid(
-					issue.fields[index(result.error.data.id)].name('Another field already has this name')
-				);
-				break;
-			case 7015: {
-				const field = data.fields[index(result.error.data.id)];
+		if (failure.code === 7001 || failure.code === 7002) {
+			const field = named(failure.data?.id);
 
-				invalid(`Records share a value in ${field?.name}, so it can't be unique`);
-				break;
-			}
-			case 7012: {
-				const { computed } = result.error.data;
-				const names = computed.join(', ');
-
-				invalid(
-					computed.length === 1
-						? `${names} is computed from a removed field. Remove it too, or keep its source.`
-						: `${names} are computed from removed fields. Remove them too, or keep their sources.`
-				);
-				break;
-			}
-			case 7020:
-				invalid(idInUseMessage(result.error.data.relations));
-				break;
+			fieldFailure(failure, { 7001: field ?? true, 7002: field ?? true });
 		}
 
-		fail(result.error);
+		if (failure.code === 7015) {
+			const field = data.fields[index(failure.data.id)];
+
+			invalid(`Records share a value in ${field?.name}, so it can't be unique`);
+		}
+
+		if (failure.code === 7012) {
+			invalid(
+				listOf(
+					failure.data.computed,
+					'is computed from a removed field. Remove it too, or keep its source.',
+					'are computed from removed fields. Remove them too, or keep their sources.'
+				)
+			);
+		}
+
+		fieldFailure(failure, { 7020: true });
 	}
 
 	// No explicit refresh: the default invalidation also updates the records grid.
