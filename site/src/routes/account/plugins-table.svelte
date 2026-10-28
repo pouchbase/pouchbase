@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Badge from '#lib/components/ui/badge/index.js';
-	import * as Empty from '#lib/components/ui/empty/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Empty from '@pouchbasejs/ui/empty';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as Table from '#lib/components/ui/table/index.js';
 	import { categoryLabel } from '#lib/plugin-categories.js';
 	import { getMyPlugins } from './account.remote';

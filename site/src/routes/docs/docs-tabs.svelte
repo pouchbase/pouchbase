@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as TabNav from '#lib/components/ui/tab-nav/index.js';
 	import { page } from '$app/state';
 	import { docsTab, docsTabs, tabHref } from './docs-nav';

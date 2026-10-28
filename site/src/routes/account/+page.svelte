@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Form from '#lib/components/ui/form/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import AccountSection from './account-section.svelte';
 	import { getUser, logout } from './account.remote';
 	import PluginsTable from './plugins-table.svelte';

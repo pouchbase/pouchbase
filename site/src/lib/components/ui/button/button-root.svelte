@@ -18,7 +18,7 @@
 </script>
 
 <script lang="ts">
-	import * as Spinner from '../spinner';
+	import * as Spinner from '@pouchbasejs/ui/spinner';
 
 	let {
 		variant = 'primary',

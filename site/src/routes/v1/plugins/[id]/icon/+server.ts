@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { failureResponse, registryError, registryPreflight } from '#lib/server/registry-http.js';
-import { getIcon } from '#lib/server/registry.js';
+import { getIcon } from '#lib/server/registry/index.js';
 
 /**
  * The icon of the newest version of a plugin (`PluginSummary.iconUrl`). SVG can carry scripts, so

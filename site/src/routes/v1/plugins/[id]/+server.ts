@@ -6,7 +6,7 @@ import {
 	registryJson,
 	registryPreflight
 } from '#lib/server/registry-http.js';
-import { getPlugin } from '#lib/server/registry.js';
+import { getPlugin } from '#lib/server/registry/index.js';
 
 /** `GET /v1/plugins/:id` → `PluginDetails` with every version, or `404`. */
 export const GET: RequestHandler = async ({ params, url }) => {

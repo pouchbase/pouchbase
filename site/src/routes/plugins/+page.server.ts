@@ -3,7 +3,7 @@ import { isPluginCategory } from '@pouchbasejs/plugin-sdk';
 
 import type { PageServerLoad } from './$types';
 
-import { RegistryFailure, searchPlugins } from '#lib/server/registry.js';
+import { RegistryFailure, searchPlugins } from '#lib/server/registry/index.js';
 
 const PER_PAGE = 24;
 

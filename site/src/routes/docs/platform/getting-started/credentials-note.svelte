@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Callout from '#lib/components/ui/callout/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import { resolve } from '$app/paths';
 </script>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Badge from '#lib/components/ui/badge/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 
 	const providers = ['Google', 'GitHub', 'Microsoft', 'Discord', 'Twitch'];
 </script>

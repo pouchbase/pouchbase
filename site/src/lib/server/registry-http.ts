@@ -1,6 +1,6 @@
 import type { RegistryErrorBody } from '@pouchbasejs/plugin-sdk';
 
-import { RegistryFailure } from './registry';
+import { RegistryFailure } from './registry/index.js';
 
 /**
  * Responses of the registry API under `/v1`. Anyone may read the registry, from any origin;

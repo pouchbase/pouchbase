@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { NavigationMenu } from 'bits-ui';
-	import * as Icon from '../icon';
+	import * as Icon from '@pouchbasejs/ui/icon';
 
 	let {
 		ref = $bindable(null),

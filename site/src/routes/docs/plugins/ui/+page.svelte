@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as LinkCard from '#lib/components/ui/link-card/index.js';
 	import { uiCategories, uiComponents } from '#lib/ui-components.js';
 	import { resolve } from '$app/paths';

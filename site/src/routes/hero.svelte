@@ -1,6 +1,6 @@
 <script lang="ts">
 	import * as Button from '#lib/components/ui/button/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import HeroScene from './hero-scene.svelte';
 	import { resolve } from '$app/paths';
 	import { GITHUB_URL } from './site-nav';

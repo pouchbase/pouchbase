@@ -2,7 +2,7 @@
 	import { createClient, isPouchbaseError } from '@pouchbasejs/js-sdk';
 	import type { OAuthProvider } from '@pouchbasejs/js-sdk';
 	import * as Button from '#lib/components/ui/button/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as Separator from '#lib/components/ui/separator/index.js';
 	import { toast } from '#lib/components/ui/toast/index.js';
 	import { isHttpError } from '@sveltejs/kit';

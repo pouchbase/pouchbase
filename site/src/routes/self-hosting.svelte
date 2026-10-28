@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as CodeBlock from '#lib/components/ui/code-block/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import { resolve } from '$app/paths';
 	import { GITHUB_URL } from './site-nav';
 

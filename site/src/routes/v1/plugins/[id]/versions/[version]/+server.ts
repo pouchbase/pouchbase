@@ -7,7 +7,7 @@ import {
 	registryJson,
 	registryPreflight
 } from '#lib/server/registry-http.js';
-import { getVersion } from '#lib/server/registry.js';
+import { getVersion } from '#lib/server/registry/index.js';
 
 /**
  * `GET /v1/plugins/:id/versions/:version` → `PluginVersion`, or `404`. `:version` may be `latest`:

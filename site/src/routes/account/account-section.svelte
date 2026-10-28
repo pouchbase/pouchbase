@@ -2,7 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Callout from '#lib/components/ui/callout/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 
 	type Props = {
 		/** What the section shows, for the error: `Your plugins could not be loaded`. */

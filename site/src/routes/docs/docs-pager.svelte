@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as LinkCard from '#lib/components/ui/link-card/index.js';
 	import { page } from '$app/state';
 	import { docsNeighbours } from './docs-nav';

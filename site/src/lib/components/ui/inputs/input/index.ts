@@ -1,2 +1,2 @@
-export { default as Root } from './input-root.svelte';
-export type { Props as RootProps, Variant } from './input-root.svelte';
+// Re-exports `@pouchbasejs/ui/inputs/input` for the components that still import it relatively.
+export * from '@pouchbasejs/ui/inputs/input';

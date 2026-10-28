@@ -12,7 +12,7 @@
 
 <script lang="ts">
 	import * as Button from '../button';
-	import * as Icon from '../icon';
+	import * as Icon from '@pouchbasejs/ui/icon';
 
 	let { page, totalPages, href, class: className, ...rest }: Props = $props();
 </script>

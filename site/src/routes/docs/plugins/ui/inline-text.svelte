@@ -3,7 +3,7 @@
 	import { resolve } from '$app/paths';
 
 	interface Props {
-		/** Text of `#lib/ui-components.ts`: `code`, and [links](/docs/ui/<slug>#<hash>) to the UI docs. */
+		/** Text of a component's `examples/<slug>/meta.ts`: `code`, and [links](/docs/ui/<slug>#<hash>) to the UI docs. */
 		text: string;
 	}
 

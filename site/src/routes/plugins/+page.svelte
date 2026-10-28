@@ -1,9 +1,9 @@
 <script lang="ts">
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as ChipGroup from '#lib/components/ui/chip-group/index.js';
-	import * as Empty from '#lib/components/ui/empty/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
-	import * as Input from '#lib/components/ui/inputs/input/index.js';
+	import * as Empty from '@pouchbasejs/ui/empty';
+	import * as Icon from '@pouchbasejs/ui/icon';
+	import * as Input from '@pouchbasejs/ui/inputs/input';
 	import * as Pagination from '#lib/components/ui/pagination/index.js';
 	import { categories } from '#lib/plugin-categories.js';
 	import { resolve } from '$app/paths';

@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { PluginSummary } from '@pouchbasejs/plugin-sdk';
 	import * as Badge from '#lib/components/ui/badge/index.js';
-	import * as Card from '#lib/components/ui/card/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
-	import * as Thumbnail from '#lib/components/ui/thumbnail/index.js';
+	import * as Card from '@pouchbasejs/ui/card';
+	import * as Icon from '@pouchbasejs/ui/icon';
+	import * as Thumbnail from '@pouchbasejs/ui/thumbnail';
 	import { categoryLabel } from '#lib/plugin-categories.js';
 
 	let { plugin }: { plugin: PluginSummary } = $props();

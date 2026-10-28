@@ -2,7 +2,7 @@
 	import * as Badge from '#lib/components/ui/badge/index.js';
 	import * as Callout from '#lib/components/ui/callout/index.js';
 	import * as Code from '#lib/components/ui/code/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import * as LinkCard from '#lib/components/ui/link-card/index.js';
 	import { resolve } from '$app/paths';
 	import DocsPage, { type Section } from '../../docs-page.svelte';

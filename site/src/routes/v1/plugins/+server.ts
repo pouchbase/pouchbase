@@ -9,7 +9,7 @@ import {
 	registryJson,
 	registryPreflight
 } from '#lib/server/registry-http.js';
-import { searchPlugins } from '#lib/server/registry.js';
+import { searchPlugins } from '#lib/server/registry/index.js';
 
 const MAX_PER_PAGE = 100;
 

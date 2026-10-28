@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { MAX_BUNDLE_SIZE } from '@pouchbasejs/plugin-sdk';
-	import * as Card from '#lib/components/ui/card/index.js';
+	import * as Card from '@pouchbasejs/ui/card';
 	import * as Code from '#lib/components/ui/code/index.js';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import { toast } from '#lib/components/ui/toast/index.js';

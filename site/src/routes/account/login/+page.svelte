@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Card from '#lib/components/ui/card/index.js';
+	import * as Card from '@pouchbasejs/ui/card';
 	import * as Form from '#lib/components/ui/form/index.js';
 	import { loginSchema } from '#lib/schemas/account.js';
 	import { resolve } from '$app/paths';

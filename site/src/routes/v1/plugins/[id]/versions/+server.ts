@@ -9,7 +9,7 @@ import {
 	registryJson,
 	registryPreflight
 } from '#lib/server/registry-http.js';
-import { publishVersion } from '#lib/server/registry.js';
+import { publishVersion } from '#lib/server/registry/index.js';
 
 /**
  * `POST /v1/plugins/:id/versions` with the bundle as body and `Authorization: Bearer <token>` (a

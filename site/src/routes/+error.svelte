@@ -3,7 +3,7 @@
 	import { page } from '$app/state';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as ErrorState from '#lib/components/ui/error-state/index.js';
-	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 	import { statusText } from '#lib/errors.js';
 
 	// Shown inside the layout, so the header and footer stay and people can navigate on.

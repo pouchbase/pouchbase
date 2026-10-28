@@ -1,7 +1,7 @@
 import type { RequestHandler } from './$types';
 
 import { failureResponse, registryError, registryPreflight } from '#lib/server/registry-http.js';
-import { getBundle } from '#lib/server/registry.js';
+import { getBundle } from '#lib/server/registry/index.js';
 
 /**
  * The bundle of a version (`PluginVersion.bundleUrl`), byte for byte as its integrity says; counts

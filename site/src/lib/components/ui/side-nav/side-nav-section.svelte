@@ -8,7 +8,7 @@
 </script>
 
 <script lang="ts">
-	import * as Icon from '../icon/index.js';
+	import * as Icon from '@pouchbasejs/ui/icon';
 
 	let { open = $bindable(false), label, children, class: className, ...rest }: Props = $props();
 </script>

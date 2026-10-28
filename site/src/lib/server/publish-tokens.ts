@@ -1,7 +1,7 @@
 import type { PublishTokensRecord } from './pouchbase';
 
 import { admin, pouchbase } from './pouchbase';
-import { backendFailure } from './registry';
+import { backendFailure } from './registry/index.js';
 
 /**
  * Publish tokens: secrets for `pouchbase-plugin publish` (`POUCHBASE_REGISTRY_TOKEN`), made on the

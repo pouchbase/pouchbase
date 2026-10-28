@@ -1,2 +1,2 @@
-export { default as Root } from './thumbnail-root.svelte';
-export type { Props as RootProps, Size } from './thumbnail-root.svelte';
+// Re-exports `@pouchbasejs/ui/thumbnail` for the components that still import it relatively.
+export * from '@pouchbasejs/ui/thumbnail';
