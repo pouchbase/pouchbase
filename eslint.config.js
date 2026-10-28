@@ -49,6 +49,8 @@ export default defineConfig(
 	},
 	{
 		rules: {
+			// Keep modules to one concern: a file over 500 lines is a sign it holds several.
+			'max-lines': ['warn', { max: 500, skipBlankLines: true, skipComments: true }],
 			// Always use braces for if/else, and keep a blank line around if statements.
 			curly: ['error', 'all'],
 			'padding-line-between-statements': [

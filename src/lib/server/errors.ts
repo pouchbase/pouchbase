@@ -1,4 +1,4 @@
-import type { ServiceError } from './services/base.service';
+import type { AnyServiceError } from './services/base.service';
 
 import { error } from '@sveltejs/kit';
 
@@ -6,8 +6,6 @@ import { dev } from '$app/env';
 import { getRequestEvent } from '$app/server';
 
 import { ERROR_MESSAGES } from './error-messages';
-
-type AnyServiceError = ServiceError<number, string>;
 
 /**
  * What went wrong underneath an error, for the `reason` of a service error: the message of the

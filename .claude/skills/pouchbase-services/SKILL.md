@@ -87,19 +87,46 @@ Services are the boundary where throwing code is wrapped into `ResultAsync`.
   methods.
 - Import order: type imports, external packages, `$app`/`#lib` imports, relative imports.
 
-## neverthrow rules
+## Writing a method: `run()`, `fail()`, `must()`
 
-- **Every public method returns `ResultAsync<T, ServiceError<Code, 'MESSAGE'>>`** with an explicit
-  return type annotation. Import `ResultAsync` as a type: `import type { ResultAsync } from 'neverthrow'`.
-- Wrap every throwing call with `fromPromise(promise, (error) => this.error(code, 'MESSAGE', error))`.
-  Multi-step async work goes in an `(async () => { ... })()` IIFE inside `fromPromise`.
-- Transform with `.map(...)`, chain with `.andThen(...)`, short-circuit with
-  `errAsync(this.error(...))`, return plain values in a chain with `okAsync(value)`.
+Every public method returns `ResultAsync<T, XError>` with an explicit return type, where `XError`
+is the service's error union (one `type XError = ...` per service, see below). The body is **one**
+`this.run()` around an `async` function that reads top to bottom with `await`:
+
+```ts
+create(name: string, input: FieldInput): ResultAsync<Field, FieldsError> {
+	return this.run(
+		async () => {
+			const collection = await this.requireCollection(name); // private helper, throws
+			const settings = this.settings(input); // pure, throws or returns
+
+			if (settings.issues) {
+				this.fail(7001, 'INVALID_FIELD', { data: settings.issues });
+			}
+
+			const { id } = await this.must(this.services.database().requireApp());
+			await queryDatabase(id, `ALTER TABLE ...`);
+
+			return this.insertField(collection, input);
+		},
+		(error) => this.error(7000, 'CREATE_FIELD_FAILED', error)
+	);
+}
+```
+
+- `this.run(work, onError)`: the value becomes `Ok`; a `Failure` thrown inside becomes that
+  error; anything else thrown (D1, the Cloudflare API, a bug) becomes `onError(error)`, the
+  method's own `..._FAILED` code, with the cause as `reason`.
+- `this.fail(code, message, { data?, cause? })`: throws an expected failure the caller reacts
+  to (`INVALID_FIELD`, `COLLECTION_NOT_FOUND` when the caller needs it as an error, ...).
+- `this.must(result)`: the value of another service's result; its error becomes this method's
+  error, so include that service's codes (or `ContextError`) in `XError`.
+- Private helpers are plain `async` functions that **throw** (`Failure` via `fail()` for
+  expected cases, anything for unexpected ones). They never return `ResultAsync`; only public
+  methods do. Pure helpers go as non-exported functions above the class or in a module next to
+  the service (`services/<domain>/*.ts`) when the service grows past ~400 lines.
 - **Not found is `Ok(null)`**, not an error. The caller decides whether that is a 404.
-- Expected failures that the caller must react to get their own code (e.g. `INVALID_CREDENTIALS`,
-  `ACCOUNT_ALREADY_EXISTS`); a method that can fail in several ways declares a union of
-  `ServiceError`s. Methods that compose other services include those services' errors in the union.
-- Never use `_unsafeUnwrap` outside tests, and never throw from inside a service method.
+- Never nest `.andThen()` chains; never use `_unsafeUnwrap` outside tests.
 
 ## ServiceError codes
 
@@ -134,6 +161,19 @@ app**; each service owns a range:
 | 24000 | mail templates (email templates with variables, sent through `/api/mail/send`) |
 
 A new service takes the next free range (6000, 7000, ...). Never reuse a code.
+
+Declare the union once per service and use it in every signature instead of repeating codes:
+
+```ts
+export type FieldsError =
+	| ContextError // 1004 APP_DATABASE_MISSING, 5000 GET_SETTING_FAILED (from base.service)
+	| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
+	| ServiceError<7000, 'FIELDS_FAILED'>
+	| (ServiceError<7001, 'INVALID_FIELD'> & { data: FieldIssues });
+```
+
+One `..._FAILED` code per service is enough for the unexpected errors (the `reason` says what
+broke); only failures a caller branches on get their own code.
 
 ## Calling services
 
