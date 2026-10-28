@@ -18,12 +18,8 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	}
 
 	const result = await locals.services
-		.auth()
-		.startOAuth(
-			provider,
-			url.searchParams.get('state') ?? '',
-			url.searchParams.get('challenge') ?? ''
-		);
+		.oauth()
+		.start(provider, url.searchParams.get('state') ?? '', url.searchParams.get('challenge') ?? '');
 
 	if (result.isErr()) {
 		switch (result.error.code) {

@@ -28,11 +28,8 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	3005: 'Could not load the admins',
 
 	// Sessions
-	4000: 'Could not start a session',
-	4001: 'Could not check your session',
-	4002: 'Could not end the session',
+	4000: 'Could not handle the session',
 	4003: [401, 'Invalid email address or password'],
-	4004: 'Could not log in',
 
 	// Settings
 	5000: 'Could not read the settings',
@@ -129,54 +126,38 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	10004: [404, 'Sign-in provider not found'],
 
 	// Auth
-	11000: 'Could not set up authentication',
+	11000: 'Authentication failed',
 	11001: [403, 'This sign-in provider is not enabled'],
-	11003: 'Signing in with the provider failed',
-	11004: 'Could not sign in',
 	11005: [409, 'This email address is already used by another account'],
 	11006: [401, 'Invalid or expired token'],
 	11007: [404, 'User not found'],
-	11009: 'Could not load the user',
 	11010: [400, 'The sign-in request is invalid'],
 	11011: [404, 'The sign-in request has expired; start again'],
 	11012: [400, 'The sign-in request could not be verified; start again'],
-	11013: 'Could not process the sign-in request',
 	11014: [404, 'Sign-in provider not found'],
-	11015: 'The plugin of the sign-in provider failed',
 	11020: [403, 'Signing in with a password is disabled'],
 	11021: [403, 'Signing up is disabled'],
 	11022: [401, 'Invalid email address or password'],
 	11024: [409, 'An account with this email address already exists'],
 	11025: [400, 'The input is invalid'],
-	11026: 'Could not sign in with the password',
 	11027: [409, 'Sending mail is not set up'],
 	11028: [400, 'This link is invalid or has expired'],
 	11029: [400, 'This link is invalid or has expired'],
-	11030: 'Could not reset the password',
-	11031: 'Could not verify the email address',
 	11032: [403, 'The email address is not verified yet'],
 
 	// Storage
-	12000: 'Could not set up the storage bucket on Cloudflare',
-	12001: 'Could not upload the file to storage',
-	12002: 'Could not download the file from storage',
-	12003: 'Could not delete the file from storage',
+	12000: 'Could not access the file storage',
 	12004: 'Could not connect to the storage bucket',
 	12005: [409, 'A storage migration is still running'],
 	12006: 'Could not move the files to the new storage',
 
 	// Files
+	13000: 'Could not process the file',
 	13001: [413, 'The file is too large'],
 	13002: [400, 'The file is empty'],
 	13003: [404, 'File not found'],
-	13004: 'Could not import the file',
-	13005: 'Could not save the file',
-	13006: 'Could not load the file',
 	13007: [400, 'The file is not an image'],
 	13008: 'Could not edit the image',
-	13009: 'Could not create the thumbnail',
-	13010: 'Could not scan the files',
-	13011: 'Could not load the files',
 
 	// Cloudflare
 	14000: 'Could not load the resources from Cloudflare',
@@ -192,7 +173,7 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	15004: 'Could not send the email',
 
 	// Backups
-	16000: 'Could not load the backups',
+	16000: 'Could not complete the backup operation',
 	16001: [404, 'Backup destination not found'],
 	16002: 'Could not connect to the backup destination',
 	16003: [409, 'A backup or restore is already running'],
@@ -201,7 +182,6 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	16006: 'Could not delete the backup',
 	16007: 'Could not look for backups in the destination',
 	16008: [400, 'The schedule is invalid'],
-	16009: 'A step of the backup job failed',
 	16010: [400, 'This is not a Pouchbase backup: its manifest.json is missing or invalid'],
 	16011: [409, 'This upload is no longer active; start it again'],
 	16012: 'Could not transfer the backup',

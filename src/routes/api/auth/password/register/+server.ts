@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 		return json({ message: 'Send a JSON body' }, 400);
 	}
 
-	const result = await locals.services.auth().passwordRegister({
+	const result = await locals.services.passwordAuth().register({
 		name: String(body.name ?? ''),
 		email: String(body.email ?? ''),
 		password: String(body.password ?? '')

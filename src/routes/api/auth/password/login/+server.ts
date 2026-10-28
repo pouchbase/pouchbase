@@ -19,8 +19,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const result = await locals.services
-		.auth()
-		.passwordLogin(parsed.data.email, parsed.data.password);
+		.passwordAuth()
+		.login(parsed.data.email, parsed.data.password);
 
 	if (result.isErr()) {
 		switch (result.error.code) {

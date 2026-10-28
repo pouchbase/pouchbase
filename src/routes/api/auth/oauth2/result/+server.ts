@@ -20,8 +20,8 @@ export const POST: RequestHandler = async ({ request, locals }) => {
 	}
 
 	const result = await locals.services
-		.auth()
-		.oauthResult(String(body.state ?? ''), String(body.verifier ?? ''));
+		.oauth()
+		.result(String(body.state ?? ''), String(body.verifier ?? ''));
 
 	if (result.isErr()) {
 		switch (result.error.code) {

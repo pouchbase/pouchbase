@@ -1,8 +1,8 @@
 import type { ServiceError } from './base.service';
 import type { ResultAsync } from 'neverthrow';
 
-import { and, desc, eq, isNull, ne } from 'drizzle-orm';
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
+import { and, desc, eq, isNull, ne, type SQL } from 'drizzle-orm';
+import { okAsync } from 'neverthrow';
 
 import { generateToken, hashToken } from '../crypto';
 import { apiKeys, functions } from '../db';
@@ -32,6 +32,12 @@ export type ApiKey = {
 	lastUsedAt: Date | null;
 };
 
+export type ApiKeysError =
+	| ServiceError<23000, 'API_KEYS_QUERY_FAILED'>
+	| ServiceError<23001, 'API_KEY_NOT_FOUND'>
+	| ServiceError<23002, 'FUNCTION_KEY'>
+	| ServiceError<23003, 'PLUGIN_KEY'>;
+
 /** Prefix of API keys, so they are recognisable (e.g. by secret scanners). */
 export const API_KEY_PREFIX = 'pbk_';
 
@@ -48,11 +54,6 @@ const COLUMNS = {
 	lastUsedAt: apiKeys.lastUsedAt
 };
 
-type QueryFailed = ServiceError<23000, 'API_KEYS_QUERY_FAILED'>;
-type KeyNotFound = ServiceError<23001, 'API_KEY_NOT_FOUND'>;
-type FunctionKey = ServiceError<23002, 'FUNCTION_KEY'>;
-type PluginKey = ServiceError<23003, 'PLUGIN_KEY'>;
-
 function newKey() {
 	const key = `${API_KEY_PREFIX}${generateToken()}`;
 
@@ -61,100 +62,90 @@ function newKey() {
 
 export class ApiKeysService extends Service {
 	/** Every key, newest first; the keys of functions too, not those of plugins. */
-	list(): ResultAsync<ApiKey[], QueryFailed> {
-		return fromPromise(
-			this.db
-				.select(COLUMNS)
-				.from(apiKeys)
-				.leftJoin(functions, eq(functions.id, apiKeys.functionId))
-				.where(isNull(apiKeys.pluginId))
-				.orderBy(desc(apiKeys.createdAt)),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
+	list(): ResultAsync<ApiKey[], ApiKeysError> {
+		return this.run(
+			() =>
+				this.db
+					.select(COLUMNS)
+					.from(apiKeys)
+					.leftJoin(functions, eq(functions.id, apiKeys.functionId))
+					.where(isNull(apiKeys.pluginId))
+					.orderBy(desc(apiKeys.createdAt)),
+			this.failed
 		);
 	}
 
 	/** Creates a key; `key` can't be read back later. */
-	create(name: string): ResultAsync<ApiKey & { key: string }, QueryFailed> {
-		const { key, prefix } = newKey();
+	create(name: string): ResultAsync<ApiKey & { key: string }, ApiKeysError> {
+		return this.run(async () => {
+			const { key, prefix } = newKey();
+			const [row] = await this.db
+				.insert(apiKeys)
+				.values({ name, prefix, keyHash: await hashToken(key) })
+				.returning();
 
-		return fromPromise(
-			(async () => {
-				const [row] = await this.db
-					.insert(apiKeys)
-					.values({ name, prefix, keyHash: await hashToken(key) })
-					.returning();
-
-				return {
-					id: row.id,
-					name: row.name,
-					prefix: row.prefix,
-					functionName: null,
-					pluginId: null,
-					createdAt: row.createdAt,
-					lastUsedAt: row.lastUsedAt,
-					key
-				};
-			})(),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		);
+			return {
+				id: row.id,
+				name: row.name,
+				prefix: row.prefix,
+				functionName: null,
+				pluginId: null,
+				createdAt: row.createdAt,
+				lastUsedAt: row.lastUsedAt,
+				key
+			};
+		}, this.failed);
 	}
 
 	/** Deletes a key; the key of a function or a plugin goes with it. */
-	delete(id: string): ResultAsync<void, QueryFailed | KeyNotFound | FunctionKey | PluginKey> {
-		return fromPromise(
-			this.db
+	delete(id: string): ResultAsync<void, ApiKeysError> {
+		return this.run(async () => {
+			const [row] = await this.db
 				.select({ functionId: apiKeys.functionId, pluginId: apiKeys.pluginId })
 				.from(apiKeys)
-				.where(eq(apiKeys.id, id)),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		)
-			.andThen(([row]) => {
-				if (!row) {
-					return errAsync(this.error(23001, 'API_KEY_NOT_FOUND'));
-				}
+				.where(eq(apiKeys.id, id));
 
-				if (row.pluginId) {
-					return errAsync(this.error(23003, 'PLUGIN_KEY'));
-				}
+			if (!row) {
+				this.fail(23001, 'API_KEY_NOT_FOUND');
+			}
 
-				return row.functionId ? errAsync(this.error(23002, 'FUNCTION_KEY')) : okAsync(undefined);
-			})
-			.andThen(() =>
-				fromPromise(this.db.delete(apiKeys).where(eq(apiKeys.id, id)), (error) =>
-					this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-				)
-			)
-			.map(() => undefined);
+			if (row.pluginId) {
+				this.fail(23003, 'PLUGIN_KEY');
+			}
+
+			if (row.functionId) {
+				this.fail(23002, 'FUNCTION_KEY');
+			}
+
+			await this.db.delete(apiKeys).where(eq(apiKeys.id, id));
+		}, this.failed);
 	}
 
 	/** The key with this value, `null` when there is none; records that it was used. */
-	verify(key: string): ResultAsync<ApiKey | null, QueryFailed> {
+	verify(key: string): ResultAsync<ApiKey | null, ApiKeysError> {
 		if (!key.startsWith(API_KEY_PREFIX)) {
 			return okAsync(null);
 		}
 
-		return fromPromise(
-			(async () => {
-				const [row] = await this.db
-					.select(COLUMNS)
-					.from(apiKeys)
-					.leftJoin(functions, eq(functions.id, apiKeys.functionId))
-					.where(eq(apiKeys.keyHash, await hashToken(key)));
+		return this.run(async () => {
+			const [row] = await this.db
+				.select(COLUMNS)
+				.from(apiKeys)
+				.leftJoin(functions, eq(functions.id, apiKeys.functionId))
+				.where(eq(apiKeys.keyHash, await hashToken(key)));
 
-				if (!row) {
-					return null;
-				}
+			if (!row) {
+				return null;
+			}
 
-				const now = new Date();
+			const now = new Date();
 
-				if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_INTERVAL) {
-					await this.db.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, row.id));
-				}
+			if (!row.lastUsedAt || now.getTime() - row.lastUsedAt.getTime() > LAST_USED_INTERVAL) {
+				await this.db.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, row.id));
+			}
 
-				return { ...row, lastUsedAt: now };
-			})(),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		);
+			return { ...row, lastUsedAt: now };
+		}, this.failed);
 	}
 
 	/**
@@ -164,39 +155,17 @@ export class ApiKeysService extends Service {
 	issueFunctionKey(
 		functionId: string,
 		functionName: string
-	): ResultAsync<{ id: string; key: string }, QueryFailed> {
-		const { key, prefix } = newKey();
-
-		return fromPromise(
-			(async () => {
-				const [row] = await this.db
-					.insert(apiKeys)
-					.values({
-						name: `Function ${functionName}`,
-						prefix,
-						keyHash: await hashToken(key),
-						functionId
-					})
-					.returning({ id: apiKeys.id });
-
-				return { id: row.id, key };
-			})(),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		);
+	): ResultAsync<{ id: string; key: string }, ApiKeysError> {
+		return this.issue({ name: `Function ${functionName}`, functionId });
 	}
 
 	/** Removes the function's keys other than this one (the key of the version that runs). */
-	keepFunctionKey(functionId: string, id: string): ResultAsync<void, QueryFailed> {
-		return fromPromise(
-			this.db.delete(apiKeys).where(and(eq(apiKeys.functionId, functionId), ne(apiKeys.id, id))),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		).map(() => undefined);
+	keepFunctionKey(functionId: string, id: string): ResultAsync<void, ApiKeysError> {
+		return this.remove(and(eq(apiKeys.functionId, functionId), ne(apiKeys.id, id)));
 	}
 
-	deleteFunctionKey(id: string): ResultAsync<void, QueryFailed> {
-		return fromPromise(this.db.delete(apiKeys).where(eq(apiKeys.id, id)), (error) =>
-			this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		).map(() => undefined);
+	deleteFunctionKey(id: string): ResultAsync<void, ApiKeysError> {
+		return this.remove(eq(apiKeys.id, id));
 	}
 
 	/**
@@ -204,39 +173,38 @@ export class ApiKeysService extends Service {
 	 * `keepPluginKey` removes the plugin's older keys; when it fails, `deleteFunctionKey` removes
 	 * the new one.
 	 */
-	issuePluginKey(pluginId: string): ResultAsync<{ id: string; key: string }, QueryFailed> {
-		const { key, prefix } = newKey();
-
-		return fromPromise(
-			(async () => {
-				const [row] = await this.db
-					.insert(apiKeys)
-					.values({
-						name: `Plugin ${pluginId}`,
-						prefix,
-						keyHash: await hashToken(key),
-						pluginId
-					})
-					.returning({ id: apiKeys.id });
-
-				return { id: row.id, key };
-			})(),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		);
+	issuePluginKey(pluginId: string): ResultAsync<{ id: string; key: string }, ApiKeysError> {
+		return this.issue({ name: `Plugin ${pluginId}`, pluginId });
 	}
 
 	/** Removes the plugin's keys other than this one (the key of the Worker that runs). */
-	keepPluginKey(pluginId: string, id: string): ResultAsync<void, QueryFailed> {
-		return fromPromise(
-			this.db.delete(apiKeys).where(and(eq(apiKeys.pluginId, pluginId), ne(apiKeys.id, id))),
-			(error) => this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		).map(() => undefined);
+	keepPluginKey(pluginId: string, id: string): ResultAsync<void, ApiKeysError> {
+		return this.remove(and(eq(apiKeys.pluginId, pluginId), ne(apiKeys.id, id)));
 	}
 
 	/** Removes every key of the plugin, e.g. when it is removed. */
-	deletePluginKeys(pluginId: string): ResultAsync<void, QueryFailed> {
-		return fromPromise(this.db.delete(apiKeys).where(eq(apiKeys.pluginId, pluginId)), (error) =>
-			this.error(23000, 'API_KEYS_QUERY_FAILED', error)
-		).map(() => undefined);
+	deletePluginKeys(pluginId: string): ResultAsync<void, ApiKeysError> {
+		return this.remove(eq(apiKeys.pluginId, pluginId));
 	}
+
+	/** A key for a function or a plugin: not listed, replaced on every deploy. */
+	private issue(owner: { name: string; functionId?: string; pluginId?: string }) {
+		return this.run(async () => {
+			const { key, prefix } = newKey();
+			const [row] = await this.db
+				.insert(apiKeys)
+				.values({ ...owner, prefix, keyHash: await hashToken(key) })
+				.returning({ id: apiKeys.id });
+
+			return { id: row.id, key };
+		}, this.failed);
+	}
+
+	private remove(where: SQL | undefined) {
+		return this.run(async () => {
+			await this.db.delete(apiKeys).where(where);
+		}, this.failed);
+	}
+
+	private failed = (error: unknown) => this.error(23000, 'API_KEYS_QUERY_FAILED', error);
 }

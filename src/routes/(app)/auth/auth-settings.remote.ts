@@ -16,8 +16,8 @@ export const getAuthSettings = query(async () => {
 		.list()
 		.andThen((providers) =>
 			services
-				.auth()
-				.passwordSettings()
+				.passwordAuth()
+				.settings()
 				.map((password) => ({ providers, password }))
 		);
 
@@ -43,7 +43,7 @@ export const updatePasswordProvider = form(passwordProviderSchema, async (data, 
 		}
 	}
 
-	const result = await services.auth().updatePasswordSettings({
+	const result = await services.passwordAuth().updateSettings({
 		enabled: data.enabled,
 		// Sign-up only makes sense while the provider is active.
 		signUp: data.enabled && data.signUp,

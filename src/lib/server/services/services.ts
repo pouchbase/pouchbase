@@ -1,5 +1,7 @@
 import { ApiKeysService } from './api-keys.service';
 import { AuthService } from './auth.service';
+import { OAuthService } from './auth-oauth.service';
+import { PasswordAuthService } from './auth-password.service';
 import { BackupsService } from './backups.service';
 import { CloudflareService } from './cloudflare.service';
 import { CollectionsService } from './collections.service';
@@ -30,6 +32,14 @@ export class Services {
 
 	auth() {
 		return new AuthService();
+	}
+
+	passwordAuth() {
+		return new PasswordAuthService();
+	}
+
+	oauth() {
+		return new OAuthService();
 	}
 
 	backups() {

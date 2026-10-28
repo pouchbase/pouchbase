@@ -3,13 +3,18 @@ import type { User } from './users.service';
 import type { ResultAsync } from 'neverthrow';
 
 import { eq } from 'drizzle-orm';
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
+import { okAsync } from 'neverthrow';
 
 import { generateToken, hashToken, verifyPassword } from '../crypto';
 import { sessions, users } from '../db';
 import { Service } from './base.service';
 
 export type SessionUser = Pick<User, 'id' | 'email'>;
+
+export type SessionsError =
+	| ServiceError<3001, 'FIND_USER_FAILED'>
+	| ServiceError<4000, 'SESSIONS_FAILED'>
+	| ServiceError<4003, 'INVALID_CREDENTIALS'>;
 
 export const SESSION_COOKIE = 'session';
 
@@ -36,18 +41,20 @@ function cacheSession(id: string, user: SessionUser, expiresAt: number) {
 	cache.set(id, { user, expiresAt, validatedAt: Date.now() });
 }
 
+/** The sessions of admins: a cookie with a random token, hashed in the `sessions` table. */
 export class SessionsService extends Service {
 	/** Creates a session for the user and sets the session cookie. */
-	create(userId: string): ResultAsync<void, ServiceError<4000, 'CREATE_SESSION_FAILED'>> {
-		const token = generateToken();
-		const expiresAt = new Date(Date.now() + SESSION_TTL);
+	create(userId: string): ResultAsync<void, SessionsError> {
+		return this.run(
+			async () => {
+				const token = generateToken();
+				const expiresAt = new Date(Date.now() + SESSION_TTL);
 
-		return fromPromise(
-			(async () => {
 				await this.db.insert(sessions).values({ id: await hashToken(token), userId, expiresAt });
-			})(),
-			(error) => this.error(4000, 'CREATE_SESSION_FAILED', error)
-		).map(() => this.setCookie(token, expiresAt));
+				this.setCookie(token, expiresAt);
+			},
+			(error) => this.error(4000, 'SESSIONS_FAILED', error)
+		);
 	}
 
 	/**
@@ -55,11 +62,9 @@ export class SessionsService extends Service {
 	 * Sessions are extended once they are past their halfway point. Valid sessions are cached
 	 * briefly (`CACHE_TTL`).
 	 */
-	validate(
-		token: string
-	): ResultAsync<SessionUser | null, ServiceError<4001, 'VALIDATE_SESSION_FAILED'>> {
-		return fromPromise(
-			(async () => {
+	validate(token: string): ResultAsync<SessionUser | null, SessionsError> {
+		return this.run(
+			async () => {
 				const id = await hashToken(token);
 				const cached = cache.get(id);
 
@@ -90,6 +95,7 @@ export class SessionsService extends Service {
 
 				if (remaining <= 0) {
 					await this.db.delete(sessions).where(eq(sessions.id, id));
+
 					return null;
 				}
 
@@ -104,13 +110,13 @@ export class SessionsService extends Service {
 				cacheSession(id, row.user, expiresAt.getTime());
 
 				return row.user;
-			})(),
-			(error) => this.error(4001, 'VALIDATE_SESSION_FAILED', error)
+			},
+			(error) => this.error(4000, 'SESSIONS_FAILED', error)
 		);
 	}
 
 	/** Deletes the current session and its cookie. */
-	invalidate(): ResultAsync<void, ServiceError<4002, 'INVALIDATE_SESSION_FAILED'>> {
+	invalidate(): ResultAsync<void, SessionsError> {
 		const token = this.ctx.cookies.get(SESSION_COOKIE);
 		this.ctx.cookies.delete(SESSION_COOKIE, { path: '/' });
 
@@ -118,42 +124,33 @@ export class SessionsService extends Service {
 			return okAsync(undefined);
 		}
 
-		return fromPromise(
-			(async () => {
+		return this.run(
+			async () => {
 				const id = await hashToken(token);
 
 				cache.delete(id);
 				await this.db.delete(sessions).where(eq(sessions.id, id));
-			})(),
-			(error) => this.error(4002, 'INVALIDATE_SESSION_FAILED', error)
+			},
+			(error) => this.error(4000, 'SESSIONS_FAILED', error)
 		);
 	}
 
 	/** Checks the credentials (email and password) and starts a session. */
-	login(
-		email: string,
-		password: string
-	): ResultAsync<
-		SessionUser,
-		| ServiceError<3001, 'FIND_USER_FAILED'>
-		| ServiceError<4000, 'CREATE_SESSION_FAILED'>
-		| ServiceError<4003, 'INVALID_CREDENTIALS'>
-		| ServiceError<4004, 'LOGIN_FAILED'>
-	> {
-		return this.services
-			.users()
-			.findByEmail(email)
-			.andThen((user) =>
-				fromPromise(
-					user ? verifyPassword(password, user.passwordHash) : Promise.resolve(false),
-					(error) => this.error(4004, 'LOGIN_FAILED', error)
-				).andThen((valid) =>
-					user && valid
-						? okAsync<SessionUser>({ id: user.id, email: user.email })
-						: errAsync(this.error(4003, 'INVALID_CREDENTIALS'))
-				)
-			)
-			.andThen((user) => this.create(user.id).map(() => user));
+	login(email: string, password: string): ResultAsync<SessionUser, SessionsError> {
+		return this.run(
+			async () => {
+				const user = await this.must(this.services.users().findByEmail(email));
+
+				if (!user || !(await verifyPassword(password, user.passwordHash))) {
+					this.fail(4003, 'INVALID_CREDENTIALS');
+				}
+
+				await this.must(this.create(user.id));
+
+				return { id: user.id, email: user.email };
+			},
+			(error) => this.error(4000, 'SESSIONS_FAILED', error)
+		);
 	}
 
 	private setCookie(token: string, expiresAt: Date) {

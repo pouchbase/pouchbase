@@ -47,8 +47,8 @@ export const GET: RequestHandler = async ({ params, url, locals }) => {
 	}
 
 	const result = await locals.services
-		.auth()
-		.finishOAuth(
+		.oauth()
+		.finish(
 			params.provider,
 			url.searchParams.get('state') ?? '',
 			url.searchParams.get('code'),
