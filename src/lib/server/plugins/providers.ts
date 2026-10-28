@@ -19,7 +19,7 @@ import { callContext } from './sources';
  * brought in line by `PluginsService.ensureEmbedded()` with the helpers here.
  */
 
-export type ProviderRow = typeof pluginAuthProviders.$inferInsert;
+type ProviderRow = typeof pluginAuthProviders.$inferInsert;
 
 export function providerRow(
 	pluginId: string,

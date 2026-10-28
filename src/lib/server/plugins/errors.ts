@@ -3,7 +3,6 @@ import type { ServiceError } from '../services/base.service';
 import type { CompileIssue } from './compile';
 
 import { reasonOf } from '../errors';
-import { PlatformError } from '../platform';
 import { Failure } from '../services/base.service';
 
 /**
@@ -44,13 +43,4 @@ export function fail(error: PluginsError, cause?: unknown): never {
 	const reason = reasonOf(cause);
 
 	throw new Failure(reason ? { ...error, reason } : error);
-}
-
-/** What went wrong, for admins: the API's messages (e.g. a deploy's syntax error) or the error's. */
-export function causeOf(error: unknown) {
-	if (error instanceof PlatformError && error.errors.length) {
-		return error.errors.map((item) => item.message).join('; ');
-	}
-
-	return error instanceof Error ? error.message : String(error);
 }

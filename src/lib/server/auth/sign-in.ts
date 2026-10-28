@@ -3,20 +3,20 @@
  * the rule is testable; `OAuthService` does the lookups and the writes around it.
  */
 
-export type SignInProfile = {
+type SignInProfile = {
 	email: string | null;
 	/** Whether the provider vouches for the address. */
 	emailVerified: boolean;
 };
 
-export type SignInLookup = {
+type SignInLookup = {
 	/** The user linked to this provider account before, when they still exist. */
 	linkedUserId: string | null;
 	/** The user that already has the profile's email address. */
 	emailOwnerId: string | null;
 };
 
-export type SignInDecision =
+type SignInDecision =
 	/** Signed in before: sign in again. */
 	| { action: 'sign-in'; userId: string }
 	/** First time with this provider, but the (verified) address belongs to a user: link the account to them. */

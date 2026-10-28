@@ -3,7 +3,7 @@ import type { functions } from '../db';
 
 import { USER_HEADER } from '#lib/functions/functions.js';
 
-import { reasonOf } from '../errors';
+import { describeError } from '../errors';
 import {
 	ENTRY_CODE,
 	ENTRY_MODULE,
@@ -12,7 +12,7 @@ import {
 	scriptName,
 	SECRET_HEADER
 } from '../functions';
-import { functions as driver, PlatformError } from '../platform';
+import { functions as driver } from '../platform';
 
 /**
  * The Worker of a function, for `FunctionsService`: uploading its code and sending requests to
@@ -62,23 +62,11 @@ const MAX_TEST_BODY = 100_000;
 /** How long the test panel waits for a function. */
 const TEST_TIMEOUT = 30_000;
 
-/**
- * What the API said, e.g. the syntax error a deploy failed with: the messages of the Cloudflare
- * API without its status and codes, or the reason of any other error.
- */
-export function apiReason(error: unknown) {
-	if (error instanceof PlatformError && error.errors.length) {
-		return error.errors.map((item) => item.message).join('; ');
-	}
-
-	return reasonOf(error) ?? String(error);
-}
-
 /** Why a test request failed, for the test panel. */
 export function testReason(error: unknown) {
 	return error instanceof Error && error.name === 'TimeoutError'
 		? `No response within ${TEST_TIMEOUT / 1000} seconds`
-		: apiReason(error);
+		: describeError(error);
 }
 
 /** The request to the Worker: the path below its URL, with the secret and the user. */

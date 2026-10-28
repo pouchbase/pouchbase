@@ -2,7 +2,7 @@ import type { ServiceError } from './base.service';
 import type { CreateUserInput, User } from './users.service';
 import type { ResultAsync } from 'neverthrow';
 
-import { errAsync, fromPromise, okAsync } from 'neverthrow';
+import { errAsync, okAsync } from 'neverthrow';
 
 import { POUCHBASE_ADMIN_EMAIL, POUCHBASE_ADMIN_PASSWORD } from '$app/env/private';
 
@@ -91,36 +91,31 @@ export class InstallService extends Service {
 			return okAsync(false);
 		}
 
-		const email = adminEmail.safeParse(POUCHBASE_ADMIN_EMAIL);
-		const password = adminPassword.safeParse(POUCHBASE_ADMIN_PASSWORD);
+		return this.run(
+			async () => {
+				const email = adminEmail.safeParse(POUCHBASE_ADMIN_EMAIL);
+				const password = adminPassword.safeParse(POUCHBASE_ADMIN_PASSWORD);
 
-		if (!email.success || !password.success) {
-			const variable = email.success ? 'POUCHBASE_ADMIN_PASSWORD' : 'POUCHBASE_ADMIN_EMAIL';
-			const issue = (email.error ?? password.error)?.issues[0]?.message ?? 'Invalid value';
+				if (!email.success || !password.success) {
+					const variable = email.success ? 'POUCHBASE_ADMIN_PASSWORD' : 'POUCHBASE_ADMIN_EMAIL';
+					const issue = (email.error ?? password.error)?.issues[0]?.message ?? 'Invalid value';
 
-			return errAsync({
-				...this.error(2002, 'INVALID_ADMIN_ENV'),
-				data: { reason: `${variable}: ${issue}` }
-			});
-		}
-
-		installingFromEnv ??= (async () => {
-			const result = await this.install({ email: email.data, password: password.data });
-
-			if (result.isErr()) {
-				// Another isolate may have installed it in the meantime.
-				if (result.error.code === 2000) {
-					return true;
+					this.fail(2002, 'INVALID_ADMIN_ENV', { data: { reason: `${variable}: ${issue}` } });
 				}
 
-				throw result.error;
-			}
+				// Concurrent first requests share one install.
+				installingFromEnv ??= this.must(
+					this.install({ email: email.data, password: password.data })
+						// Another isolate may have installed it in the meantime.
+						.orElse((error) => (error.code === 2000 ? okAsync(null) : errAsync(error)))
+						.map(() => true)
+				).finally(() => {
+					installingFromEnv = null;
+				});
 
-			return true;
-		})().finally(() => {
-			installingFromEnv = null;
-		});
-
-		return fromPromise(installingFromEnv, (error) => error as InstallError);
+				return installingFromEnv;
+			},
+			(error) => this.error(1001, 'DATABASE_CREATE_FAILED', error)
+		);
 	}
 }

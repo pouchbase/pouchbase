@@ -1,7 +1,7 @@
 import type { BackupsError } from './backups.service';
 import type { ContextError, ServiceError } from './base.service';
 import type { Deployment } from './environments/deployments';
-import type { RemoteFailed, RemoteNotLinked } from './environments/remote';
+import type { RemoteFailed, RemoteNotLinked } from './environments/remote-instance';
 import type { Plan, PlanStep } from '#lib/environments/diff.js';
 import type { Environment } from '#lib/environments/snapshot.js';
 import type { Snapshot, SnapshotCollection } from '#lib/schemas/environments.js';
@@ -14,7 +14,7 @@ import { ENVIRONMENTS, snapshotHash } from '#lib/environments/snapshot.js';
 
 import { generateToken, hashToken } from '../crypto';
 import { deployments, deployTokens } from '../db';
-import { describeError } from '../jobs';
+import { describeError } from '../errors';
 import { Service } from './base.service';
 import { applyStep } from './environments/apply-step';
 import { backingUp, runDeploymentStep, toDeployment } from './environments/deployments';
@@ -24,7 +24,7 @@ import {
 	linkedRemote,
 	parseDeployment,
 	request
-} from './environments/remote';
+} from './environments/remote-instance';
 import { readCollections, readSnapshot, SNAPSHOT_KEYS } from './environments/snapshot';
 
 export type { Deployment } from './environments/deployments';

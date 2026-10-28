@@ -39,7 +39,7 @@ export type BackupState =
 			updatedAt: number;
 	  };
 
-export type UploadedFile = { uploadId: string; etags: string[]; size: number; done: boolean };
+type UploadedFile = { uploadId: string; etags: string[]; size: number; done: boolean };
 
 export type UploadState = Extract<BackupState, { step: 'upload' }>;
 

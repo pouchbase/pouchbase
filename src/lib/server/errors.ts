@@ -6,6 +6,7 @@ import { dev } from '$app/env';
 import { getRequestEvent } from '$app/server';
 
 import { ERROR_MESSAGES } from './error-messages';
+import { PlatformError } from './platform';
 
 /**
  * What went wrong underneath an error, for the `reason` of a service error: the message of the
@@ -35,6 +36,19 @@ export function reasonOf(cause: unknown): string | undefined {
 	}
 
 	return innermost.message || cause.message || undefined;
+}
+
+/**
+ * What went wrong, as a job, a plugin or a deploy records it for admins: the messages of the
+ * Cloudflare API when it answered with errors (e.g. the syntax error of a deploy), else the reason
+ * of the error, else the error itself.
+ */
+export function describeError(error: unknown): string {
+	if (error instanceof PlatformError && error.errors.length) {
+		return error.errors.map((item) => item.message).join('; ');
+	}
+
+	return reasonOf(error) ?? String(error);
 }
 
 /** The message of a service error for people, e.g. `Could not load the API keys`. */

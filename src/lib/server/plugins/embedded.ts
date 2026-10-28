@@ -31,7 +31,7 @@ export type EmbeddedSource = {
 };
 
 /** What the Vite plugin found: the plugins, and the folders it couldn't read. */
-export type EmbeddedSources = {
+type EmbeddedSources = {
 	plugins: readonly EmbeddedSource[];
 	issues: readonly EmbeddedIssue[];
 };

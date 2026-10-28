@@ -9,7 +9,8 @@ import { nextRun, parseCron } from '#lib/backups/cron.js';
 
 import { backupDestinations, backupFiles, backups, backupSchedules, db } from '../../db';
 import { exportDatabase, getDatabaseId } from '../../db/query';
-import { describeError, runJobStep, StepError, stepResult } from '../../jobs';
+import { describeError } from '../../errors';
+import { runJobStep, StepError, stepResult } from '../../jobs';
 import { storageKeys } from '../files.service';
 import {
 	backupState,

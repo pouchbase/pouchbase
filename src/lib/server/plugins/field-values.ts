@@ -8,10 +8,10 @@ import type { FieldValue } from '@pouchbasejs/plugin-sdk/server';
  */
 
 /** Most values in one `fields.read` call. */
-export const MAX_READ_VALUES = 500;
+const MAX_READ_VALUES = 500;
 
 /** Whether `value` fits a column as it is: a string, a number, bytes or `null`. */
-export function isFieldValue(value: unknown): value is FieldValue {
+function isFieldValue(value: unknown): value is FieldValue {
 	return (
 		value === null ||
 		typeof value === 'string' ||

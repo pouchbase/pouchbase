@@ -36,7 +36,7 @@ export class PluginCallError extends Error {
  * Request headers that never reach a plugin's route: the admin's session cookie, and the host's
  * own `x-pouchbase-plugin-*` headers (so a client can't send them).
  */
-export function isHiddenRequestHeader(name: string) {
+function isHiddenRequestHeader(name: string) {
 	const lower = name.toLowerCase();
 
 	return lower === 'cookie' || lower === 'host' || lower.startsWith('x-pouchbase-plugin-');
@@ -59,7 +59,7 @@ export function routeRequestHeaders(headers: Headers): Headers {
  * A `ctx.pouch` whose every request fails, where the host has none to give (e.g. while it asks a
  * built-in plugin to `describe` itself).
  */
-export function unavailablePouch(): Pouchbase {
+function unavailablePouch(): Pouchbase {
 	return new Pouchbase('https://pouchbase.invalid', {
 		fetch: () => Promise.reject(new Error('ctx.pouch is not available here'))
 	});
@@ -213,7 +213,7 @@ export async function dispatch(
 }
 
 /** The answer when no route matches: 404, or 405 with `Allow` when only the method doesn't. */
-export function routeNotFound(match: { status: 404 } | { status: 405; allow: string[] }) {
+function routeNotFound(match: { status: 404 } | { status: 405; allow: string[] }) {
 	return match.status === 405
 		? Response.json(
 				{ message: 'Method not allowed' },

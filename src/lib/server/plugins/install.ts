@@ -32,13 +32,14 @@ import {
 	pluginSettings,
 	plugins
 } from '../db';
-import { reasonOf } from '../errors';
-import { functions as driver, PlatformError } from '../platform';
+import { describeError } from '../errors';
+import { functions as driver } from '../platform';
 import { background } from '../platform/runtime';
 import { PluginCallError } from './dispatch';
 import { fail } from './errors';
 import { installedInProcess } from './in-process';
-import { chunks, moduleRows, MODULE_ROWS_PER_INSERT } from './modules';
+import { chunks } from '../db/query';
+import { moduleRows, MODULE_ROWS_PER_INSERT } from './modules';
 import { describePlugin } from './protocol';
 import { providerConfigs, providerRow } from './providers';
 import { INSTALLED_COLUMNS } from './sources';
@@ -64,7 +65,7 @@ const DESCRIBE_ATTEMPTS = 5;
 
 const HOST = { version: POUCHBASE_VERSION, apiVersions: SUPPORTED_API_VERSIONS };
 
-export type Registry = ReturnType<typeof createRegistryClient>;
+type Registry = ReturnType<typeof createRegistryClient>;
 
 export function registryUrl() {
 	return POUCHBASE_REGISTRY_URL ?? DEFAULT_REGISTRY_URL;
@@ -72,15 +73,6 @@ export function registryUrl() {
 
 export function registryClient(): Registry {
 	return createRegistryClient({ url: registryUrl() });
-}
-
-/** What went wrong, for admins: the API's messages (e.g. a deploy's syntax error) or the error's. */
-function describeError(error: unknown) {
-	if (error instanceof PlatformError && error.errors.length) {
-		return error.errors.map((item) => item.message).join('; ');
-	}
-
-	return reasonOf(error) ?? String(error);
 }
 
 /** Fails with `REGISTRY_REQUEST_FAILED` for an error of the registry client. */
@@ -110,7 +102,7 @@ function incompatibility(manifest: Pick<PluginManifest, 'apiVersion' | 'engines'
 	);
 }
 
-export type FetchedBundle = {
+type FetchedBundle = {
 	version: PluginVersion;
 	bytes: Uint8Array;
 	manifest: PluginManifest;
@@ -199,7 +191,7 @@ function deployFailure(error: unknown): never {
 	);
 }
 
-export type DeployedWorker = { url: string; secret: string };
+type DeployedWorker = { url: string; secret: string };
 
 /**
  * Deploys `server` to the plugin's Worker with a new API key, and keeps the secret of an
@@ -268,7 +260,7 @@ export async function deployWorker(
 }
 
 /** Deletes the plugin's Worker in the background; a failure is only logged. */
-export function deleteWorkerLater(pluginId: string) {
+function deleteWorkerLater(pluginId: string) {
 	background(
 		driver.delete(pluginScriptName(POUCHBASE_INSTANCE, pluginId)).catch((error: unknown) => {
 			console.error(`[plugins] Could not delete the Worker of ${pluginId}`, error);
@@ -300,7 +292,7 @@ async function describeWithRetries(
  * has a handler for every sign-in provider the manifest contributes. A Worker that was just
  * deployed is asked again while workers.dev doesn't serve it yet. Fails with `PLUGIN_CALL_FAILED`.
  */
-export async function describeServer(
+async function describeServer(
 	runtime: PluginRuntime,
 	manifest: PluginManifest,
 	context: PluginCallContext,

@@ -19,7 +19,8 @@ import { tarSize } from '#lib/backups/archive.js';
 import { nextRun, parseCron } from '#lib/backups/cron.js';
 
 import { backupDestinations, backupRestores, backups, backupSchedules } from '../db';
-import { claimJob, describeError } from '../jobs';
+import { describeError } from '../errors';
+import { claimJob } from '../jobs';
 import {
 	archiveFiles,
 	archiveStream,
@@ -40,7 +41,7 @@ import {
 import { retireDatabases, runRestoreStep } from './backups/restore-steps';
 import { backupKey, parseManifest, stamp, without } from './backups/state';
 import { createUpload, expireUploads, finishUpload, uploadOf, uploadPart } from './backups/upload';
-import { Failure, Service } from './base.service';
+import { Service } from './base.service';
 
 export type {
 	BackupSummary,
@@ -129,7 +130,10 @@ export class BackupsService extends Service {
 			try {
 				await testConnection(destination);
 			} catch (error) {
-				throw new Failure(this.withReason(16002, 'CONNECTION_FAILED', error));
+				this.fail(16002, 'CONNECTION_FAILED', {
+					data: { reason: describeError(error) },
+					cause: error
+				});
 			}
 
 			await this.db

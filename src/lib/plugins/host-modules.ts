@@ -4,9 +4,15 @@ import * as badge from '@pouchbasejs/ui/badge';
 import * as button from '@pouchbasejs/ui/button';
 import * as callout from '@pouchbasejs/ui/callout';
 import * as card from '@pouchbasejs/ui/card';
+import * as codeBlock from '@pouchbasejs/ui/code-block';
+import * as copyButton from '@pouchbasejs/ui/copy-button';
+import * as dialog from '@pouchbasejs/ui/dialog';
 import * as empty from '@pouchbasejs/ui/empty';
+import * as errorState from '@pouchbasejs/ui/error-state';
+import * as format from '@pouchbasejs/ui/format';
 import * as icon from '@pouchbasejs/ui/icon';
 import * as checkbox from '@pouchbasejs/ui/inputs/checkbox';
+import * as file from '@pouchbasejs/ui/inputs/file';
 import * as input from '@pouchbasejs/ui/inputs/input';
 import * as select from '@pouchbasejs/ui/inputs/select';
 import * as slider from '@pouchbasejs/ui/inputs/slider';
@@ -16,12 +22,14 @@ import * as meter from '@pouchbasejs/ui/meter';
 import * as progress from '@pouchbasejs/ui/progress';
 import * as scrollArea from '@pouchbasejs/ui/scroll-area';
 import * as segmented from '@pouchbasejs/ui/segmented';
+import * as sheet from '@pouchbasejs/ui/sheet';
 import * as skeleton from '@pouchbasejs/ui/skeleton';
 import * as spinner from '@pouchbasejs/ui/spinner';
 import * as swatch from '@pouchbasejs/ui/swatch';
 import * as table from '@pouchbasejs/ui/table';
 import * as thumbnail from '@pouchbasejs/ui/thumbnail';
 import * as tile from '@pouchbasejs/ui/tile';
+import * as toast from '@pouchbasejs/ui/toast';
 import * as tooltip from '@pouchbasejs/ui/tooltip';
 /* eslint-disable svelte/no-svelte-internal -- compiled plugin components import Svelte's runtime
    internals, so the host has to lend them its own instances */
@@ -74,21 +82,29 @@ const HOST_MODULES: Record<HostModuleId, () => Promise<ModuleNamespace>> = {
 	'@pouchbasejs/ui/button': async () => button,
 	'@pouchbasejs/ui/callout': async () => callout,
 	'@pouchbasejs/ui/card': async () => card,
+	'@pouchbasejs/ui/code-block': async () => codeBlock,
+	'@pouchbasejs/ui/copy-button': async () => copyButton,
+	'@pouchbasejs/ui/dialog': async () => dialog,
 	'@pouchbasejs/ui/empty': async () => empty,
+	'@pouchbasejs/ui/error-state': async () => errorState,
+	'@pouchbasejs/ui/format': async () => format,
 	'@pouchbasejs/ui/icon': async () => icon,
 	'@pouchbasejs/ui/link': async () => link,
 	'@pouchbasejs/ui/meter': async () => meter,
 	'@pouchbasejs/ui/progress': async () => progress,
 	'@pouchbasejs/ui/scroll-area': async () => scrollArea,
 	'@pouchbasejs/ui/segmented': async () => segmented,
+	'@pouchbasejs/ui/sheet': async () => sheet,
 	'@pouchbasejs/ui/skeleton': async () => skeleton,
 	'@pouchbasejs/ui/spinner': async () => spinner,
 	'@pouchbasejs/ui/swatch': async () => swatch,
 	'@pouchbasejs/ui/table': async () => table,
 	'@pouchbasejs/ui/thumbnail': async () => thumbnail,
 	'@pouchbasejs/ui/tile': async () => tile,
+	'@pouchbasejs/ui/toast': async () => toast,
 	'@pouchbasejs/ui/tooltip': async () => tooltip,
 	'@pouchbasejs/ui/inputs/checkbox': async () => checkbox,
+	'@pouchbasejs/ui/inputs/file': async () => file,
 	'@pouchbasejs/ui/inputs/input': async () => input,
 	'@pouchbasejs/ui/inputs/select': async () => select,
 	'@pouchbasejs/ui/inputs/slider': async () => slider,

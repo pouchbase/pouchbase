@@ -6,7 +6,8 @@ import type { Services } from '../services';
 import { eq } from 'drizzle-orm';
 
 import { db, fields } from '../../db';
-import { describeError, StepError, stepResult } from '../../jobs';
+import { describeError } from '../../errors';
+import { StepError, stepResult } from '../../jobs';
 
 /**
  * Runs one step of a plan through the services, as if it was made in the UI. A step that already

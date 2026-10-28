@@ -132,7 +132,7 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 const httpsUrl = z.url({ protocol: /^https$/ });
 
 /** What the host needs to run the OAuth flow of a provider; reported by `describe`. */
-export const providerConfigSchema = z.object({
+const providerConfigSchema = z.object({
 	authorizeUrl: httpsUrl,
 	tokenUrl: httpsUrl,
 	scopes: z.array(z.string().min(1).max(200)).max(50),
@@ -142,7 +142,7 @@ export const providerConfigSchema = z.object({
 export type ProviderConfig = z.output<typeof providerConfigSchema>;
 
 /** Which hooks a field type implements; the host skips the call when it has none it needs. */
-export const fieldHandlerSchema = z.object({
+const fieldHandlerSchema = z.object({
 	validate: z.boolean(),
 	serialize: z.boolean(),
 	deserialize: z.boolean()

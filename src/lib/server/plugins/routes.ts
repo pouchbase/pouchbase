@@ -12,7 +12,7 @@ import type { RouteHandler } from '@pouchbasejs/plugin-sdk/server';
  *   one that matches nothing 404. Keys that aren't `"<METHOD> /<path>"` are ignored.
  */
 
-export type RouteMatch =
+type RouteMatch =
 	| { handler: RouteHandler; params: Record<string, string> }
 	| { status: 404 }
 	| { status: 405; allow: string[] };

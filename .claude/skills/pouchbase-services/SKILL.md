@@ -24,23 +24,34 @@ src/lib/server/
 │                           # the app DB has a random name (id and name in settings)
 ├── db/                     # Drizzle schema, client and migrator (throws)
 ├── crypto.ts               # password hashing, tokens (throws)
-├── plugins/                # running plugin server code (throws; used by plugins.service.ts)
-│   ├── runtime.ts          # PluginRuntime, the calls (describe, profile), dispatch, zod schemas
-│   ├── network.ts          # hostMatches/restrictedFetch: the permissions.network allowlist
-│   ├── worker.ts           # the Worker of an installed plugin: entry code, WorkerRuntime
-│   └── embedded.ts         # built-in plugins from /plugins/* (import.meta.glob), InProcessRuntime
+├── plugins/                # running plugin code (throws; used by plugins.service.ts)
+│   ├── protocol.ts         # the calls (describe, profile, field values), zod schemas, PluginRuntime
+│   ├── dispatch.ts         # dispatch/dispatchRoute, shared by the Worker entry and in-process
+│   ├── worker.ts           # WorkerRuntime: an installed plugin's own Worker (entry in worker/)
+│   ├── in-process.ts       # InProcessRuntime: built-in plugins, and installed ones in dev
+│   ├── install.ts          # fetch + check the bundle, deploy the Worker, describe, store rows
+│   ├── apply-collections.ts, providers.ts, modules.ts, sources.ts, runtimes.ts, errors.ts
+│   └── embedded.ts         # built-in plugins from /plugins/* (import.meta.glob)
+├── jobs.ts                 # resumable jobs (backups, restores, deployments): claimJob, runJobStep
+├── failure.ts              # ServiceError, Failure, unwrap (no SvelteKit imports; base.service re-exports)
+├── errors.ts               # reasonOf, describeError, fail() for routes
+├── require-user.ts         # requireUser() for remote functions
 ├── hooks/                  # boot.ts, session.ts, guard.ts → sequence() in src/hooks.server.ts
 └── services/
     ├── api-keys.service.ts # API keys for server-side code (`pbk_…`); every function has one
-    ├── auth.service.ts
+    ├── auth.service.ts     # app users: users collection, tokens, reset/verification links
+    ├── auth-password.service.ts, auth-oauth.service.ts
+    │                       # helpers in ../auth/ (tokens, sign-in decision, users table)
     ├── backups.service.ts  # backups to S3-compatible buckets, schedules and restores
+    ├── backups/            # state, backup-steps, restore-steps, upload, queries
     ├── base.service.ts     # ServiceError type + Service base class
     ├── cloudflare.service.ts # dashboard overview of the Cloudflare account (resources, usage, limits)
     ├── services.ts         # Services registry (one method per service)
     ├── collections.service.ts
     ├── database.service.ts
     ├── environments.service.ts # development/production: snapshots of the schema and plans between instances
-    ├── fields.service.ts
+    ├── environments/       # snapshot, apply-step, deployments, remote-instance
+    ├── fields.service.ts   # DDL helpers in ../fields/ (ddl, changes, plugin-snapshot)
     ├── files.service.ts
     ├── functions.service.ts # serverless functions: one Worker each, versions, secrets, logs
     ├── indexes.service.ts
@@ -51,7 +62,8 @@ src/lib/server/
     ├── plugins.service.ts  # plugins: registry search, install (Worker deploy, sign-in providers),
     │                       # remove, built-in plugins, runtimeFor(), asset()
     ├── realtime.service.ts # realtime events: sessions, subscription and view-rule checks for the hubs
-    ├── records.service.ts
+    ├── records.service.ts  # helpers in ../records/ (values, query, access, deletion, write, include, ...)
+    ├── schema.service.ts   # the schema API: export/import, create/update collections from JSON
     ├── sessions.service.ts
     ├── settings.service.ts
     ├── storage.service.ts  # uploads: R2 by default, or the S3 bucket from the settings

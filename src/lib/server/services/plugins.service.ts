@@ -37,7 +37,7 @@ import {
 import { functions as driver } from '../platform';
 import { applyCollections, deleteCollections } from '../plugins/apply-collections';
 import { embeddedPlugin, embeddedPlugins } from '../plugins/embedded';
-import { causeOf } from '../plugins/errors';
+import { describeError } from '../errors';
 import { hasHooks, passThroughWrite, readInChunks } from '../plugins/field-values';
 import {
 	fetchBundle,
@@ -47,7 +47,8 @@ import {
 	runServer,
 	storeInstalled
 } from '../plugins/install';
-import { chunks, compileBundle, toModules } from '../plugins/modules';
+import { chunks } from '../db/query';
+import { compileBundle, toModules } from '../plugins/modules';
 import { readFieldValues, withCallContext, writeFieldValues } from '../plugins/protocol';
 import {
 	checkProviderIds,
@@ -396,7 +397,7 @@ export class PluginsService extends Service {
 				);
 			} catch (error) {
 				return this.fail(19013, 'PLUGIN_ROUTE_FAILED', {
-					data: { reason: causeOf(error) },
+					data: { reason: describeError(error) },
 					cause: error
 				});
 			}
@@ -676,7 +677,7 @@ export class PluginsService extends Service {
 			return await call();
 		} catch (error) {
 			return this.fail(19017, 'FIELD_CALL_FAILED', {
-				data: { reason: causeOf(error) },
+				data: { reason: describeError(error) },
 				cause: error
 			});
 		}

@@ -2,7 +2,6 @@ import type { ServiceError } from './base.service';
 import type { ResultAsync } from 'neverthrow';
 
 import { eq, inArray, sql } from 'drizzle-orm';
-import { fromPromise } from 'neverthrow';
 
 import { settings } from '../db';
 import { Service } from './base.service';
@@ -55,53 +54,53 @@ export type SettingKey =
 	/** JSON: the latest release on GitHub and when it was looked up (see `UpdatesService`). */
 	| 'update_check';
 
+export type SettingsError =
+	ServiceError<5000, 'GET_SETTING_FAILED'> | ServiceError<5001, 'SET_SETTING_FAILED'>;
+
 export class SettingsService extends Service {
 	get(key: SettingKey): ResultAsync<string | null, ServiceError<5000, 'GET_SETTING_FAILED'>> {
-		return fromPromise(this.db.select().from(settings).where(eq(settings.key, key)), (error) =>
-			this.error(5000, 'GET_SETTING_FAILED', error)
-		).map(([row]) => row?.value ?? null);
+		return this.run(async () => {
+			const [row] = await this.db.select().from(settings).where(eq(settings.key, key));
+
+			return row?.value ?? null;
+		}, this.getFailed);
 	}
 
 	/** Several settings in one query; missing ones are `null`. */
 	getMany<Key extends SettingKey>(
 		keys: readonly Key[]
 	): ResultAsync<Record<Key, string | null>, ServiceError<5000, 'GET_SETTING_FAILED'>> {
-		return fromPromise(
-			this.db
+		return this.run(async () => {
+			const rows = await this.db
 				.select()
 				.from(settings)
-				.where(inArray(settings.key, [...keys])),
-			(error) => this.error(5000, 'GET_SETTING_FAILED', error)
-		).map(
-			(rows) =>
-				Object.fromEntries(
-					keys.map((key) => [key, rows.find((row) => row.key === key)?.value ?? null])
-				) as Record<Key, string | null>
-		);
+				.where(inArray(settings.key, [...keys]));
+
+			return Object.fromEntries(
+				keys.map((key) => [key, rows.find((row) => row.key === key)?.value ?? null])
+			) as Record<Key, string | null>;
+		}, this.getFailed);
 	}
 
 	set(key: SettingKey, value: string): ResultAsync<void, ServiceError<5001, 'SET_SETTING_FAILED'>> {
-		return fromPromise(
-			this.db
-				.insert(settings)
-				.values({ key, value })
-				.onConflictDoUpdate({ target: settings.key, set: { value } }),
-			(error) => this.error(5001, 'SET_SETTING_FAILED', error)
-		).map(() => undefined);
+		return this.setMany({ [key]: value });
 	}
 
 	/** Several settings in one statement. */
 	setMany(
 		values: Partial<Record<SettingKey, string>>
 	): ResultAsync<void, ServiceError<5001, 'SET_SETTING_FAILED'>> {
-		const rows = Object.entries(values).map(([key, value]) => ({ key, value: value as string }));
+		return this.run(async () => {
+			const rows = Object.entries(values).map(([key, value]) => ({ key, value: value as string }));
 
-		return fromPromise(
-			this.db
+			await this.db
 				.insert(settings)
 				.values(rows)
-				.onConflictDoUpdate({ target: settings.key, set: { value: sql`excluded.value` } }),
-			(error) => this.error(5001, 'SET_SETTING_FAILED', error)
-		).map(() => undefined);
+				.onConflictDoUpdate({ target: settings.key, set: { value: sql`excluded.value` } });
+		}, this.setFailed);
 	}
+
+	private getFailed = (error: unknown) => this.error(5000, 'GET_SETTING_FAILED', error);
+
+	private setFailed = (error: unknown) => this.error(5001, 'SET_SETTING_FAILED', error);
 }

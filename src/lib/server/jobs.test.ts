@@ -3,11 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { runJobStep, StepError, stepResult } from './jobs';
 
-// `claimJob` needs the database and `reasonOf` the SvelteKit runtime; the rest is pure.
+// `claimJob` needs the database and `describeError` the SvelteKit runtime; the rest is pure.
 vi.mock('./db', () => ({ db: {} }));
 vi.mock('./errors', () => ({
-	reasonOf: (error: unknown) =>
-		error instanceof Error ? error.message : (error as { reason?: string })?.reason
+	describeError: (error: unknown) =>
+		error instanceof Error
+			? error.message
+			: ((error as { reason?: string })?.reason ?? String(error))
 }));
 
 const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);

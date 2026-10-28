@@ -175,3 +175,21 @@ export function importDatabase(databaseId: string, sql: Uint8Array<ArrayBuffer>)
 export function pollDatabaseImport(databaseId: string, bookmark: string) {
 	return timed('import poll', () => database.pollImport(databaseId, bookmark));
 }
+
+/** `items` in groups of at most `size`, e.g. to stay within D1's limit on bound parameters. */
+export function chunks<T>(items: readonly T[], size: number): T[][] {
+	const groups: T[][] = [];
+
+	for (let start = 0; start < items.length; start += size) {
+		groups.push(items.slice(start, start + size));
+	}
+
+	return groups;
+}
+
+/** `items` in chunks of at most `size`, e.g. to keep a statement within D1's bound parameters. */
+export function chunks<T>(items: readonly T[], size: number): T[][] {
+	return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
+		items.slice(index * size, (index + 1) * size)
+	);
+}

@@ -6,7 +6,7 @@ import type { ResultAsync } from 'neverthrow';
 import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 
 import { db } from './db';
-import { reasonOf } from './errors';
+import { describeError } from './errors';
 
 /**
  * Resumable jobs: backups, restores and deployments run in steps, so a step stays within the
@@ -16,15 +16,10 @@ import { reasonOf } from './errors';
  */
 
 /** A step is considered stuck (and may be taken over by another request) after this long. */
-export const LOCK_MS = 3 * 60 * 1000;
+const LOCK_MS = 3 * 60 * 1000;
 
 /** A step that can't run; the message is stored with the job and shown in the dashboard. */
 export class StepError extends Error {}
-
-/** What went wrong, as the job records it. */
-export function describeError(error: unknown) {
-	return reasonOf(error) ?? String(error);
-}
 
 /** The value of a service result inside a step; its error ends the step as a `StepError`. */
 export async function stepResult<T>(result: ResultAsync<T, AnyServiceError>): Promise<T> {
@@ -66,10 +61,10 @@ export async function claimJob<Table extends JobTable>(
 }
 
 /** What a step saves on its job when it succeeds; `done` completes the job. */
-export type StepOutcome<Values> = { values?: Values; done?: boolean };
+type StepOutcome<Values> = { values?: Values; done?: boolean };
 
 /** The job columns a step updates besides its own values. */
-export type JobUpdate = {
+type JobUpdate = {
 	attempts: number;
 	error: string | null;
 	lockedUntil: null;

@@ -8,7 +8,7 @@ import type { PluginSetting } from '@pouchbasejs/plugin-sdk';
  */
 
 /** A setting's value for the dashboard: secrets come back as `value: null`. */
-export type PluginSettingValue = {
+type PluginSettingValue = {
 	/** The saved value, else the default as a string; always `null` for a secret. */
 	value: string | null;
 	/** Whether a value is saved (for a secret: whether it is filled in). */

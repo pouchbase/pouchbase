@@ -58,8 +58,8 @@ import {
 
 export const ENTRY_MODULE = 'pouchbase.js';
 export const GUARD_MODULE = 'pouchbase-guard.js';
-export const CONFIG_MODULE = 'pouchbase-config.js';
-export const PLUGIN_MODULE = 'plugin.js';
+const CONFIG_MODULE = 'pouchbase-config.js';
+const PLUGIN_MODULE = 'plugin.js';
 
 export { CALL_PATH, CONTEXT_HEADER, ROUTE_PATH, SECRET_HEADER } from './worker/codec';
 

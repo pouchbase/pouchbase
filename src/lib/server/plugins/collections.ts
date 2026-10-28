@@ -10,9 +10,9 @@ import { BUILT_IN_DEFAULT_FIELDS, relationOnDelete } from '#lib/fields/field-typ
  */
 
 /** A field as `apiCreateCollectionSchema` takes it, before it is checked. */
-export type FieldInput = Record<string, unknown> & { name: string; type: string };
+type FieldInput = Record<string, unknown> & { name: string; type: string };
 
-export type CollectionContribution = PluginManifest['contributes']['collections'][number];
+type CollectionContribution = PluginManifest['contributes']['collections'][number];
 
 /**
  * A field's options with the defaults Pouchbase stores (`multiple: false`, a relation's `onDelete`,

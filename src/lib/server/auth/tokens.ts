@@ -15,7 +15,7 @@ const LIFETIME = '7d';
 /** What an email link is for; part of the token's audience. */
 export type TokenPurpose = 'password_reset' | 'verification';
 
-export const PURPOSE_LIFETIMES: Record<TokenPurpose, string> = {
+const PURPOSE_LIFETIMES: Record<TokenPurpose, string> = {
 	password_reset: '30m',
 	verification: '3d'
 };

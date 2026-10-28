@@ -5,7 +5,8 @@ import type { Services } from '../services';
 import { eq } from 'drizzle-orm';
 
 import { backups, db, deployments as deploymentsTable } from '../../db';
-import { claimJob, describeError, runJobStep } from '../../jobs';
+import { describeError } from '../../errors';
+import { claimJob, runJobStep } from '../../jobs';
 import { applyStep } from './apply-step';
 
 /**
@@ -16,7 +17,7 @@ import { applyStep } from './apply-step';
 /** Failed attempts of a step before the deployment fails. */
 const MAX_ATTEMPTS = 3;
 
-export type DeploymentRow = typeof deployments.$inferSelect;
+type DeploymentRow = typeof deployments.$inferSelect;
 
 /** A publish to this instance, as its status is reported to the publishing instance. */
 export type Deployment = {

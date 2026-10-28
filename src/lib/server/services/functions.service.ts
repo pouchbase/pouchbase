@@ -16,7 +16,8 @@ import { functions, functionVersions } from '../db';
 import { scriptName } from '../functions';
 import { functions as driver, PlatformError } from '../platform';
 import { Service } from './base.service';
-import { apiReason, testReason, testWorker, uploadWorker, workerRequest } from './functions-worker';
+import { describeError } from '../errors';
+import { testReason, testWorker, uploadWorker, workerRequest } from './functions-worker';
 
 /**
  * Serverless functions: code written or uploaded on the Functions page that runs as a Worker of
@@ -374,7 +375,7 @@ export class FunctionsService extends Service {
 					...(hasBody ? { duplex: 'half' } : {})
 				} as RequestInit);
 			} catch (error) {
-				this.invokeFailed(error, apiReason(error));
+				this.invokeFailed(error, describeError(error));
 			}
 		}, this.failed);
 	}
@@ -493,11 +494,11 @@ export class FunctionsService extends Service {
 	}
 
 	private deployFailed(error: unknown): never {
-		this.fail(18005, 'DEPLOY_FAILED', { cause: error, data: { reason: apiReason(error) } });
+		this.fail(18005, 'DEPLOY_FAILED', { cause: error, data: { reason: describeError(error) } });
 	}
 
 	private secretsFailed(error: unknown): never {
-		this.fail(18008, 'SECRETS_FAILED', { cause: error, data: { reason: apiReason(error) } });
+		this.fail(18008, 'SECRETS_FAILED', { cause: error, data: { reason: describeError(error) } });
 	}
 
 	private invokeFailed(error: unknown, reason: string): never {
