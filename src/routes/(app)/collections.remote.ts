@@ -141,7 +141,7 @@ export const importCollections = command(importSchema, async ({ file, ...options
 		error(401, 'Not logged in');
 	}
 
-	const result = await locals.services.collections().import(file, options);
+	const result = await locals.services.schema().import(file, options);
 
 	if (result.isErr()) {
 		const failure = result.error;
