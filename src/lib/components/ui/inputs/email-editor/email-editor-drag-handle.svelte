@@ -1,10 +1,18 @@
 <script lang="ts">
-	import type { EditorView } from '@tiptap/pm/view';
 	import type { Transaction } from '@tiptap/pm/state';
 	import { NodeSelection } from '@tiptap/pm/state';
 	import * as Button from '../../button/index.js';
 	import * as Icon from '../../icon/index.js';
 	import { getEmailEditorContext } from './email-editor-context';
+	import {
+		BLOCKS,
+		FIRST_LINE,
+		GUTTER,
+		HANDLE_SIZE,
+		positionOf,
+		resizerStart,
+		startBlockDrag
+	} from './email-editor-drag-handle';
 
 	type Props = {
 		/** The card around the editor: the handle is placed in it and shown while it is hovered. */
@@ -14,15 +22,6 @@
 	let { container }: Props = $props();
 
 	const context = getEmailEditorContext();
-
-	/** The blocks that can be dragged: those in the email, a section or a column. */
-	const BLOCKS = '.email-canvas > *, .email-section > *, .email-column > *';
-
-	/** Height of the handle; it is centered on the block's first line. */
-	const HANDLE_SIZE = 24;
-	const FIRST_LINE = 32;
-	/** Width of the strip left of a block that leads to its handle (the handle and its gap). */
-	const GUTTER = HANDLE_SIZE + 12;
 
 	let block = $state.raw<HTMLElement | null>(null);
 	let box = $state({ top: 0, left: 0, width: 0, height: 0 });
@@ -34,27 +33,6 @@
 	let dragging = $state(false);
 
 	const visible = $derived(!!block && !context.disabled);
-
-	/** The position of the node `element` draws, or `-1`. */
-	function positionOf(view: EditorView, element: HTMLElement) {
-		let found = -1;
-
-		view.state.doc.descendants((_, position) => {
-			if (found >= 0) {
-				return false;
-			}
-
-			if (view.nodeDOM(position) === element) {
-				found = position;
-
-				return false;
-			}
-
-			return true;
-		});
-
-		return found;
-	}
 
 	function show(element: HTMLElement) {
 		// Measured once per block, not on every mouse move; typing hides the handle (see below).
@@ -73,19 +51,6 @@
 			height: rect.height
 		};
 		handleEnd = Math.min(box.left, resizerStart(element) - frame.left);
-	}
-
-	/**
-	 * The left edge of the column resizer next to a block at the start of a column (see
-	 * `email-editor-nodes.ts`), or `Infinity`. The handle goes left of it: over the resizer, the
-	 * browser doesn't start dragging the handle.
-	 */
-	function resizerStart(element: HTMLElement) {
-		const resizer = element.parentElement?.querySelector<HTMLElement>(
-			':scope > .email-column-resizer'
-		);
-
-		return resizer ? resizer.getBoundingClientRect().left : Infinity;
 	}
 
 	/**
@@ -191,28 +156,8 @@
 			return;
 		}
 
-		const selection = NodeSelection.create(view.state.doc, position);
-
 		dragging = true;
-		view.dispatch(view.state.tr.setSelection(selection));
-
-		const slice = selection.content();
-		const { dom, text } = view.serializeForClipboard(slice);
-		const rect = block.getBoundingClientRect();
-
-		event.dataTransfer.clearData();
-		event.dataTransfer.setData('text/html', dom.innerHTML);
-		event.dataTransfer.setData('text/plain', text);
-		event.dataTransfer.effectAllowed = 'copyMove';
-		// Held where the pointer is, level with the handle.
-		event.dataTransfer.setDragImage(
-			block,
-			0,
-			Math.min(rect.height, Math.max(0, event.clientY - rect.top))
-		);
-
-		// `node` makes the drop remove exactly this block when it moves.
-		view.dragging = { slice, move: true, node: selection } as EditorView['dragging'];
+		startBlockDrag(view, block, position, event.dataTransfer, event.clientY);
 	}
 
 	// The drag starts outside the editor, so ProseMirror doesn't see it end when it is cancelled.

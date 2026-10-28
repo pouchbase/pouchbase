@@ -1,19 +1,3 @@
-<script module lang="ts">
-	/** A choice in the access menu of a rule, and the rule it stands for (`null`: locked). */
-	export type AccessOption = {
-		value: string;
-		label: string;
-		description: string;
-		icon: string;
-		rule: string | null;
-		/** Who it allows, as the end of a sentence: `users whose id is in author`. */
-		who?: string;
-	};
-
-	/** The value of the access menu for a custom rule. */
-	export const CUSTOM = 'custom';
-</script>
-
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import * as Card from '#lib/components/ui/card/index.js';
@@ -22,6 +6,7 @@
 	import * as Select from '#lib/components/ui/inputs/select/index.js';
 	import { checkFilter } from '#lib/filter/filter.js';
 	import type { ApiRuleAction } from '#lib/filter/rules.js';
+	import { ACTIONS, CUSTOM, CUSTOM_HINTS, type AccessOption } from './api-rules.js';
 
 	type Props = {
 		action: ApiRuleAction;
@@ -37,55 +22,6 @@
 	};
 
 	let { action, rule, options, names, issue, onRuleChange }: Props = $props();
-
-	const ACTIONS: Record<
-		ApiRuleAction,
-		{ title: string; request: string; icon: string; verb: string; destructive: boolean }
-	> = {
-		list: {
-			title: 'List and search',
-			request: 'GET /api/db/:collection',
-			icon: 'lucide:list',
-			verb: 'list and search records',
-			destructive: false
-		},
-		view: {
-			title: 'View',
-			request: 'GET /api/db/:collection/:id',
-			icon: 'lucide:eye',
-			verb: 'view records',
-			destructive: false
-		},
-		create: {
-			title: 'Create',
-			request: 'POST /api/db/:collection',
-			icon: 'lucide:plus',
-			verb: 'create records',
-			destructive: true
-		},
-		update: {
-			title: 'Update',
-			request: 'PATCH /api/db/:collection/:id',
-			icon: 'lucide:pencil',
-			verb: 'update records',
-			destructive: true
-		},
-		delete: {
-			title: 'Delete',
-			request: 'DELETE /api/db/:collection/:id',
-			icon: 'lucide:trash-2',
-			verb: 'delete records',
-			destructive: true
-		}
-	};
-
-	const CUSTOM_HINTS: Record<ApiRuleAction, string> = {
-		list: 'Only records that match the rule are listed; others are left out.',
-		view: 'Only records that match the rule can be viewed; others are not found.',
-		create: 'A new record is only created when it matches the rule.',
-		update: 'Only records that match the rule (before the change) can be updated.',
-		delete: 'Only records that match the rule can be deleted.'
-	};
 
 	const meta = $derived(ACTIONS[action]);
 

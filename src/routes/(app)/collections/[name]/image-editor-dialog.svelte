@@ -2,7 +2,8 @@
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
 	import { fileUrl } from '#lib/files/files.js';
-	import ImageEditor from './image-editor.svelte';
+	import * as ImageEditor from '#lib/components/ui/image-editor/index.js';
+	import { editImage } from './records.remote';
 
 	type Props = {
 		file: { id: string; name: string; mimeType: string; version: string | number };
@@ -34,11 +35,12 @@
 	{#await load(fileUrl(file.id, { version: file.version }))}
 		<p class="py-16 text-center text-sm text-zinc-500">Loading image…</p>
 	{:then image}
-		<ImageEditor
+		<ImageEditor.Root
 			fileId={file.id}
 			name={file.name}
 			mimeType={file.mimeType}
 			{image}
+			save={editImage}
 			onSaved={() => close(true)}
 		/>
 	{:catch failure}

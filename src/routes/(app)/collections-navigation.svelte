@@ -2,10 +2,10 @@
 	import { resolve } from '$app/paths';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Navigation from '#lib/components/ui/navigation/index.js';
 	import * as Sidebar from '#lib/components/ui/sidebar/index.js';
+	import * as RowActions from '#lib/components/ui/row-actions/index.js';
 	import { USERS_COLLECTION } from '#lib/auth/users.js';
 	import { FILES_COLLECTION } from '#lib/files/files.js';
 	import { listCollections } from './collections.remote';
@@ -23,22 +23,20 @@
 		<Sidebar.GroupLabel>Collections</Sidebar.GroupLabel>
 
 		<div class="flex items-center">
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Collections actions">
-					<Icon.Root icon="lucide:ellipsis" />
-				</DropdownMenu.Trigger>
-
-				<DropdownMenu.Content>
-					<DropdownMenu.Item onSelect={() => void dialogs.open(ExportCollectionsDialog)}>
-						<Icon.Root icon="lucide:download" />
-						Export collections
-					</DropdownMenu.Item>
-					<DropdownMenu.Item onSelect={() => void dialogs.open(ImportCollectionsDialog)}>
-						<Icon.Root icon="lucide:upload" />
-						Import collections
-					</DropdownMenu.Item>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
+			<RowActions.Root label="Collections actions">
+				<RowActions.Item
+					icon="lucide:download"
+					onSelect={() => void dialogs.open(ExportCollectionsDialog)}
+				>
+					Export collections
+				</RowActions.Item>
+				<RowActions.Item
+					icon="lucide:upload"
+					onSelect={() => void dialogs.open(ImportCollectionsDialog)}
+				>
+					Import collections
+				</RowActions.Item>
+			</RowActions.Root>
 
 			<Button.Root
 				variant="ghost"

@@ -11,10 +11,11 @@
 </script>
 
 <script lang="ts">
-	import { formatFileSize } from '#lib/files/files.js';
-	import * as Button from '../../button';
 	import * as Icon from '../../icon';
-	import * as Thumbnail from '../../thumbnail';
+	import FileFooter from './file-footer.svelte';
+	import FileItem from './file-item.svelte';
+	import FilePrompt from './file-prompt.svelte';
+	import { describeAccept, filterFiles, hasFiles } from './file-utils.js';
 
 	let {
 		ref = $bindable(null),
@@ -66,60 +67,14 @@
 	// Set while this component dispatches its own events, so they aren't processed twice.
 	let applying = false;
 
-	const defaultHint = $derived.by(() => {
-		const types = accept
-			?.split(',')
-			.map((rule) => rule.trim())
-			.filter(Boolean)
-			.join(', ');
-		const size = maxSize ? `up to ${formatFileSize(maxSize)}` : '';
-
-		return [types || (multiple ? 'Any files' : 'Any file'), size].filter(Boolean).join(' ');
-	});
-
-	function matchesAccept(file: File) {
-		if (!accept) {
-			return true;
-		}
-
-		const name = file.name.toLowerCase();
-		const type = file.type.toLowerCase();
-
-		return accept
-			.split(',')
-			.map((rule) => rule.trim().toLowerCase())
-			.filter(Boolean)
-			.some((rule) => {
-				if (rule.startsWith('.')) {
-					return name.endsWith(rule);
-				}
-
-				if (rule.endsWith('/*')) {
-					return type.startsWith(rule.slice(0, -1));
-				}
-
-				return type === rule;
-			});
-	}
+	const defaultHint = $derived(describeAccept(accept, !!multiple, maxSize));
 
 	/** Drops files that don't match `accept` or `maxSize` and explains why. */
 	function filter(incoming: File[]) {
-		const accepted: File[] = [];
-		const problems: string[] = [];
+		const result = filterFiles(incoming, accept, maxSize);
+		rejection = result.rejection;
 
-		for (const file of incoming) {
-			if (!matchesAccept(file)) {
-				problems.push(`${file.name} is not an accepted file type.`);
-			} else if (maxSize && file.size > maxSize) {
-				problems.push(`${file.name} is larger than ${formatFileSize(maxSize)}.`);
-			} else {
-				accepted.push(file);
-			}
-		}
-
-		rejection = problems.length ? problems.join(' ') : null;
-
-		return accepted;
+		return result.accepted;
 	}
 
 	/** The selection after adding `accepted`: appended when `multiple`, otherwise replaced. */
@@ -166,10 +121,6 @@
 		}
 
 		write(merge(filter(Array.from(ref.files))));
-	}
-
-	function hasFiles(event: DragEvent) {
-		return !!event.dataTransfer?.types.includes('Files');
 	}
 
 	function handleDragOver(event: DragEvent) {
@@ -236,32 +187,6 @@
 
 		return () => form.removeEventListener('reset', handleReset);
 	});
-
-	function iconFor(file: File) {
-		const type = file.type;
-
-		if (type.startsWith('image/')) {
-			return 'lucide:file-image';
-		}
-
-		if (type.startsWith('video/')) {
-			return 'lucide:file-video-camera';
-		}
-
-		if (type.startsWith('audio/')) {
-			return 'lucide:file-audio';
-		}
-
-		if (type.startsWith('text/') || type === 'application/pdf' || type === 'application/json') {
-			return 'lucide:file-text';
-		}
-
-		if (/zip|tar|gzip|compressed|rar|7z/.test(type)) {
-			return 'lucide:file-archive';
-		}
-
-		return 'lucide:file';
-	}
 </script>
 
 <!-- Dropping is a pointer shortcut; keyboard and screen reader users use the input itself. -->
@@ -300,71 +225,20 @@
 		/>
 
 		{#if selected.length === 0}
-			<label
-				for={id}
-				class={[
-					'flex flex-col items-center justify-center gap-2 px-6 py-8 text-center',
-					disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-zinc-50'
-				]}
-			>
-				<span
-					class="flex size-10 items-center justify-center rounded-full border border-zinc-200 bg-white text-zinc-500 shadow-xs [&_svg]:size-5"
-				>
-					<Icon.Root icon="lucide:upload" />
-				</span>
-				<span class="text-sm text-zinc-600">
-					<strong class="font-medium text-zinc-900 underline underline-offset-4">
-						Click to upload
-					</strong>
-					or drag and drop
-				</span>
-				<span class="text-xs text-zinc-500">{hint ?? defaultHint}</span>
-			</label>
+			<FilePrompt for={id} hint={hint ?? defaultHint} disabled={!!disabled} />
 		{:else}
 			<ul class="divide-y divide-zinc-200">
 				{#each selected as file, index (`${index}:${file.name}:${file.size}:${file.lastModified}`)}
-					<li class="flex items-center gap-3 p-3">
-						<Thumbnail.Root src={previews[index]} alt="">
-							<Icon.Root icon={iconFor(file)} />
-						</Thumbnail.Root>
-
-						<div class="flex min-w-0 flex-1 flex-col">
-							<span class="truncate text-sm font-medium text-zinc-900" title={file.name}>
-								{file.name}
-							</span>
-							<span class="truncate text-xs text-zinc-500">
-								{formatFileSize(file.size)}{file.type ? ` · ${file.type}` : ''}
-							</span>
-						</div>
-
-						<Button.Root
-							type="button"
-							variant="ghost"
-							size="icon"
-							aria-label={`Remove ${file.name}`}
-							{disabled}
-							onclick={() => remove(index)}
-						>
-							<Icon.Root icon="lucide:x" />
-						</Button.Root>
-					</li>
+					<FileItem
+						{file}
+						preview={previews[index]}
+						disabled={!!disabled}
+						onremove={() => remove(index)}
+					/>
 				{/each}
 			</ul>
 
-			<div
-				class="flex items-center justify-between gap-3 border-t border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-500"
-			>
-				<span class="truncate">{hint ?? defaultHint}</span>
-				<label
-					for={id}
-					class={[
-						'shrink-0 font-medium text-zinc-900 underline-offset-4',
-						disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:underline'
-					]}
-				>
-					{multiple ? 'Add files' : 'Replace'}
-				</label>
-			</div>
+			<FileFooter for={id} hint={hint ?? defaultHint} multiple={!!multiple} disabled={!!disabled} />
 		{/if}
 
 		{#if dragging}

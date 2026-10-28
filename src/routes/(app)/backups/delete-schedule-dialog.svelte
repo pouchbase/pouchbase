@@ -1,15 +1,12 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as ConfirmDialog from '#lib/components/ui/confirm-dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
-	import * as Form from '#lib/components/ui/form/index.js';
 	import { describeCron } from '#lib/backups/cron.js';
 	import { deleteBackupSchedule } from './backups.remote';
 	import type { Schedule } from './types';
 
-	type Props = { schedule: Schedule } & DialogProps;
-
-	let { schedule, close }: Props = $props();
+	let { schedule, close }: { schedule: Schedule } & DialogProps = $props();
 
 	const form = $derived.by(() => {
 		const key = schedule.id;
@@ -18,29 +15,16 @@
 	});
 </script>
 
-<Dialog.Content>
-	<Dialog.Header>
-		<Dialog.Title>Delete schedule</Dialog.Title>
-		<Dialog.Description>
-			The backups to {schedule.destinationName} ({describeCron(schedule.cron).toLowerCase()}) stop.
-			The backups it made are kept.
-		</Dialog.Description>
-	</Dialog.Header>
-
-	<Form.Root
-		{form}
-		success="Schedule deleted"
-		enhance={async (instance) => {
-			if (await instance.submit()) {
-				close();
-			}
-		}}
-	>
-		<Form.Hidden field={form.fields.id} value={schedule.id} />
-
-		<Dialog.Footer>
-			<Dialog.Close>Cancel</Dialog.Close>
-			<Form.Submit variant="danger">Delete schedule</Form.Submit>
-		</Dialog.Footer>
-	</Form.Root>
-</Dialog.Content>
+<ConfirmDialog.Root
+	{form}
+	title="Delete schedule"
+	submit="Delete schedule"
+	success="Schedule deleted"
+	hidden={[{ field: form.fields.id, value: schedule.id }]}
+	{close}
+>
+	{#snippet description()}
+		The backups to {schedule.destinationName} ({describeCron(schedule.cron).toLowerCase()}) stop.
+		The backups it made are kept.
+	{/snippet}
+</ConfirmDialog.Root>

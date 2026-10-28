@@ -4,20 +4,9 @@
 	import * as Form from '#lib/components/ui/form/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
-	import * as Table from '#lib/components/ui/table/index.js';
-	import * as ProviderIcon from '#lib/components/ui/provider-icon/index.js';
-	import { signInMethodIcon, type SignInMethod } from '#lib/auth/sign-in-methods.js';
+	import type { SignInMethod } from '#lib/auth/sign-in-methods.js';
 	import { USERS_COLLECTION } from '#lib/auth/users.js';
-	import * as Thumbnail from '#lib/components/ui/thumbnail/index.js';
-	import {
-		FILES_COLLECTION,
-		fileUrl,
-		formatFileSize,
-		isEditableImage,
-		isInlineImage,
-		MANAGED_FILE_FIELDS,
-		MAX_FILE_SIZE
-	} from '#lib/files/files.js';
+	import { FILES_COLLECTION, MANAGED_FILE_FIELDS, MAX_FILE_SIZE } from '#lib/files/files.js';
 	import { isAutoType } from '#lib/fields/field-types.js';
 	import {
 		formatTimestamp,
@@ -29,6 +18,8 @@
 	} from './grid';
 	import RecordFieldInput from './record-field-input.svelte';
 	import RecordFileField from './record-file-field.svelte';
+	import RecordFileSummary from './record-file-summary.svelte';
+	import RecordSignInList from './record-sign-in-list.svelte';
 	import { saveRecord } from './records.remote';
 
 	type Props = {
@@ -129,44 +120,7 @@
 				<Sheet.Body>
 					{#if isFiles}
 						{#if record}
-							<div class="flex items-center gap-4">
-								<Thumbnail.Root
-									src={isInlineImage(String(record.mime_type ?? ''))
-										? fileUrl(record._key, { version: updated })
-										: null}
-									alt={String(record.name ?? '')}
-									size="lg"
-								>
-									<Icon.Root icon="lucide:file" />
-								</Thumbnail.Root>
-
-								<div class="flex min-w-0 flex-col gap-1 text-sm">
-									<span class="truncate font-medium text-zinc-900">{record.name}</span>
-									<span class="text-zinc-500">
-										{record.mime_type} · {formatFileSize(Number(record.size ?? 0))}
-									</span>
-									<Button.Root
-										href={fileUrl(record._key, { download: true })}
-										variant="secondary"
-										class="self-start"
-									>
-										<Icon.Root icon="lucide:download" />
-										Download
-									</Button.Root>
-
-									{#if onEditImage && isEditableImage(String(record.mime_type ?? ''))}
-										<Button.Root
-											type="button"
-											variant="secondary"
-											class="self-start"
-											onclick={() => onEditImage(record)}
-										>
-											<Icon.Root icon="lucide:pencil" />
-											Edit image
-										</Button.Root>
-									{/if}
-								</div>
-							</div>
+							<RecordFileSummary {record} version={updated} {onEditImage} />
 						{/if}
 
 						<Form.Field field={form.fields._file}>
@@ -204,43 +158,7 @@
 					{/each}
 
 					{#if collection.name === USERS_COLLECTION && record}
-						<section class="flex flex-col gap-2" aria-labelledby="sign-in-methods">
-							<h3 id="sign-in-methods" class="text-sm font-medium text-zinc-900">
-								Sign-in methods
-							</h3>
-
-							<Table.Root>
-								<Table.Body>
-									{#each signInMethods as method, index (`${method.provider}:${method.providerId ?? index}`)}
-										<Table.Row>
-											<Table.Cell>
-												<span class="inline-flex items-center gap-2 font-medium text-zinc-900">
-													<ProviderIcon.Root
-														src={method.iconUrl}
-														fallback={signInMethodIcon(method)}
-														class="size-4"
-													/>
-													{method.label}
-												</span>
-											</Table.Cell>
-											<Table.Cell class="font-mono text-xs text-zinc-500">
-												{method.providerId ?? ''}
-											</Table.Cell>
-											<Table.Cell class="text-right text-xs whitespace-nowrap text-zinc-500">
-												{method.provider === 'password' ? 'set' : 'linked'}
-												{formatTimestamp(method.linkedAt)}
-											</Table.Cell>
-										</Table.Row>
-									{:else}
-										<Table.Row>
-											<Table.Cell class="text-zinc-500">
-												This user can't sign in yet: no linked accounts and no password.
-											</Table.Cell>
-										</Table.Row>
-									{/each}
-								</Table.Body>
-							</Table.Root>
-						</section>
+						<RecordSignInList methods={signInMethods} />
 					{/if}
 
 					{#if collection.name === USERS_COLLECTION}

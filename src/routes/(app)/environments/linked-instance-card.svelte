@@ -3,8 +3,9 @@
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Card from '#lib/components/ui/card/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
+	import * as CardHeading from '#lib/components/ui/card-heading/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
+	import * as RowActions from '#lib/components/ui/row-actions/index.js';
 	import { toast } from '#lib/components/ui/toast/index.js';
 	import { getRemote, unlinkRemote } from './environments.remote';
 	import LinkInstanceDialog from './link-instance-dialog.svelte';
@@ -21,48 +22,40 @@
 </script>
 
 <Card.Root>
-	<Card.Header>
-		<div class="flex items-start justify-between gap-4">
-			<div class="flex min-w-0 flex-col gap-1.5">
-				<Card.Title>Linked instance</Card.Title>
-				<Card.Description>
-					{#if remote}
-						Publish this instance's schema to it, or pull its schema into this instance.
-					{:else}
-						Link your production instance to publish this instance's schema to it, or to start from
-						its schema.
-					{/if}
-				</Card.Description>
-			</div>
-
+	<CardHeading.Root title="Linked instance">
+		{#snippet description()}
 			{#if remote}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Linked instance actions">
-						<Icon.Root icon="lucide:ellipsis" />
-					</DropdownMenu.Trigger>
+				Publish this instance's schema to it, or pull its schema into this instance.
+			{:else}
+				Link your production instance to publish this instance's schema to it, or to start from its
+				schema.
+			{/if}
+		{/snippet}
 
-					<DropdownMenu.Content>
-						<DropdownMenu.Item onSelect={() => void dialogs.open(LinkInstanceDialog)}>
-							<Icon.Root icon="lucide:pencil" />
-							Change
-						</DropdownMenu.Item>
+		{#snippet actions()}
+			{#if remote}
+				<RowActions.Root label="Linked instance actions">
+					<RowActions.Item
+						icon="lucide:pencil"
+						onSelect={() => void dialogs.open(LinkInstanceDialog)}
+					>
+						Change
+					</RowActions.Item>
 
-						<DropdownMenu.Separator />
+					<RowActions.Separator />
 
-						<DropdownMenu.Item variant="danger" onSelect={() => void unlink()}>
-							<Icon.Root icon="lucide:unlink" />
-							Unlink
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
+					<RowActions.Item variant="danger" icon="lucide:unlink" onSelect={() => void unlink()}>
+						Unlink
+					</RowActions.Item>
+				</RowActions.Root>
 			{:else}
 				<Button.Root variant="secondary" onclick={() => void dialogs.open(LinkInstanceDialog)}>
 					<Icon.Root icon="lucide:link" />
 					Link instance
 				</Button.Root>
 			{/if}
-		</div>
-	</Card.Header>
+		{/snippet}
+	</CardHeading.Root>
 
 	{#if remote}
 		<Card.Content>

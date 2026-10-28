@@ -4,10 +4,10 @@
 	import * as Breadcrumb from '#lib/components/ui/breadcrumb/index.js';
 	import * as Button from '#lib/components/ui/button/index.js';
 	import * as Dialog from '#lib/components/ui/dialog/index.js';
-	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.js';
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Segmented from '#lib/components/ui/segmented/index.js';
 	import * as Topbar from '#lib/components/ui/topbar/index.js';
+	import * as RowActions from '#lib/components/ui/row-actions/index.js';
 	import DeleteCollectionDialog from './delete-collection-dialog.svelte';
 	import RenameCollectionDialog from './rename-collection-dialog.svelte';
 
@@ -129,37 +129,26 @@
 
 		<!-- System collections can't be renamed or deleted, so they have no actions here. -->
 		{#if !collection?.system}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger
-					variant="ghost"
-					size="icon"
-					aria-label="Collection actions"
-					disabled={!collection}
-				>
-					<Icon.Root icon="lucide:ellipsis" />
-				</DropdownMenu.Trigger>
-
+			<RowActions.Root label="Collection actions" disabled={!collection}>
 				{#if collection}
-					<DropdownMenu.Content>
-						<DropdownMenu.Item
-							onSelect={() => void dialogs.open(RenameCollectionDialog, { collection })}
-						>
-							<Icon.Root icon="lucide:pencil" />
-							Rename collection
-						</DropdownMenu.Item>
+					<RowActions.Item
+						icon="lucide:pencil"
+						onSelect={() => void dialogs.open(RenameCollectionDialog, { collection })}
+					>
+						Rename collection
+					</RowActions.Item>
 
-						<DropdownMenu.Separator />
+					<RowActions.Separator />
 
-						<DropdownMenu.Item
-							variant="danger"
-							onSelect={() => void dialogs.open(DeleteCollectionDialog, { collection })}
-						>
-							<Icon.Root icon="lucide:trash-2" />
-							Delete collection
-						</DropdownMenu.Item>
-					</DropdownMenu.Content>
+					<RowActions.Item
+						variant="danger"
+						icon="lucide:trash-2"
+						onSelect={() => void dialogs.open(DeleteCollectionDialog, { collection })}
+					>
+						Delete collection
+					</RowActions.Item>
 				{/if}
-			</DropdownMenu.Root>
+			</RowActions.Root>
 		{/if}
 	</Topbar.Actions>
 </Topbar.Root>

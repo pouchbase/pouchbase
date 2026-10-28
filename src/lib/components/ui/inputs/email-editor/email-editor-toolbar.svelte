@@ -1,14 +1,15 @@
 <script lang="ts">
-	import type { Editor } from '@tiptap/core';
 	import * as Button from '../../button/index.js';
 	import * as Dialog from '../../dialog/index.js';
 	import * as DropdownMenu from '../../dropdown-menu/index.js';
 	import * as Icon from '../../icon/index.js';
 	import * as Color from '../color/index.js';
 	import * as Select from '../select/index.js';
-	import { insertBlock, INSERTABLE } from './email-editor-blocks';
 	import { getEmailEditorContext } from './email-editor-context';
 	import LinkDialog from './email-editor-link-dialog.svelte';
+	import ToolbarInsert from './email-editor-toolbar-insert.svelte';
+	import type { Tool } from './email-editor-toolbar-tools';
+	import { BLOCK_STYLES, FONT_SIZES, formattingTools } from './email-editor-toolbar-tools';
 
 	let { class: className }: { class?: string } = $props();
 
@@ -27,13 +28,6 @@
 
 		return typeof name === 'string' ? editor.isActive(name, attributes) : editor.isActive(name);
 	}
-
-	const BLOCK_STYLES = [
-		{ value: 'paragraph', label: 'Text' },
-		{ value: 'h1', label: 'Heading 1' },
-		{ value: 'h2', label: 'Heading 2' },
-		{ value: 'h3', label: 'Heading 3' }
-	];
 
 	const blockStyle = $derived.by(() => {
 		void context.version;
@@ -56,13 +50,6 @@
 			chain?.setHeading({ level: Number(value.slice(1)) as 1 | 2 | 3 }).run();
 		}
 	}
-
-	const FONT_SIZES = [
-		{ value: 'default', label: 'Normal size' },
-		{ value: '13px', label: 'Small' },
-		{ value: '18px', label: 'Large' },
-		{ value: '22px', label: 'Extra large' }
-	];
 
 	const fontSize = $derived.by(() => {
 		void context.version;
@@ -114,112 +101,7 @@
 		}
 	}
 
-	async function insertButton() {
-		const result = await dialogs.open(LinkDialog, { kind: 'button', label: 'Get started' });
-
-		if (editor && result && 'url' in result) {
-			insertBlock(editor, {
-				type: 'emailButton',
-				attrs: { href: result.url },
-				content: [{ type: 'text', text: result.label || 'Open' }]
-			});
-		}
-	}
-
-	async function chooseImage() {
-		if (context.pickImage) {
-			return context.pickImage();
-		}
-
-		const result = await dialogs.open(LinkDialog, { kind: 'image' });
-
-		return result && 'url' in result ? { src: result.url, alt: result.label } : undefined;
-	}
-
-	async function insertImage() {
-		const image = await chooseImage();
-
-		if (editor && image) {
-			insertBlock(editor, { type: 'image', attrs: image });
-		}
-	}
-
-	type Tool = { label: string; icon: string; active?: () => boolean; run: (e: Editor) => void };
-
-	const marks: Tool[] = [
-		{
-			label: 'Bold',
-			icon: 'lucide:bold',
-			active: () => active('bold'),
-			run: (e) => e.chain().focus().toggleBold().run()
-		},
-		{
-			label: 'Italic',
-			icon: 'lucide:italic',
-			active: () => active('italic'),
-			run: (e) => e.chain().focus().toggleItalic().run()
-		},
-		{
-			label: 'Underline',
-			icon: 'lucide:underline',
-			active: () => active('underline'),
-			run: (e) => e.chain().focus().toggleUnderline().run()
-		},
-		{
-			label: 'Strikethrough',
-			icon: 'lucide:strikethrough',
-			active: () => active('strike'),
-			run: (e) => e.chain().focus().toggleStrike().run()
-		},
-		{
-			label: 'Link',
-			icon: 'lucide:link',
-			active: () => active('link'),
-			run: () => void editLink()
-		}
-	];
-
-	const alignments: Tool[] = [
-		{
-			label: 'Align left',
-			icon: 'lucide:align-left',
-			active: () => active({ textAlign: 'left' }),
-			run: (e) => e.chain().focus().setTextAlign('left').run()
-		},
-		{
-			label: 'Align center',
-			icon: 'lucide:align-center',
-			active: () => active({ textAlign: 'center' }),
-			run: (e) => e.chain().focus().setTextAlign('center').run()
-		},
-		{
-			label: 'Align right',
-			icon: 'lucide:align-right',
-			active: () => active({ textAlign: 'right' }),
-			run: (e) => e.chain().focus().setTextAlign('right').run()
-		}
-	];
-
-	const lists: Tool[] = [
-		{
-			label: 'Bullet list',
-			icon: 'lucide:list',
-			active: () => active('bulletList'),
-			run: (e) => e.chain().focus().toggleBulletList().run()
-		},
-		{
-			label: 'Numbered list',
-			icon: 'lucide:list-ordered',
-			active: () => active('orderedList'),
-			run: (e) => e.chain().focus().toggleOrderedList().run()
-		},
-		{
-			label: 'Quote',
-			icon: 'lucide:quote',
-			active: () => active('blockquote'),
-			run: (e) => e.chain().focus().toggleBlockquote().run()
-		}
-	];
+	const { marks, alignments, lists } = formattingTools(active, editLink);
 </script>
 
 {#snippet tools(list: Tool[])}
@@ -249,46 +131,7 @@
 	aria-label="Formatting"
 	class={['flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-white p-1.5', className]}
 >
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger {disabled}>
-			<Icon.Root icon="lucide:plus" />
-			Insert
-		</DropdownMenu.Trigger>
-
-		<!-- The editor keeps the focus, so typing continues in what was inserted. -->
-		<DropdownMenu.Content
-			align="start"
-			class="w-72"
-			onCloseAutoFocus={(event) => event.preventDefault()}
-		>
-			<DropdownMenu.Item class="h-auto py-2" onSelect={() => void insertButton()}>
-				<Icon.Root icon="lucide:rectangle-horizontal" />
-				<span class="flex flex-col">
-					Button
-					<span class="text-xs text-zinc-500">A link that stands out</span>
-				</span>
-			</DropdownMenu.Item>
-			<DropdownMenu.Item class="h-auto py-2" onSelect={() => void insertImage()}>
-				<Icon.Root icon="lucide:image" />
-				<span class="flex flex-col">
-					Image
-					<span class="text-xs text-zinc-500">From a URL or a variable</span>
-				</span>
-			</DropdownMenu.Item>
-			{#each INSERTABLE as block (block.label)}
-				<DropdownMenu.Item
-					class="h-auto py-2"
-					onSelect={() => editor && insertBlock(editor, block.content())}
-				>
-					<Icon.Root icon={block.icon} />
-					<span class="flex flex-col">
-						{block.label}
-						<span class="text-xs text-zinc-500">{block.description}</span>
-					</span>
-				</DropdownMenu.Item>
-			{/each}
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
+	<ToolbarInsert {disabled} />
 
 	{@render separator()}
 

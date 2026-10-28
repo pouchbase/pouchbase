@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import * as Dialog from '#lib/components/ui/dialog/index.js';
+	import * as ConfirmDialog from '#lib/components/ui/confirm-dialog/index.js';
 	import type { DialogProps } from '#lib/components/ui/dialog/index.js';
-	import * as Form from '#lib/components/ui/form/index.js';
 	import { deleteMailTemplate } from '../mail.remote';
 
-	type Props = { name: string } & DialogProps;
-
-	let { name, close }: Props = $props();
+	let { name, close }: { name: string } & DialogProps = $props();
 
 	const form = $derived.by(() => {
 		const key = name;
@@ -16,29 +13,18 @@
 	});
 </script>
 
-<Dialog.Content>
-	<Dialog.Header>
-		<Dialog.Title>Delete template</Dialog.Title>
-		<Dialog.Description>
-			Code that sends <strong class="font-medium text-zinc-900">{name}</strong> gets a
-			<code>404</code> from then on.
-		</Dialog.Description>
-	</Dialog.Header>
-
-	<Form.Root
-		{form}
-		success="Template deleted"
-		enhance={async (instance) => {
-			// Deleting redirects to the Mail page.
-			await instance.submit();
-			close();
-		}}
-	>
-		<Form.Hidden field={form.fields.name} value={name} />
-
-		<Dialog.Footer>
-			<Dialog.Close>Cancel</Dialog.Close>
-			<Form.Submit variant="danger">Delete template</Form.Submit>
-		</Dialog.Footer>
-	</Form.Root>
-</Dialog.Content>
+<!-- Deleting redirects to the Mail page. -->
+<ConfirmDialog.Root
+	{form}
+	title="Delete template"
+	submit="Delete template"
+	success="Template deleted"
+	hidden={[{ field: form.fields.name, value: name }]}
+	{close}
+	redirects
+>
+	{#snippet description()}
+		Code that sends <strong class="font-medium text-zinc-900">{name}</strong> gets a
+		<code>404</code> from then on.
+	{/snippet}
+</ConfirmDialog.Root>

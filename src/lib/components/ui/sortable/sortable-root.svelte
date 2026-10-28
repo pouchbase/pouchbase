@@ -16,16 +16,21 @@
 	import { tick } from 'svelte';
 	import { on } from 'svelte/events';
 	import { setSortableContext } from './sortable-context';
+	import {
+		DURATION,
+		follow,
+		landing,
+		measureSlots,
+		measureTops,
+		offset as itemOffset,
+		reducedMotion,
+		scrollParent,
+		scrollStep,
+		slideFrom,
+		type Slot
+	} from './sortable-geometry';
 
 	let { count, onReorder, header, children, class: className, ...rest }: Props = $props();
-
-	/** Matches the `duration-200` of the items. */
-	const DURATION = 200;
-	const EASING = 'cubic-bezier(0.2, 0, 0, 1)';
-	/** Distance from the edge of the scroll container that starts scrolling, in pixels. */
-	const SCROLL_EDGE = 56;
-
-	type Slot = { top: number; height: number };
 
 	let list: HTMLUListElement | null = null;
 
@@ -47,40 +52,12 @@
 
 	const placeholder = $derived(
 		dragging !== null && target !== null && slots[dragging]
-			? { top: landing(target), height: slots[dragging].height }
+			? { top: landing(slots, dragging, target), height: slots[dragging].height }
 			: null
 	);
 
-	function reducedMotion() {
-		return matchMedia('(prefers-reduced-motion: reduce)').matches;
-	}
-
 	function items() {
 		return list ? [...list.querySelectorAll<HTMLElement>(':scope > [data-sortable-index]')] : [];
-	}
-
-	function scrollParent(node: HTMLElement) {
-		for (let parent = node.parentElement; parent; parent = parent.parentElement) {
-			const { overflowY } = getComputedStyle(parent);
-
-			if (/auto|scroll/.test(overflowY) && parent.scrollHeight > parent.clientHeight) {
-				return parent;
-			}
-		}
-
-		return document.scrollingElement as HTMLElement | null;
-	}
-
-	/** Top of the dragged item once it lands at `to`. */
-	function landing(to: number) {
-		const from = dragging === null ? undefined : slots[dragging];
-		const slot = slots[to];
-
-		if (dragging === null || !from || !slot) {
-			return 0;
-		}
-
-		return to > dragging ? slot.top + slot.height - from.height : slot.top;
 	}
 
 	function announce(to: number) {
@@ -93,35 +70,9 @@
 			return;
 		}
 
-		const from = dragging;
-		const slot = slots[from];
-		const known = slots.filter(Boolean);
-		const first = known[0];
-		const last = known[known.length - 1];
 		const scrolled = (scroller?.scrollTop ?? 0) - startScroll;
 
-		// Kept within the list, so it can't be dragged out of it.
-		delta = Math.min(
-			Math.max(pointerY - startY + scrolled, first.top - slot.top),
-			last.top + last.height - slot.top - slot.height
-		);
-
-		const center = slot.top + delta + slot.height / 2;
-		let next = from;
-
-		slots.forEach((other, index) => {
-			const middle = other.top + other.height / 2;
-
-			if (index > from && center > middle) {
-				next = Math.max(next, index);
-			}
-
-			if (index < from && center < middle) {
-				next = Math.min(next, index);
-			}
-		});
-
-		target = next;
+		({ delta, target } = follow(slots, dragging, pointerY - startY + scrolled));
 	}
 
 	/** Scrolls the container while the pointer is near its top or bottom edge. */
@@ -132,18 +83,10 @@
 
 		if (scroller) {
 			const rect = scroller.getBoundingClientRect();
-			const top = Math.max(rect.top, 0);
-			const bottom = Math.min(rect.bottom, innerHeight);
-			let speed = 0;
+			const step = scrollStep(pointerY, Math.max(rect.top, 0), Math.min(rect.bottom, innerHeight));
 
-			if (pointerY < top + SCROLL_EDGE) {
-				speed = pointerY - (top + SCROLL_EDGE);
-			} else if (pointerY > bottom - SCROLL_EDGE) {
-				speed = pointerY - (bottom - SCROLL_EDGE);
-			}
-
-			if (speed) {
-				scroller.scrollTop += Math.max(-16, Math.min(16, Math.round(speed / 4)));
+			if (step) {
+				scroller.scrollTop += step;
 				update();
 			}
 		}
@@ -170,7 +113,7 @@
 
 		target = to;
 		dropping = true;
-		delta = landing(to) - slots[from].top;
+		delta = landing(slots, from, to) - slots[from].top;
 
 		if (!reducedMotion()) {
 			await new Promise((resolve) => setTimeout(resolve, DURATION));
@@ -196,44 +139,14 @@
 			return dropping;
 		},
 		offset(index) {
-			if (dragging === null) {
-				return 0;
-			}
-
-			if (index === dragging) {
-				return delta;
-			}
-
-			if (target === null) {
-				return 0;
-			}
-
-			if (index > dragging && index <= target) {
-				return -shift;
-			}
-
-			if (index < dragging && index >= target) {
-				return shift;
-			}
-
-			return 0;
+			return itemOffset(index, dragging, target, delta, shift);
 		},
 		grab(index, event) {
 			if (dragging !== null || dropping || event.button !== 0 || !list) {
 				return;
 			}
 
-			const origin = list.getBoundingClientRect().top;
-			const measured: Slot[] = [];
-
-			for (const element of items()) {
-				const rect = element.getBoundingClientRect();
-
-				measured[Number(element.dataset.sortableIndex)] = {
-					top: rect.top - origin,
-					height: rect.height
-				};
-			}
+			const measured = measureSlots(items(), list.getBoundingClientRect().top);
 
 			if (!measured[index]) {
 				return;
@@ -288,28 +201,14 @@
 				return;
 			}
 
-			const before = new Map(
-				items().map((element) => [element, element.getBoundingClientRect().top])
-			);
+			const before = measureTops(items());
 
 			onReorder(from, to);
 			announce(to);
 			await tick();
 
-			if (reducedMotion()) {
-				return;
-			}
-
-			// Slides the items from their old to their new place.
-			for (const [element, top] of before) {
-				const distance = top - element.getBoundingClientRect().top;
-
-				if (distance) {
-					element.animate([{ transform: `translateY(${distance}px)` }, { transform: 'none' }], {
-						duration: DURATION,
-						easing: EASING
-					});
-				}
+			if (!reducedMotion()) {
+				slideFrom(before);
 			}
 		}
 	});

@@ -7,23 +7,14 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Sheet from '#lib/components/ui/sheet/index.js';
 	import * as Sortable from '#lib/components/ui/sortable/index.js';
-	import { fieldTypeInfo } from '#lib/fields/field-type-info.js';
-	import {
-		canHide,
-		COMPUTED_TRANSFORMS,
-		ID_GENERATORS,
-		idGenerator,
-		isAutoType,
-		isPluginFieldType,
-		RELATION_ON_DELETE,
-		relationOnDelete
-	} from '#lib/fields/field-types.js';
+	import { isPluginFieldType } from '#lib/fields/field-types.js';
 	import { listPluginFieldTypes } from '#lib/remote/plugins.remote.js';
 	import { updateFieldsSchema } from '#lib/schemas/fields.js';
 	import AddFieldDialog from './add-field-dialog.svelte';
 	import EditCollectionIndexes from './edit-collection-indexes.svelte';
 	import EditComputedDialog from './edit-computed-dialog.svelte';
 	import EditFieldDialog from './edit-field-dialog.svelte';
+	import FieldRow from './field-row.svelte';
 	import { updateFields } from './fields.remote';
 	import type { GridField } from './grid';
 
@@ -45,10 +36,6 @@
 			? listPluginFieldTypes().current
 			: undefined
 	);
-
-	function typeOf(field: GridField) {
-		return fieldTypeInfo(field, pluginTypes);
-	}
 
 	function toRow(field: GridField) {
 		return {
@@ -111,63 +98,11 @@
 		void dialogs.open(EditFieldDialog, { collection, field });
 	}
 
-	/** Fields with settings for the edit-field dialog; timestamps have none. */
-	function hasSettings(field: GridField) {
-		return (
-			!field.system &&
-			!typeOf(field).orphaned &&
-			field.type !== 'computed' &&
-			field.type !== 'created' &&
-			field.type !== 'updated' &&
-			field.type !== 'blob'
-		);
-	}
-
 	onMount(() => {
 		if (newField) {
 			addField();
 		}
 	});
-
-	/** The type, plus what sets this field apart, e.g. `Computed · Slug of title`. */
-	function describe(field: GridField) {
-		const type = typeOf(field);
-
-		// The plugin isn't installed: the field keeps its data, but can't be edited.
-		if (type.orphaned) {
-			return type.description;
-		}
-
-		const parts: string[] = [type.label];
-
-		if (type.plugin) {
-			parts.push(`Plugin ${type.plugin.name ?? type.plugin.id}`);
-		}
-
-		if (field.type === 'computed' && field.options.transform) {
-			const transform = COMPUTED_TRANSFORMS[field.options.transform].label;
-
-			parts.push(field.options.source ? `${transform} of ${field.options.source}` : transform);
-		}
-
-		if (field.type === 'id') {
-			parts.push(ID_GENERATORS[idGenerator(field.options)].label);
-		}
-
-		if ((field.type === 'relation' || field.type === 'list') && field.options.multiple) {
-			parts.push('Multiple');
-		}
-
-		if (field.type === 'relation' && relationOnDelete(field.options) !== 'set_null') {
-			parts.push(`On delete: ${RELATION_ON_DELETE[relationOnDelete(field.options)].label}`);
-		}
-
-		if (field.system) {
-			parts.push('Built-in');
-		}
-
-		return parts.join(' · ');
-	}
 
 	function reorder(from: number, to: number) {
 		const next = [...rows];
@@ -211,143 +146,15 @@
 					{@const field = byId.get(row.id)}
 
 					{#if field}
-						{@const type = typeOf(field)}
-						{@const locked = field.system || row.remove}
-						{@const auto = isAutoType(field.type)}
-						{@const canRequire = field.type !== 'computed' && !auto}
-						{@const canBeUnique =
-							field.type !== 'file' &&
-							!auto &&
-							!((field.type === 'relation' || field.type === 'list') && field.options.multiple)}
-
-						<Sortable.Item {index} variant={row.remove ? 'danger' : 'default'}>
-							<Form.Hidden field={form.fields.fields[index].id} value={row.id} />
-							<Form.Hidden field={form.fields.fields[index].remove} value={row.remove} />
-
-							<Sortable.Handle aria-label="Move {field.name}" />
-							<Sortable.Icon title={type.label}>
-								<Icon.Root icon={type.icon} src={type.iconUrl} />
-							</Sortable.Icon>
-
-							<div class="flex min-w-0 flex-1 flex-col">
-								<Form.Field field={form.fields.fields[index].name} class="gap-0">
-									<Form.Label class="sr-only">Name of {field.name}</Form.Label>
-									<Form.Input
-										variant="ghost"
-										defaultValue={field.name}
-										readonly={locked}
-										autocomplete="off"
-										class={[
-											'-ml-2 h-7 px-2 font-mono font-medium',
-											row.remove && 'text-zinc-500 line-through'
-										]}
-									/>
-									<Form.Errors class="text-xs" />
-								</Form.Field>
-
-								{#if row.remove && field.type === 'id'}
-									<span class="text-xs text-red-600">
-										Deleted with its values when you save; records are then identified by their row
-										number
-									</span>
-								{:else if row.remove}
-									<span class="text-xs text-red-600">Deleted with its data when you save</span>
-								{:else}
-									<span class="truncate text-xs text-zinc-500">{describe(field)}</span>
-								{/if}
-							</div>
-
-							<div class="flex w-16 justify-center">
-								{#if canRequire}
-									<Form.Field field={form.fields.fields[index].required} orientation="horizontal">
-										<Form.Checkbox defaultChecked={field.required} disabled={locked} />
-										<Form.Label class="sr-only">{field.name} is required</Form.Label>
-									</Form.Field>
-								{:else}
-									<span class="text-zinc-300" title="Always filled in automatically">—</span>
-								{/if}
-							</div>
-
-							<div class="flex w-16 justify-center">
-								{#if canBeUnique}
-									<Form.Field field={form.fields.fields[index].unique} orientation="horizontal">
-										<Form.Checkbox defaultChecked={field.unique} disabled={locked} />
-										<Form.Label class="sr-only">{field.name} is unique</Form.Label>
-									</Form.Field>
-								{:else}
-									<span class="text-zinc-300" title="Not available for this field type">—</span>
-								{/if}
-							</div>
-
-							<div class="flex w-16 justify-center">
-								{#if canHide(field)}
-									<Form.Field field={form.fields.fields[index].hidden} orientation="horizontal">
-										<Form.Checkbox defaultChecked={field.hidden} disabled={locked} />
-										<Form.Label class="sr-only">{field.name} is hidden from app users</Form.Label>
-									</Form.Field>
-								{:else}
-									<span class="text-zinc-300" title="The ID and built-in fields are always shown"
-										>—</span
-									>
-								{/if}
-							</div>
-
-							<div class="flex w-16 shrink-0 justify-end">
-								{#if hasSettings(field) && !row.remove}
-									<Button.Root
-										variant="ghost"
-										size="icon"
-										aria-label="Edit settings of {field.name}"
-										title="Edit settings"
-										class="text-zinc-400 hover:text-zinc-900"
-										onclick={() => editSettings(field)}
-									>
-										<Icon.Root icon="lucide:settings-2" />
-									</Button.Root>
-								{/if}
-
-								{#if field.type === 'computed' && !row.remove}
-									<Button.Root
-										variant="ghost"
-										size="icon"
-										aria-label="Edit computation of {field.name}"
-										title="Edit computation"
-										class="text-zinc-400 hover:text-zinc-900"
-										onclick={() => editComputation(field)}
-									>
-										<Icon.Root icon="lucide:square-function" />
-									</Button.Root>
-								{/if}
-
-								{#if field.system}
-									<span class="flex size-8 shrink-0 items-center justify-center text-zinc-400">
-										<Icon.Root icon="lucide:lock" label="Built-in field" class="size-3.5" />
-									</span>
-								{:else if row.remove}
-									<Button.Root
-										variant="ghost"
-										size="icon"
-										aria-label="Keep {field.name}"
-										title="Keep"
-										onclick={() => form.fields.fields[index].remove.set(false)}
-									>
-										<Icon.Root icon="lucide:undo-2" />
-									</Button.Root>
-								{:else}
-									<!-- Shown on hover or focus, and always on touch screens. -->
-									<Button.Root
-										variant="ghost"
-										size="icon"
-										aria-label="Delete {field.name}"
-										title="Delete"
-										class="text-zinc-400 opacity-0 group-hover/item:opacity-100 hover:text-red-600 focus-visible:opacity-100 pointer-coarse:opacity-100"
-										onclick={() => form.fields.fields[index].remove.set(true)}
-									>
-										<Icon.Root icon="lucide:trash-2" />
-									</Button.Root>
-								{/if}
-							</div>
-						</Sortable.Item>
+						<FieldRow
+							{form}
+							{index}
+							{field}
+							{row}
+							{pluginTypes}
+							onEditSettings={editSettings}
+							onEditComputation={editComputation}
+						/>
 					{/if}
 				{/each}
 			</Sortable.Root>

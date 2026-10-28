@@ -67,17 +67,21 @@
 	import { theme } from '#lib/theme.svelte.js';
 	import * as Spinner from '../../spinner';
 	import {
+		configureTypeScript,
+		createWidgetsLayer,
+		editorOptions,
+		labelInput,
+		modelUri,
+		type EditorSettings
+	} from './code-editor';
+	import {
 		FILTER_LANGUAGE,
-		FILTER_RULES,
 		registerFilterCompletions,
 		registerFilterLanguage,
 		setDiagnostics
 	} from './code-filter';
 	import { loadMonaco, registerCompletions } from './code-monaco';
-
-	// Monaco has one theme for all editors on the page.
-	const LIGHT_THEME = 'pouchbase';
-	const DARK_THEME = 'pouchbase-dark';
+	import { defineThemes, themeName } from './code-theme';
 
 	let {
 		value = $bindable(''),
@@ -110,7 +114,7 @@
 		const disposables: Monaco.IDisposable[] = [];
 
 		// Only the settings below are read here; content changes go through the effect further down.
-		const settings = untrack(() => ({
+		const settings: EditorSettings = untrack(() => ({
 			language,
 			typings,
 			completions,
@@ -123,18 +127,7 @@
 			key: id.replace(/[^\w-]/g, '')
 		}));
 
-		// Suggestions, hovers and parameter hints are rendered here, directly under `body`, so they
-		// can extend past a surrounding dialog (whose `translate` and `contain` would otherwise
-		// position and clip them). `monaco-editor` makes Monaco's styles apply.
-		const widgets = document.createElement('div');
-		widgets.className = 'monaco-editor';
-		// Above dialogs (z-50). A modal dialog turns off pointer events on `body` (only its own
-		// overlay and content opt back in), so this layer opts back in too.
-		widgets.style.cssText = 'position: relative; z-index: 60; pointer-events: auto;';
-		// Monaco has handled the pointer by the time it bubbles up to here. Stopping it keeps a
-		// surrounding dialog from treating a click on a suggestion as a click outside and closing.
-		widgets.addEventListener('pointerdown', (event) => event.stopPropagation());
-		document.body.appendChild(widgets);
+		const widgets = createWidgetsLayer();
 
 		loadMonaco()
 			.then((monaco) => {
@@ -142,134 +135,27 @@
 					return;
 				}
 
-				if (settings.language === 'javascript' || settings.language === 'typescript') {
-					const defaults =
-						settings.language === 'javascript'
-							? monaco.typescript.javascriptDefaults
-							: monaco.typescript.typescriptDefaults;
-
-					defaults.setCompilerOptions({
-						target: monaco.typescript.ScriptTarget.ES2020,
-						lib: settings.lib,
-						allowJs: true,
-						checkJs: true,
-						allowNonTsExtensions: true
-					});
-					defaults.setDiagnosticsOptions({
-						noSemanticValidation: false,
-						noSyntaxValidation: false,
-						// 1108: "A 'return' statement can only be used within a function body".
-						diagnosticCodesToIgnore: settings.allowReturn ? [1108] : []
-					});
-
-					if (settings.typings) {
-						disposables.push(
-							defaults.addExtraLib(settings.typings, `file:///${settings.key}-typings.d.ts`)
-						);
-					}
-				}
+				disposables.push(...configureTypeScript(monaco, settings));
 
 				if (settings.language === 'filter') {
 					registerFilterLanguage(monaco);
 				}
 
-				const extension = {
-					javascript: 'js',
-					typescript: 'ts',
-					json: 'json',
-					sql: 'sql',
-					html: 'html',
-					filter: 'filter'
-				}[settings.language];
 				const model = monaco.editor.createModel(
 					settings.initial,
 					settings.language === 'filter' ? FILTER_LANGUAGE : settings.language,
-					monaco.Uri.parse(`file:///${settings.key}.${extension}`)
+					modelUri(monaco, settings)
 				);
 
-				// The light and dark themes, with scrollbars in the colors of `ScrollArea` (zinc
-				// 300/400/500); the dark one on the background of the dashboard's dark surfaces.
-				monaco.editor.defineTheme(LIGHT_THEME, {
-					base: 'vs',
-					inherit: true,
-					rules: [
-						{ token: 'variable', foreground: '7c3aed' },
-						{ token: 'predefined', foreground: '0369a1' },
-						...FILTER_RULES.light
-					],
-					colors: {
-						'scrollbar.shadow': '#00000000',
-						'scrollbarSlider.background': '#d4d4d8',
-						'scrollbarSlider.hoverBackground': '#a1a1aa',
-						'scrollbarSlider.activeBackground': '#71717a'
-					}
-				});
-				monaco.editor.defineTheme(DARK_THEME, {
-					base: 'vs-dark',
-					inherit: true,
-					rules: [
-						{ token: 'variable', foreground: 'a78bfa' },
-						{ token: 'predefined', foreground: '38bdf8' },
-						...FILTER_RULES.dark
-					],
-					colors: {
-						'editor.background': '#111114',
-						'editorGutter.background': '#111114',
-						'editor.lineHighlightBackground': '#1e1e21',
-						'editor.lineHighlightBorder': '#00000000',
-						'scrollbar.shadow': '#00000000',
-						'scrollbarSlider.background': '#3f3f45',
-						'scrollbarSlider.hoverBackground': '#686871',
-						'scrollbarSlider.activeBackground': '#8b8b95'
-					}
-				});
+				defineThemes(monaco);
 
 				const instance = monaco.editor.create(node, {
+					...editorOptions(settings, widgets),
 					model,
-					theme: untrack(() => (theme.dark ? DARK_THEME : LIGHT_THEME)),
-					readOnly: settings.readonly,
-					automaticLayout: true,
-					minimap: { enabled: false },
-					scrollBeyondLastLine: false,
-					fontSize: 12,
-					lineHeight: 18,
-					fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
-					tabSize: 2,
-					insertSpaces: false,
-					lineNumbersMinChars: 3,
-					overviewRulerLanes: 0,
-					padding: { top: 8, bottom: 8 },
-					renderLineHighlight: 'line',
-					wordBasedSuggestions: 'off',
-					quickSuggestions: {
-						other: true,
-						comments: false,
-						strings: !!settings.completions?.some((completion) => completion.inString)
-					},
-					lineNumbers: settings.lineNumbers ? 'on' : 'off',
-					placeholder: settings.placeholder,
-					folding: settings.lineNumbers,
-					glyphMargin: false,
-					lineDecorationsWidth: settings.lineNumbers ? 10 : 8,
-					overflowWidgetsDomNode: widgets,
-					fixedOverflowWidgets: true,
-					scrollbar: {
-						useShadows: false,
-						verticalScrollbarSize: 10,
-						horizontalScrollbarSize: 10,
-						verticalSliderSize: 6,
-						horizontalSliderSize: 6
-					}
+					theme: untrack(() => themeName(theme.dark))
 				});
 
-				// Label the control that actually receives focus.
-				const input = node.querySelector('textarea');
-
-				for (const [name, attribute] of Object.entries(aria)) {
-					if (attribute !== undefined) {
-						input?.setAttribute(name, String(attribute));
-					}
-				}
+				labelInput(node, aria);
 
 				if (settings.completions?.length) {
 					disposables.push(
@@ -312,7 +198,7 @@
 
 	// Follows the dashboard when it switches between light and dark.
 	$effect(() => {
-		monacoApi?.editor.setTheme(theme.dark ? DARK_THEME : LIGHT_THEME);
+		monacoApi?.editor.setTheme(themeName(theme.dark));
 	});
 
 	// Problems are underlined again after every edit, and when `diagnostics` changes.
