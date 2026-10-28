@@ -1,9 +1,9 @@
-import type { ErrorOf, ServiceError } from './base.service';
+import type { ResultAsync } from 'neverthrow';
 import type { ApiKeysService } from './api-keys.service';
 import type { AuthService } from './auth.service';
-import type { Collection } from './collections.service';
+import type { Collection, CollectionLookupError } from './collections.service';
 import type { Field } from './fields.service';
-import type { ApiAccess, ApiRecord, RecordsService } from './records.service';
+import type { ApiAccess, ApiRecord } from './records.service';
 import type { AuthorizeCheck } from '../realtime/authorize';
 import type {
 	AccessContext,
@@ -12,21 +12,20 @@ import type {
 	SessionResult,
 	Subject
 } from '../realtime/hub-core';
+import type { ContextError, ErrorOf, ServiceError } from './base.service';
 
 import { decodeJwt } from 'jose';
-import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
 
-import { FilterError } from '#lib/filter/filter.js';
 import { apiActions } from '#lib/filter/rules.js';
 
 import { batchDatabase } from '../db/query';
-import { compileFilter, compileRule, usesRelations } from '../filter';
+import { usesRelations } from '../filter';
 import { authorizationChecks } from '../realtime/authorize';
 import { publish } from '../realtime/broker';
+import { relatedCollections } from '../records/access';
+import { apiFields, apiRecord } from '../records/values';
 import { API_KEY_PREFIX } from './api-keys.service';
-import { Service } from './base.service';
-import { checkUserFields, visibleFields } from '../hidden-fields';
-import { apiRecord, relatedCollections } from './records.service';
+import { Failure, Service } from './base.service';
 
 /** What the hub asks before it adds a subscription. */
 export type SubscriptionRequest = {
@@ -44,12 +43,24 @@ export type AuthorizeRequest = {
 	items: { event: RecordEvent; contexts: AccessContext[] }[];
 };
 
-type ForbiddenError = ServiceError<22002, 'SUBSCRIPTION_FORBIDDEN'>;
-type InvalidSubscriptionError = ServiceError<22003, 'INVALID_SUBSCRIPTION'> & {
-	data: { param: 'where' | 'select' | 'include'; message: string };
-};
+type SubscriptionParam = 'where' | 'select' | 'include';
 
-type IncludeError = ErrorOf<ReturnType<RecordsService['apiInclude']>>;
+/** Every error of the realtime service; the internal routes map the codes for the hubs. */
+export type RealtimeError =
+	| ContextError
+	| CollectionLookupError
+	| ServiceError<11006, 'INVALID_TOKEN'>
+	| ErrorOf<ReturnType<AuthService['verifyToken']>>
+	| ErrorOf<ReturnType<ApiKeysService['verify']>>
+	| ServiceError<22000, 'PUBLISH_FAILED'>
+	| ServiceError<22001, 'SESSION_FAILED'>
+	| ServiceError<22002, 'SUBSCRIPTION_FORBIDDEN'>
+	| (ServiceError<22003, 'INVALID_SUBSCRIPTION'> & {
+			data: { param: SubscriptionParam; message: string };
+	  })
+	| ServiceError<22004, 'AUTHORIZE_FAILED'>
+	| ServiceError<22005, 'INVALID_API_KEY'>
+	| ServiceError<22006, 'PLUGIN_KEY'>;
 
 /** What the records API checks for `subject`: nothing for admins (the dashboard). */
 function apiAccess(subject: Subject): ApiAccess | undefined {
@@ -60,11 +71,6 @@ function apiAccess(subject: Subject): ApiAccess | undefined {
 	return { user: subject.kind === 'user' ? subject.auth : null };
 }
 
-/** The fields the records API reads and filters on: all but blobs. */
-function readableFields(collectionFields: Field[]) {
-	return collectionFields.filter((field) => field.type !== 'blob');
-}
-
 /**
  * Realtime events of records (see `src/lib/server/realtime/`). The hubs hold the sockets; this
  * service answers what they ask through `/internal/realtime/*`: who a socket is, whether it may
@@ -72,12 +78,15 @@ function readableFields(collectionFields: Field[]) {
  */
 export class RealtimeService extends Service {
 	/** Hands saved changes of one collection to its hub. */
-	publish(events: RecordEvent[]): ResultAsync<void, ServiceError<22000, 'PUBLISH_FAILED'>> {
-		if (!events.length) {
-			return okAsync(undefined);
-		}
-
-		return fromPromise(publish(events), (error) => this.error(22000, 'PUBLISH_FAILED', error));
+	publish(events: RecordEvent[]): ResultAsync<void, RealtimeError> {
+		return this.run(
+			async () => {
+				if (events.length) {
+					await publish(events);
+				}
+			},
+			(error) => this.error(22000, 'PUBLISH_FAILED', error)
+		);
 	}
 
 	/**
@@ -85,160 +94,88 @@ export class RealtimeService extends Service {
 	 * of `token`, else the dashboard admin of the session cookie (only passed on when the upgrade
 	 * came from the same origin), else anonymous.
 	 */
-	session(
-		token: string | null
-	): ResultAsync<
-		SessionResult,
-		| ErrorOf<ReturnType<AuthService['verifyToken']>>
-		| ServiceError<11006, 'INVALID_TOKEN'>
-		| ErrorOf<ReturnType<ApiKeysService['verify']>>
-		| ServiceError<22005, 'INVALID_API_KEY'>
-		| ServiceError<22006, 'PLUGIN_KEY'>
-	> {
-		if (!token) {
-			return okAsync({
-				subject: this.ctx.locals.user ? { kind: 'admin' } : { kind: 'anonymous' },
-				expiresAt: null
-			});
-		}
+	session(token: string | null): ResultAsync<SessionResult, RealtimeError> {
+		return this.run(
+			async (): Promise<SessionResult> => {
+				if (!token) {
+					return {
+						subject: this.ctx.locals.user ? { kind: 'admin' } : { kind: 'anonymous' },
+						expiresAt: null
+					};
+				}
 
-		if (token.startsWith(API_KEY_PREFIX)) {
-			return this.services
-				.apiKeys()
-				.verify(token)
-				.andThen((key) => {
+				if (token.startsWith(API_KEY_PREFIX)) {
+					const key = await this.must(this.services.apiKeys().verify(token));
+
 					if (!key) {
-						return errAsync(this.error(22005, 'INVALID_API_KEY'));
+						this.fail(22005, 'INVALID_API_KEY');
 					}
 
-					if (key.pluginId) {
-						return errAsync(this.error(22006, 'PLUGIN_KEY'));
+					if (key?.pluginId) {
+						this.fail(22006, 'PLUGIN_KEY');
 					}
 
-					return okAsync<SessionResult>({ subject: { kind: 'admin' }, expiresAt: null });
-				});
-		}
+					return { subject: { kind: 'admin' }, expiresAt: null };
+				}
 
-		return this.services
-			.auth()
-			.verifyToken(token)
-			.andThen((user) => {
+				const user = await this.must(this.services.auth().verifyToken(token));
 				let expiresAt: number | null;
 
 				try {
 					const { exp } = decodeJwt(token);
 					expiresAt = exp ? exp * 1000 : null;
 				} catch (error) {
-					return errAsync(this.error(11006, 'INVALID_TOKEN', error));
+					return this.fail(11006, 'INVALID_TOKEN', { cause: error });
 				}
 
-				return okAsync({ subject: { kind: 'user', auth: user } as Subject, expiresAt });
-			});
+				return { subject: { kind: 'user', auth: user }, expiresAt };
+			},
+			(error) => this.error(22001, 'SESSION_FAILED', error)
+		);
 	}
 
 	/**
 	 * Whether `subject` may subscribe: the collection exists, the API offers `view` for it and its
 	 * view rule isn't locked or invalid (admins skip the rule), and the filter, fields and `expand`
-	 * are valid (see `RecordsService.apiInclude`).
+	 * are valid (see `RecordsService.checkQuery`).
 	 */
-	checkSubscription(
-		request: SubscriptionRequest
-	): ResultAsync<
-		void,
-		| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ForbiddenError
-		| InvalidSubscriptionError
-		| IncludeError
-	> {
-		return this.services
-			.collections()
-			.requireWithFields(request.collection)
-			.andThen(({ collection, fields: collectionFields }) =>
-				(usesRelations([collection.settings.rules?.view, request.filter])
-					? this.services.collections().listWithFields()
-					: okAsync<{ collection: Collection; fields: Field[] }[]>([])
-				).map((all) => ({ collection, collectionFields, all }))
-			)
-			.andThen((found) =>
-				this.services
+	checkSubscription(request: SubscriptionRequest): ResultAsync<void, RealtimeError> {
+		return this.run(
+			async () => {
+				const checked = await this.services
 					.records()
-					.userFields(request.filter, apiAccess(request.subject))
-					.map((userFields) => ({ ...found, userFields }))
-			)
-			.andThen(({ collection, collectionFields, all, userFields }) => {
-				const readable = readableFields(collectionFields);
-				// What the subscriber may filter on and select: no hidden fields for app users.
-				const visible = visibleFields(collectionFields, apiAccess(request.subject));
-				const auth = request.subject.kind === 'user' ? request.subject.auth : null;
-				const table = collection.name;
+					.checkQuery(
+						request.collection,
+						{ where: request.filter, select: request.fields, include: request.expand },
+						apiAccess(request.subject)
+					);
 
-				if (request.subject.kind !== 'admin') {
-					if (!apiActions(collection).includes('view')) {
-						return errAsync(this.error(22002, 'SUBSCRIPTION_FORBIDDEN'));
-					}
+				if (checked.isOk()) {
+					return;
+				}
 
-					try {
-						const relations = relatedCollections(all, undefined);
+				const { error } = checked;
 
-						if (
-							!compileRule(collection.settings.rules?.view, readable, {
-								user: auth,
-								table,
-								relations
-							})
-						) {
-							return errAsync(this.error(22002, 'SUBSCRIPTION_FORBIDDEN'));
+				if (error.code === 8013 || error.code === 8014 || error.code === 8016) {
+					this.fail(22002, 'SUBSCRIPTION_FORBIDDEN');
+				}
+
+				if (error.code === 8015) {
+					const param = error.data.param === 'order' ? 'where' : error.data.param;
+
+					this.fail(22003, 'INVALID_SUBSCRIPTION', {
+						data: {
+							param,
+							message:
+								param === 'include' ? `Invalid include: ${error.data.message}` : error.data.message
 						}
-					} catch {
-						return errAsync(this.error(22002, 'SUBSCRIPTION_FORBIDDEN'));
-					}
-				}
-
-				if (request.filter) {
-					try {
-						if (userFields) {
-							checkUserFields(request.filter, userFields);
-						}
-
-						compileFilter(request.filter, visible, {
-							user: auth,
-							table,
-							relations: relatedCollections(all, apiAccess(request.subject))
-						});
-					} catch (error) {
-						return errAsync(this.invalid('where', error));
-					}
-				}
-
-				const unknown = request.fields?.find(
-					(name) => !visible.some((field) => field.name === name)
-				);
-
-				if (unknown) {
-					return errAsync(this.invalid('select', new FilterError(`Unknown field \`${unknown}\``)));
-				}
-
-				if (!request.expand?.length) {
-					return okAsync(undefined);
-				}
-
-				return this.services
-					.records()
-					.apiInclude(request.collection, [], request.expand, apiAccess(request.subject))
-					.mapErr((error): IncludeError | ForbiddenError | InvalidSubscriptionError => {
-						if (error.code === 8015) {
-							return {
-								...this.error(22003, 'INVALID_SUBSCRIPTION'),
-								data: { param: 'include', message: `Invalid include: ${error.data.message}` }
-							};
-						}
-
-						// The view rule of a related collection doesn't compile.
-						return error.code === 8016 ? this.error(22002, 'SUBSCRIPTION_FORBIDDEN') : error;
 					});
-			});
+				}
+
+				throw new Failure(error);
+			},
+			(error) => this.error(22004, 'AUTHORIZE_FAILED', error)
+		);
 	}
 
 	/**
@@ -246,45 +183,44 @@ export class RealtimeService extends Service {
 	 * when the collection or its table is gone. All checks run in one batch. For allowed contexts
 	 * with `expand`, the record with its relations expanded as that subject may see them.
 	 */
-	authorize(
-		request: AuthorizeRequest
-	): ResultAsync<
-		AuthorizeResult,
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<22004, 'AUTHORIZE_FAILED'>
-	> {
-		return this.services
-			.collections()
-			.requireWithFields(request.collection)
-			.map((found): { collection: Collection; fields: Field[] } | null => found)
-			.orElse((failure) => (failure.code === 6006 ? okAsync(null) : errAsync(failure)))
-			.andThen((found) => {
-				if (!found?.fields.length) {
-					return okAsync({ results: request.items.map(() => null) });
+	authorize(request: AuthorizeRequest): ResultAsync<AuthorizeResult, RealtimeError> {
+		return this.run(
+			async () => {
+				const found = await this.services.collections().requireWithFields(request.collection);
+
+				if (found.isErr()) {
+					if (found.error.code === 6006) {
+						return { results: request.items.map(() => null) };
+					}
+
+					throw new Failure(found.error);
 				}
 
-				const { collection, fields: collectionFields } = found;
+				const { collection, fields: collectionFields } = found.value;
+
+				if (!collectionFields.length) {
+					return { results: request.items.map(() => null) };
+				}
+
 				const filters = request.items.flatMap(({ contexts }) =>
 					contexts.map((context) => context.filter)
 				);
-				const related = usesRelations([collection.settings.rules?.view, ...filters])
-					? this.services.collections().listWithFields()
-					: okAsync<{ collection: Collection; fields: Field[] }[]>([]);
+				const all = usesRelations([collection.settings.rules?.view, ...filters])
+					? await this.must(this.services.collections().listWithFields())
+					: [];
+				const appDatabase = await this.must(this.services.database().requireApp());
+				const result = await this.runChecks(
+					appDatabase.id,
+					collection,
+					collectionFields,
+					request,
+					all
+				);
 
-				return related
-					.andThen((all) =>
-						this.services
-							.database()
-							.requireApp()
-							.andThen((appDatabase) =>
-								this.runChecks(appDatabase.id, collection, collectionFields, request, all)
-							)
-					)
-					.andThen((result) => this.expandAllowed(request, result));
-			});
+				return this.expandAllowed(request, result);
+			},
+			(error) => this.error(22004, 'AUTHORIZE_FAILED', error)
+		);
 	}
 
 	/**
@@ -292,10 +228,10 @@ export class RealtimeService extends Service {
 	 * expanded in one go. A context whose `expand` no longer works (a relation was removed, or a
 	 * view rule locked) gets no events, like a filter that no longer compiles.
 	 */
-	private expandAllowed(
+	private async expandAllowed(
 		request: AuthorizeRequest,
 		result: AuthorizeResult
-	): ResultAsync<AuthorizeResult, ServiceError<22004, 'AUTHORIZE_FAILED'>> {
+	): Promise<AuthorizeResult> {
 		const groups = new Map<
 			string,
 			{ subject: Subject; expand: string[]; items: { index: number; record: ApiRecord }[] }
@@ -325,58 +261,52 @@ export class RealtimeService extends Service {
 		});
 
 		if (!groups.size) {
-			return okAsync(result);
+			return result;
 		}
 
-		return ResultAsync.combine(
-			[...groups].map(([key, group]) =>
-				this.services
-					.records()
-					.apiInclude(
-						request.collection,
-						group.items.map((item) => item.record),
-						group.expand,
-						apiAccess(group.subject)
-					)
-					.map(() => true)
-					.orElse((error) => {
-						if (error.code === 8015 || error.code === 8016) {
-							return okAsync(false);
-						}
+		const expansions = await Promise.all(
+			[...groups].map(async ([key, group]) => {
+				const included = await this.services.records().apiInclude(
+					request.collection,
+					group.items.map((item) => item.record),
+					group.expand,
+					apiAccess(group.subject)
+				);
 
-						return errAsync(this.error(22004, 'AUTHORIZE_FAILED', error));
-					})
-					.map((expanded) => ({ key, group, expanded }))
-			)
-		).map((expansions) => {
-			const results = result.results.map((found) =>
-				found ? { ...found, allowed: [...found.allowed], expanded: { ...found.expanded } } : null
-			);
+				if (included.isErr() && included.error.code !== 8015 && included.error.code !== 8016) {
+					throw new Failure(included.error);
+				}
 
-			for (const { key, group, expanded } of expansions) {
-				for (const { index, record } of group.items) {
-					const found = results[index]!;
+				return { key, group, expanded: included.isOk() };
+			})
+		);
+		const results = result.results.map((found) =>
+			found ? { ...found, allowed: [...found.allowed], expanded: { ...found.expanded } } : null
+		);
 
-					if (expanded) {
-						found.expanded[key] = record;
-					} else {
-						found.allowed = found.allowed.filter((allowed) => allowed !== key);
-					}
+		for (const { key, group, expanded } of expansions) {
+			for (const { index, record } of group.items) {
+				const found = results[index]!;
+
+				if (expanded) {
+					found.expanded[key] = record;
+				} else {
+					found.allowed = found.allowed.filter((allowed) => allowed !== key);
 				}
 			}
+		}
 
-			return { results };
-		});
+		return { results };
 	}
 
-	private runChecks(
+	private async runChecks(
 		databaseId: string,
 		collection: Collection,
 		collectionFields: Field[],
 		request: AuthorizeRequest,
 		all: { collection: Collection; fields: Field[] }[]
-	): ResultAsync<AuthorizeResult, ServiceError<22004, 'AUTHORIZE_FAILED'>> {
-		const readable = readableFields(collectionFields);
+	): Promise<AuthorizeResult> {
+		const readable = apiFields(collectionFields);
 		const key = collectionFields.find((field) => field.type === 'id')?.name ?? 'rowid';
 		const viewOffered = apiActions(collection).includes('view');
 		const checks: AuthorizeCheck[][] = request.items.map(({ event, contexts }) =>
@@ -399,35 +329,22 @@ export class RealtimeService extends Service {
 		const statements = [
 			...new Set(checks.flat().flatMap((check) => (check.statement ? [check.statement] : [])))
 		];
+		const rows = statements.length ? await batchDatabase(databaseId, statements) : [];
+		const matched = new Map(
+			statements.map((statement, index) => [statement, Boolean(rows[index]?.length)])
+		);
+		// App users get the record without its hidden fields; only made when there are any.
+		const shown = collectionFields.filter((field) => !field.hidden);
+		const hides = shown.length < collectionFields.length;
 
-		return fromPromise(
-			statements.length ? batchDatabase(databaseId, statements) : Promise.resolve([]),
-			(error) => this.error(22004, 'AUTHORIZE_FAILED', error)
-		).map((rows) => {
-			const matched = new Map(
-				statements.map((statement, index) => [statement, Boolean(rows[index]?.length)])
-			);
-
-			// App users get the record without its hidden fields; only made when there are any.
-			const shown = collectionFields.filter((field) => !field.hidden);
-			const hides = shown.length < collectionFields.length;
-
-			return {
-				results: request.items.map(({ event }, index) => ({
-					record: apiRecord(collectionFields, event.row),
-					...(hides ? { userRecord: apiRecord(shown, event.row) } : {}),
-					allowed: checks[index]
-						.filter((check) => (check.statement ? matched.get(check.statement) : check.allowed))
-						.map((check) => check.key)
-				}))
-			};
-		});
-	}
-
-	private invalid(param: 'where' | 'select' | 'include', error: unknown): InvalidSubscriptionError {
 		return {
-			...this.error(22003, 'INVALID_SUBSCRIPTION'),
-			data: { param, message: error instanceof FilterError ? error.message : `Invalid ${param}` }
+			results: request.items.map(({ event }, index) => ({
+				record: apiRecord(collectionFields, event.row),
+				...(hides ? { userRecord: apiRecord(shown, event.row) } : {}),
+				allowed: checks[index]
+					.filter((check) => (check.statement ? matched.get(check.statement) : check.allowed))
+					.map((check) => check.key)
+			}))
 		};
 	}
 }

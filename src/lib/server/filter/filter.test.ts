@@ -1,11 +1,11 @@
-import type { Field } from './services/fields.service';
+import type { Field } from '../services/fields.service';
 
 import { DatabaseSync } from 'node:sqlite';
 import { describe, expect, it } from 'vitest';
 
-import type { FilterContext, RelatedCollection } from './filter';
+import type { FilterContext, RelatedCollection } from './index';
 
-import { compileFilter, evaluateFilter } from './filter';
+import { compileFilter, evaluateFilter } from './index';
 
 /**
  * `evaluateFilter` has to give the answer SQLite gives for the compiled condition on the same row

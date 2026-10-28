@@ -1,5 +1,5 @@
 import type { ApiKey } from './services/api-keys.service';
-import type { ApiAccess } from './services/records.service';
+import type { ApiAccess } from './records/access';
 import type { RequestEvent } from '@sveltejs/kit';
 
 import { internalPluginKey, INTERNAL_PLUGIN_KEY_PREFIX } from './plugins/internal-keys';

@@ -1,10 +1,10 @@
-import type { Field } from './services/fields.service';
+import type { Field } from '../services/fields.service';
 
 import { describe, expect, it } from 'vitest';
 
 import { FilterError } from '#lib/filter/filter.js';
 
-import { checkUserFields, visibleFields } from './hidden-fields';
+import { checkUserFields, visibleFields } from './access';
 
 function field(name: string, overrides: Partial<Field> = {}): Field {
 	return {

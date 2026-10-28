@@ -93,9 +93,7 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	9004: [404, 'Index not found'],
 
 	// OAuth providers
-	10000: 'Could not load the sign-in providers',
-	10001: 'Could not load the sign-in provider',
-	10002: 'Could not save the sign-in provider',
+	10000: 'Could not load or save the sign-in providers',
 	10003: [400, 'The sign-in provider is missing its client ID or secret'],
 	10004: [404, 'Sign-in provider not found'],
 
@@ -178,28 +176,22 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 
 	// Plugins
 	19000: 'Could not reach the plugin registry',
-	19001: 'Could not load the plugins',
+	19001: 'Could not complete the plugin operation',
 	19002: [404, 'Plugin not found'],
 	19003: [409, 'This plugin does not work with this version of Pouchbase'],
 	19004: [400, 'The plugin bundle is invalid'],
-	19005: 'Could not install the plugin',
-	19006: 'Could not uninstall the plugin',
 	19007: 'Could not deploy the plugin to Cloudflare',
 	19008: [409, 'Another plugin already provides a sign-in provider with this ID'],
 	19009: 'The plugin failed',
 	19010: [403, "Built-in plugins can't be uninstalled"],
 	19011: 'The Cloudflare account has no workers.dev subdomain yet',
-	19012: 'Could not install the built-in plugins',
 	19013: 'The plugin route failed',
 	19014: [400, "The plugin's UI components could not be compiled"],
-	19015: "Could not load the plugin's components",
 	19016: [409, 'The field type comes from a plugin that is not installed'],
 	19017: 'The plugin could not process the field values',
 	19018: [400, 'The plugin settings are invalid'],
-	19019: 'Could not save the plugin settings',
 	19020: [409, "A collection with the name of one of the plugin's collections already exists"],
 	19021: [400, "One of the plugin's collections is invalid"],
-	19022: "Could not create, update or delete the plugin's collections",
 	19023: [409, "Another collection links to one of the plugin's collections"],
 
 	// Environments

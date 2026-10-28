@@ -118,11 +118,6 @@ export type FieldsError =
 	| (ServiceError<7026, 'LIST_ITEMS_IN_USE'> & { data: { items: string[] } })
 	| PluginFieldError;
 
-/** Columns a computed field's script can read: everything except blobs, which can be large. */
-export function readableColumns(collectionFields: Field[]) {
-	return collectionFields.filter((field) => field.type !== 'blob').map((field) => field.name);
-}
-
 /** The field named `name` in `collectionFields`. */
 function fieldNamed(collectionFields: Field[], name: string) {
 	return collectionFields.find((field) => field.name === name);

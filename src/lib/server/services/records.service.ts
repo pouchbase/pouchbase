@@ -1,79 +1,94 @@
-import type { ErrorOf, ServiceError } from './base.service';
-import type { Collection } from './collections.service';
-import type { Field } from './fields.service';
-import type { PluginsService } from './plugins.service';
+import type { ResultAsync } from 'neverthrow';
 import type { SignInMethod } from '#lib/auth/sign-in-methods.js';
-import type { FieldOptions, RelationOnDelete } from '#lib/fields/field-types.js';
-import type { PluginGrant } from '../plugins/grant';
+import type { FieldOptions } from '#lib/fields/field-types.js';
 import type { ApiRuleAction } from '#lib/filter/rules.js';
 import type { RealtimeAction } from '#lib/realtime/protocol.js';
 import type { FilterContext, SqlCondition } from '../filter';
+import type { ApiAccess } from '../records/access';
+import type { IncludeHost } from '../records/include';
+import type { ComputedPreview } from '../records/write';
+import type {
+	ApiRecord,
+	RecordContext,
+	RecordInput,
+	RecordIssues,
+	RecordRow,
+	RelationRef,
+	StoredValue
+} from '../records/values';
+import type { CollectionLookupError } from './collections.service';
+import type { Field } from './fields.service';
+import type { ContextError, ServiceError } from './base.service';
 
-import { asc, eq, inArray } from 'drizzle-orm';
-import { errAsync, fromPromise, okAsync, ResultAsync } from 'neverthrow';
+import { okAsync } from 'neverthrow';
 
-import {
-	idGenerator,
-	isAutoType,
-	isMultiple,
-	isPluginFieldType,
-	isRelationType,
-	NOW_DEFAULT,
-	relationOnDelete
-} from '#lib/fields/field-types.js';
-import { sqlDefaultSelect } from '#lib/fields/sql-expression.js';
+import { USERS_COLLECTION } from '#lib/auth/users.js';
+import { NOW_DEFAULT } from '#lib/fields/field-types.js';
 import { fileFieldRules } from '#lib/files/accept.js';
-import { FilterError, MAX_RELATION_DEPTH } from '#lib/filter/filter.js';
-import { apiActions, protectedApiFields } from '#lib/filter/rules.js';
+import { FILES_COLLECTION } from '#lib/files/files.js';
+import { FilterError } from '#lib/filter/filter.js';
+import { apiActions } from '#lib/filter/rules.js';
 
-import { ComputeError, computedSpecs, createComputer, fillComputedColumns } from '../computed';
-import { batchDatabase, queryDatabase, queryObjects, uniqueViolation } from '../db/query';
+import { computedSpecs, fillComputedColumns } from '../computed';
+import { batchDatabase, queryDatabase, uniqueViolation } from '../db/query';
+import { reasonOf } from '../errors';
 import { ALWAYS, both, compileFilter, compileOrder, compileRule, usesRelations } from '../filter';
-import { checkUserFields, visibleFields } from '../hidden-fields';
 import { generateId } from '../crypto';
+import { inBackground } from '../platform/runtime';
 import { pluginMay } from '../plugins/grant';
 import {
-	applyPluginReads,
-	applyPluginWrites,
-	hasPluginFields,
-	planPluginReads,
-	planPluginWrites
-} from '../plugin-fields';
-import { USERS_COLLECTION } from './auth.service';
-import { FILES_COLLECTION } from '#lib/files/files.js';
-import { readableColumns } from './fields.service';
-import { parseThumbnailList, storageKeys } from './files.service';
-import { inBackground } from '../platform/runtime';
-import { collections, fields } from '../db';
+	accessUser,
+	checkUserFields,
+	protectedWrites,
+	relatedCollections,
+	visibleFields
+} from '../records/access';
+import {
+	allRelations,
+	CascadeTooLargeFailure,
+	deletionPlan,
+	executeDeletion,
+	linksTo,
+	RecordInUseFailure,
+	RecordIsDefaultFailure,
+	storageKeysOf,
+	storedFiles,
+	userCleanupStatements
+} from '../records/deletion';
+import { readGrid } from '../records/grid';
+import { deserialize } from '../records/plugin-values';
+import { includeRelated } from '../records/include';
+import { includeTree, selectFields, withIncluded } from '../records/query';
+import { relationTarget } from '../records/relations';
+import {
+	apiFields,
+	autoFields,
+	keyParams,
+	readableColumns,
+	MAX_IDS,
+	placeholders,
+	returning,
+	toApiRecord
+} from '../records/values';
+import {
+	computeValues,
+	fillSqlDefaults,
+	invalidRecord,
+	previewComputed,
+	readStoredRecord,
+	validateInput
+} from '../records/write';
 import { Service } from './base.service';
 
-/**
- * A value as the grid and the record form get it. Fields with a plugin's type hold what the
- * plugin's `deserialize` returned, which can be any value that devalue can send.
- */
-export type RecordValue = string | number | null | RelationRef[];
-
-/** A related record as shown in the grid: its id and a human readable label. */
-export type RelationRef = { id: string; label: string };
-
-/**
- * A record with a value per field. `_key` identifies it: the value of the ID field, or its `rowid`
- * when the collection has none. Field names start with a letter, so it never collides with one.
- */
-export type RecordRow = { _key: string } & {
-	[column: string]: RecordValue;
-};
-
-/**
- * The collection a relation field points to, the field used as the label of its records, and
- * its `id` and first `created` field. Without an `id` field its records can't be linked.
- */
-type RelationTarget = {
-	collection: Collection;
-	label: string | null;
-	id: string | null;
-	created: string | null;
-};
+export type { ApiAccess } from '../records/access';
+export type {
+	ApiRecord,
+	RecordInput,
+	RecordIssues,
+	RecordRow,
+	RecordValue,
+	RelationRef
+} from '../records/values';
 
 export type ListRecordsOptions = {
 	page: number;
@@ -96,35 +111,6 @@ export type RecordPage = {
 	signInMethods?: Record<string, SignInMethod[]>;
 };
 
-/** Field values as submitted by a form, keyed by field name. */
-export type RecordInput = Record<string, unknown>;
-
-/** Validation messages keyed by field name. */
-export type RecordIssues = Record<string, string>;
-
-type InvalidRecordError = ServiceError<8001, 'INVALID_RECORD'> & { data: { issues: RecordIssues } };
-type UniqueViolationError = ServiceError<8002, 'UNIQUE_VIOLATION'> & { data: { field: string } };
-
-type RecordContext = { collection: Collection; fields: Field[]; databaseId: string };
-
-/**
- * Who calls the records API: the signed-in user (a row of `users`) or `null`, or a plugin with
- * what it may do. Record operations that get an `access` check the collection's API rule for a
- * user and the grant for a plugin; without one (the dashboard) every record is reachable.
- */
-export type ApiAccess = { user: Record<string, unknown> | null } | { plugin: PluginGrant };
-
-/** The user an API rule or a filter's `$user` stands for: nobody for a plugin. */
-function accessUser(access: ApiAccess | undefined) {
-	return access && 'user' in access ? access.user : null;
-}
-
-/**
- * A record as the records API returns it: every field except blobs, with real values: booleans as
- * `true`/`false`, JSON fields parsed, and multiple relations, files and lists as arrays.
- */
-export type ApiRecord = Record<string, unknown>;
-
 export type ApiListOptions = {
 	/** Records to return. */
 	limit: number;
@@ -143,9 +129,6 @@ export type ApiListOptions = {
 /** What the records API returns of a record: `select` limits the fields, `include` relations. */
 export type ApiReadOptions = { select?: string[]; include?: string[] };
 
-/** Relation fields to expand by name, each with the fields to expand in its related records. */
-type IncludeTree = Map<string, IncludeTree>;
-
 export type ApiRecordList = {
 	items: ApiRecord[];
 	/** Records that match, on every page. */
@@ -154,568 +137,73 @@ export type ApiRecordList = {
 	offset: number;
 };
 
-type GuardError =
-	| ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>
-	| ServiceError<8013, 'ACTION_NOT_AVAILABLE'>
-	| ServiceError<8014, 'RULE_LOCKED'>
-	| (ServiceError<8016, 'INVALID_RULE'> & { data: { action: ApiRuleAction; message: string } })
-	| InvalidRecordError;
-
 /** The query parameters of the records API that `INVALID_QUERY` can be about. */
 type ApiQueryParam = 'where' | 'order' | 'select' | 'include';
 
-type InvalidQueryError = ServiceError<8015, 'INVALID_QUERY'> & {
-	data: { param: ApiQueryParam; message: string };
+/** A query of the records API: what `apiList` takes besides the page. */
+type ApiQuery = {
+	where?: string | null;
+	order?: string | null;
+	select?: string[] | null;
+	include?: string[] | null;
 };
 
-type IncludeError =
+/** Every error of the records service; callers branch on the codes they handle. */
+export type RecordsError =
 	| ContextError
-	| GuardError
-	| InvalidQueryError
-	| ServiceError<6010, 'GET_COLLECTION_BY_ID_FAILED'>
-	| ServiceError<8018, 'EXPAND_RECORDS_FAILED'>;
-
-/** A record can't be deleted: a record of `collection` links to it through a restricting `field`. */
-type RecordInUseError = ServiceError<8019, 'RECORD_IN_USE'> & {
-	data: { collection: string; field: string };
-};
-
-/** See `RecordInUseError`; thrown while a delete is planned. */
-class RecordInUseFailure extends Error {
-	constructor(
-		readonly collection: string,
-		readonly field: string
-	) {
-		super(`A record of ${collection} links to it through ${field}`);
-	}
-}
-
-/** A record can't be deleted: it is the default value of relation `field` of `collection`. */
-type RecordIsDefaultError = ServiceError<8021, 'RECORD_IS_DEFAULT'> & {
-	data: { collection: string; field: string };
-};
-
-/** See `RecordIsDefaultError`; thrown while a delete is planned. */
-class RecordIsDefaultFailure extends Error {
-	constructor(
-		readonly collection: string,
-		readonly field: string
-	) {
-		super(`The record is the default value of ${collection}.${field}`);
-	}
-}
-
-/** Deleting would cascade to more records than `MAX_CASCADE`; thrown while a delete is planned. */
-class CascadeTooLargeFailure extends Error {}
-
-/** A relation field, the name of the collection it belongs to, and what deleting does to it. */
-type Relation = { collection: string; field: Field; onDelete: RelationOnDelete };
+	| CollectionLookupError
+	| ServiceError<8000, 'RECORDS_FAILED'>
+	| (ServiceError<8001, 'INVALID_RECORD'> & { data: { issues: RecordIssues } })
+	| (ServiceError<8002, 'UNIQUE_VIOLATION'> & { data: { field: string } })
+	| ServiceError<8003, 'RECORD_NOT_FOUND'>
+	| ServiceError<8012, 'NO_FIELDS'>
+	| ServiceError<8013, 'ACTION_NOT_AVAILABLE'>
+	| ServiceError<8014, 'RULE_LOCKED'>
+	| (ServiceError<8015, 'INVALID_QUERY'> & { data: { param: ApiQueryParam; message: string } })
+	| (ServiceError<8016, 'INVALID_RULE'> & { data: { action: ApiRuleAction; message: string } })
+	| ServiceError<8017, 'RULE_DENIED'>
+	| (ServiceError<8019, 'RECORD_IN_USE'> & { data: { collection: string; field: string } })
+	| ServiceError<8020, 'CASCADE_TOO_LARGE'>
+	| (ServiceError<8021, 'RECORD_IS_DEFAULT'> & { data: { collection: string; field: string } });
 
 /**
- * What a delete does (see `deletionPlan()`): the records to delete per collection name (those
- * requested and those it cascades to), and the relation fields to unlink the deleted ids from.
+ * Records: the rows of a collection's table in the app database. The dashboard reads them as the
+ * grid shows them (`list`, `get`), the records API with its rules and query parameters
+ * (`apiList`, `apiGet`, ...), and both write through `create`, `update` and `delete`. The pure
+ * parts live in `src/lib/server/records/`.
  */
-type DeletionPlan = {
-	deletes: Map<string, { context: RecordContext; ids: Set<string> }>;
-	unlinks: { context: RecordContext; field: Field; ids: string[] }[];
-};
-
-type ContextError =
-	| ServiceError<1004, 'APP_DATABASE_MISSING'>
-	| ServiceError<5000, 'GET_SETTING_FAILED'>
-	| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-	| ServiceError<6006, 'COLLECTION_NOT_FOUND'>;
-
-/**
- * The last context read per collection name, cached per isolate so reads don't wait for it (see
- * `read()`). It is never trusted without checking: another isolate may have changed the schema.
- */
-const contexts = new Map<string, RecordContext>();
-
-/** D1 allows at most 100 bound parameters per statement (SQLite itself allows more). */
-const MAX_IDS = 90;
-/** Most records one delete may cascade to through relation fields. */
-const MAX_CASCADE = 1000;
-/** Field types whose value makes a good label for a related record, in order of preference. */
-const LABEL_TYPES = new Set(['text', 'email', 'url']);
-
-function isEmpty(value: unknown) {
-	return value === undefined || value === null || value === '';
-}
-
-function parseIds(value: unknown): string[] {
-	if (Array.isArray(value)) {
-		return value.map(String).filter(Boolean);
-	}
-
-	if (typeof value !== 'string' || value === '') {
-		return [];
-	}
-
-	if (value.startsWith('[')) {
-		const parsed: unknown = JSON.parse(value);
-		return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
-	}
-
-	return [value];
-}
-
-/**
- * Converts a submitted value into what is stored in the column.
- *
- * @returns `{ value }` (`null` for an empty value) or `{ error }` with a message for the form.
- */
-function parseValue(
-	field: Field,
-	raw: unknown
-): { value: string | number | null } | { error: string } {
-	if (field.type === 'boolean') {
-		const checked = raw === true || raw === 'true' || raw === 'on' || raw === '1' || raw === 1;
-		return { value: checked ? 1 : 0 };
-	}
-
-	if (isRelationType(field.type)) {
-		let ids: string[];
-
-		try {
-			ids = parseIds(raw);
-		} catch {
-			return { error: 'Invalid selection' };
-		}
-
-		if (!ids.length) {
-			return field.required ? { error: 'Required' } : { value: null };
-		}
-
-		return { value: field.options.multiple ? JSON.stringify(ids) : ids[0] };
-	}
-
-	if (field.type === 'list') {
-		let selected: string[];
-
-		try {
-			selected = field.options.multiple
-				? [...new Set(parseIds(raw))]
-				: isEmpty(raw)
-					? []
-					: [String(raw)];
-		} catch {
-			return { error: 'Invalid selection' };
-		}
-
-		if (!selected.length) {
-			return field.required ? { error: 'Required' } : { value: null };
-		}
-
-		const allowed = field.options.values ?? [];
-
-		if (selected.some((value) => !allowed.includes(value))) {
-			return { error: 'Choose an item from the list' };
-		}
-
-		// Stored in the order of the list, so the same selection always gives the same value.
-		const ordered = allowed.filter((value) => selected.includes(value));
-
-		return { value: field.options.multiple ? JSON.stringify(ordered) : ordered[0] };
-	}
-
-	if (isEmpty(raw)) {
-		return field.required ? { error: 'Required' } : { value: null };
-	}
-
-	// The API may send JSON fields as values instead of JSON text.
-	const text = field.type === 'json' && typeof raw !== 'string' ? JSON.stringify(raw) : String(raw);
-
-	switch (field.type) {
-		case 'number': {
-			const number = Number(text);
-			return Number.isFinite(number) ? { value: number } : { error: 'Enter a number' };
-		}
-		case 'integer': {
-			const number = Number(text);
-			return Number.isInteger(number) ? { value: number } : { error: 'Enter a whole number' };
-		}
-		case 'date': {
-			// `datetime-local` inputs send no timezone; dates are stored and edited in UTC.
-			const time = Date.parse(/T\d{2}:\d{2}(:\d{2})?$/.test(text) ? `${text}Z` : text);
-			return Number.isNaN(time)
-				? { error: 'Enter a valid date' }
-				: { value: new Date(time).toISOString() };
-		}
-		case 'email':
-			return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(text)
-				? { value: text }
-				: { error: 'Enter an email address' };
-		case 'url':
-			return URL.canParse(text)
-				? { value: text }
-				: { error: 'Enter a URL, e.g. https://example.com' };
-		case 'json':
-			try {
-				return { value: JSON.stringify(JSON.parse(text)) };
-			} catch {
-				return { error: 'Enter valid JSON' };
-			}
-		default:
-			return { value: text };
-	}
-}
-
-/**
- * The fields Pouchbase fills in: the `id` field (`null` when removed), and the timestamps set when
- * a record is created or saved. `key` is the column records are found by: the `id` field, or
- * SQLite's `rowid`.
- */
-function autoFields(collectionFields: Field[]) {
-	const idField = collectionFields.find((field) => field.type === 'id');
-	const id = idField?.name ?? null;
-	const names = (type: Field['type']) =>
-		collectionFields.filter((field) => field.type === type).map((field) => field.name);
-
-	return {
-		id,
-		generator: idField ? idGenerator(idField.options) : null,
-		key: id ?? 'rowid',
-		created: names('created'),
-		updated: names('updated')
-	};
-}
-
-/** Record keys as bound parameters; `rowid`s are integers, so other values can't match. */
-function keyParams(key: string, ids: string[]) {
-	return key === 'rowid' ? ids.map(Number).filter(Number.isSafeInteger) : ids;
-}
-
-/** `items` in chunks of at most `size`, e.g. to stay within `MAX_IDS` bound parameters. */
-function chunks<T>(items: T[], size: number) {
-	return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
-		items.slice(index * size, (index + 1) * size)
-	);
-}
-
-/** Whether the relation field links to the collection with this id. */
-function linksTo(relation: Relation, collectionId: string) {
-	return relation.field.options.collectionId === collectionId;
-}
-
-/**
- * The keys of the records of `source` whose relation `field` links to one of `ids`. Ids are
- * compared as text: a relation stores them as text, also those of auto-increment ids.
- */
-function linkedSelect(source: RecordContext, field: Field, ids: string[]) {
-	const table = `"${source.collection.name}"`;
-	const key = `${table}."${autoFields(source.fields).key}"`;
-	const placeholders = ids.map(() => '?').join(', ');
-
-	return {
-		sql: field.options.multiple
-			? `SELECT DISTINCT ${key} FROM ${table}, json_each(${table}."${field.name}") AS "item" WHERE CAST("item"."value" AS TEXT) IN (${placeholders})`
-			: `SELECT ${key} FROM ${table} WHERE "${field.name}" IN (${placeholders})`,
-		params: ids
-	};
-}
-
-/**
- * Removes `ids` from relation `field` of the records of `source`: a single relation becomes empty,
- * a multiple one loses them (and becomes empty without any left). Returns the changed rows.
- */
-function unlinkStatement(source: RecordContext, field: Field, ids: string[]) {
-	const table = `"${source.collection.name}"`;
-	const column = `${table}."${field.name}"`;
-	const placeholders = ids.map(() => '?').join(', ');
-	const key = autoFields(source.fields).key;
-
-	return field.options.multiple
-		? {
-				sql: `UPDATE ${table} SET "${field.name}" = (SELECT CASE WHEN count(*) THEN json_group_array("value") END FROM json_each(${column}) WHERE CAST("value" AS TEXT) NOT IN (${placeholders})) WHERE EXISTS (SELECT 1 FROM json_each(${column}) WHERE CAST("value" AS TEXT) IN (${placeholders})) RETURNING ${returning(key, source.fields)}`,
-				params: [...ids, ...ids]
-			}
-		: {
-				sql: `UPDATE ${table} SET "${field.name}" = NULL WHERE "${field.name}" IN (${placeholders}) RETURNING ${returning(key, source.fields)}`,
-				params: ids
-			};
-}
-
-/** A selected row (the key first, then every field) as a record. */
-function toRecord(collectionFields: Field[], row: unknown[]) {
-	return {
-		...Object.fromEntries(collectionFields.map((field, index) => [field.name, row[index + 1]])),
-		_key: String(row[0])
-	} as RecordRow;
-}
-
-/** The fields the records API reads and filters on: all but blobs, which can be large. */
-function apiFields(collectionFields: Field[]) {
-	return collectionFields.filter((field) => field.type !== 'blob');
-}
-
-/**
- * The view rule a path through relations (`author.role`) checks on records of `collection`:
- * none without `access` (admins, and API rules, which the admin wrote), `null` when the API
- * doesn't show them to `access`, and otherwise its view rule, as for `?include=`.
- */
-function relatedViewRule(collection: Collection, access: ApiAccess | undefined) {
-	if (!access) {
-		return undefined;
-	}
-
-	if (!apiActions(collection).includes('view')) {
-		return null;
-	}
-
-	if ('plugin' in access) {
-		return pluginMay(access.plugin, 'view', collection.name) ? undefined : null;
-	}
-
-	return collection.settings?.rules?.view ?? null;
-}
-
-/**
- * The collections that relations point to, by id, for conditions with paths such as
- * `post.author.role`; their records are checked against their view rule for `access`.
- */
-export function relatedCollections(
-	all: { collection: Collection; fields: Field[] }[],
-	access: ApiAccess | undefined
-): NonNullable<FilterContext['relations']> {
-	const byId = new Map(all.map((entry) => [entry.collection.id, entry]));
-
-	return (id) => {
-		const entry = byId.get(id);
-
-		if (!entry) {
-			return undefined;
-		}
-
-		return {
-			name: entry.collection.name,
-			key: entry.fields.find((field) => field.type === 'id')?.name ?? null,
-			// Hidden fields aren't for app users, so their filters can't reach them either.
-			fields: visibleFields(entry.fields, access),
-			rule: relatedViewRule(entry.collection, access)
-		};
-	};
-}
-
-/** A stored value as the records API returns it (see `ApiRecord`). */
-function decodeValue(field: Field, value: unknown): unknown {
-	if (value === null || value === undefined) {
-		return isMultiple(field) ? [] : null;
-	}
-
-	if (field.type === 'boolean') {
-		return Number(value) === 1;
-	}
-
-	if (field.type === 'json' || isMultiple(field)) {
-		try {
-			const parsed: unknown = JSON.parse(String(value));
-			return isMultiple(field) && !Array.isArray(parsed) ? [parsed] : parsed;
-		} catch {
-			return isMultiple(field) ? [String(value)] : value;
-		}
-	}
-
-	return value;
-}
-
-/** The fields the API returns: `names` (checked) or all readable ones. Throws a `FilterError`. */
-function selectFields(readable: Field[], names: string[] | undefined) {
-	if (!names?.length) {
-		return readable;
-	}
-
-	for (const name of names) {
-		if (!readable.some((field) => field.name === name)) {
-			throw new FilterError(`Unknown field \`${name}\``);
-		}
-	}
-
-	return readable.filter((field) => names.includes(field.name));
-}
-
-/**
- * `?include=author,comments.author` as a tree of field names. Throws a `FilterError` for a path
- * that is empty or deeper than `MAX_RELATION_DEPTH`.
- */
-function parseInclude(paths: string[] | undefined): IncludeTree {
-	const tree: IncludeTree = new Map();
-
-	for (const path of paths ?? []) {
-		const names = path.split('.').map((name) => name.trim());
-
-		if (names.some((name) => !name)) {
-			throw new FilterError(`Invalid path \`${path}\``);
-		}
-
-		if (names.length > MAX_RELATION_DEPTH) {
-			throw new FilterError(
-				`\`${path}\` is too deep: relations can be included ${MAX_RELATION_DEPTH} levels deep`
-			);
-		}
-
-		let level = tree;
-
-		for (const name of names) {
-			let next = level.get(name);
-
-			if (!next) {
-				next = new Map();
-				level.set(name, next);
-			}
-
-			level = next;
-		}
-	}
-
-	return tree;
-}
-
-/**
- * `paths` (or a tree of them) as a tree, checking that every field of its first level is a
- * relation or file field of `readable`. Throws a `FilterError`.
- */
-function includeTree(readable: Field[], paths: string[] | IncludeTree | undefined) {
-	const tree = paths instanceof Map ? paths : parseInclude(paths);
-
-	for (const name of tree.keys()) {
-		const field = readable.find((field) => field.name === name);
-
-		if (!field) {
-			throw new FilterError(`Unknown field \`${name}\``);
-		}
-
-		if (!isRelationType(field.type)) {
-			throw new FilterError(`\`${name}\` is not a relation or file field`);
-		}
-	}
-
-	return tree;
-}
-
-/** The fields to select: `names` plus the fields to expand, or all of them without `names`. */
-function withIncluded(names: string[] | undefined, tree: IncludeTree) {
-	return names?.length ? [...new Set([...names, ...tree.keys()])] : names;
-}
-
-/** The ids in a decoded relation value: one id, an array of them, or none. */
-function relatedIds(value: unknown) {
-	if (Array.isArray(value)) {
-		return value.map(String);
-	}
-
-	return value === null || value === undefined ? [] : [String(value)];
-}
-
-/** A row with the columns of `selected`, in order, as an API record. */
-function toApiRecord(selected: Field[], row: unknown[]) {
-	return Object.fromEntries(
-		selected.map((field, index) => [field.name, decodeValue(field, row[index])])
-	) as ApiRecord;
-}
-
-/** Stored values by field name as the records API returns the record, e.g. for realtime events. */
-export function apiRecord(collectionFields: Field[], values: Record<string, unknown>) {
-	const readable = apiFields(collectionFields);
-	return toApiRecord(
-		readable,
-		readable.map((field) => values[field.name])
-	);
-}
-
-/** What a write returns: the key, then the API fields, for its realtime event. */
-function returning(key: string, collectionFields: Field[]) {
-	return [`"${key}"`, ...apiFields(collectionFields).map((field) => `"${field.name}"`)].join(', ');
-}
-
-function columnExpression(field: Pick<Field, 'name' | 'type'>) {
-	// Blobs can be large; the grid only needs their size.
-	return field.type === 'blob' ? `length("${field.name}") AS "${field.name}"` : `"${field.name}"`;
-}
-
 export class RecordsService extends Service {
-	/** One page of records, plus the fields (columns) of the collection. */
-	list(
-		collectionName: string,
-		options: ListRecordsOptions
-	): ResultAsync<
-		RecordPage,
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<8000, 'LIST_RECORDS_FAILED'>
-	> {
-		return this.read(
-			collectionName,
-			async ({ collection, fields: collectionFields, databaseId }) => {
-				const { key, created } = autoFields(collectionFields);
+	/** One page of records as the grid shows them, plus the fields (columns) of the collection. */
+	list(collectionName: string, options: ListRecordsOptions): ResultAsync<RecordPage, RecordsError> {
+		return this.run(async () => {
+			const context = await this.context(collectionName);
+			const { collection, fields: collectionFields, databaseId } = context;
+			const { key, created } = autoFields(collectionFields);
+			const page = { fields: collectionFields, page: options.page, perPage: options.perPage };
 
-				// Without fields the collection has no table yet.
-				if (!collectionFields.length) {
-					return {
-						relationTargets: {},
-						fields: collectionFields,
-						items: [],
-						total: 0,
-						page: options.page,
-						perPage: options.perPage,
-						sort: key,
-						order: 'desc'
-					} satisfies RecordPage;
-				}
+			// Without fields the collection has no table yet.
+			if (!collectionFields.length) {
+				return { ...page, relationTargets: {}, items: [], total: 0, sort: key, order: 'desc' };
+			}
 
-				const sortable = collectionFields
-					.filter((field) => field.type !== 'blob')
-					.map((field) => field.name);
-				const sort =
-					options.sort && sortable.includes(options.sort) ? options.sort : (created[0] ?? key);
-				const order = options.order === 'asc' ? 'asc' : 'desc';
-				const columns = [`"${key}"`, ...collectionFields.map(columnExpression)];
+			const sortable = collectionFields
+				.filter((field) => field.type !== 'blob')
+				.map((field) => field.name);
+			const sort =
+				options.sort && sortable.includes(options.sort) ? options.sort : (created[0] ?? key);
+			const order = options.order === 'asc' ? 'asc' : 'desc';
+			const [[total], grid] = await Promise.all([
+				queryDatabase(databaseId, `SELECT count(*) FROM "${collection.name}"`),
+				readGrid(
+					this.services,
+					context,
+					`ORDER BY "${sort}" ${order}, "${key}" ${order} LIMIT ? OFFSET ?`,
+					[options.perPage, (options.page - 1) * options.perPage]
+				)
+			]);
 
-				// The relation targets don't depend on the rows, so they're read at the same time.
-				const [[[total], rows], targets] = await Promise.all([
-					batchDatabase(databaseId, [
-						{ sql: `SELECT count(*) FROM "${collection.name}"` },
-						{
-							sql: `SELECT ${columns.join(', ')} FROM "${collection.name}" ORDER BY "${sort}" ${order}, "${key}" ${order} LIMIT ? OFFSET ?`,
-							params: [options.perPage, (options.page - 1) * options.perPage]
-						}
-					]),
-					this.relationTargets(
-						collectionFields
-							.filter((field) => isRelationType(field.type) && field.options.collectionId)
-							.map((field) => field.options.collectionId!)
-					)
-				]);
-
-				const items = rows.map((row) => toRecord(collectionFields, row));
-
-				const [relationTargets, signInMethods] = await Promise.all([
-					this.resolveRelations(databaseId, collectionFields, items, targets),
-					collection.system && collection.name === USERS_COLLECTION
-						? this.signInMethods(
-								databaseId,
-								items.map((item) => item._key)
-							)
-						: undefined,
-					this.deserialize(collectionFields, items)
-				]);
-
-				return {
-					signInMethods,
-					relationTargets,
-					fields: collectionFields,
-					items,
-					total: Number(total?.[0] ?? 0),
-					page: options.page,
-					perPage: options.perPage,
-					sort,
-					order
-				} satisfies RecordPage;
-			},
-			(error) => this.error(8000, 'LIST_RECORDS_FAILED', error)
-		);
+			return { ...page, ...grid, total: Number(total?.[0] ?? 0), sort, order };
+		}, this.failed);
 	}
 
 	/**
@@ -725,56 +213,25 @@ export class RecordsService extends Service {
 	get(
 		collectionName: string,
 		id: string
-	): ResultAsync<
-		{ item: RecordRow; signInMethods?: SignInMethod[] } | null,
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<8011, 'GET_RECORD_FAILED'>
-	> {
-		return this.read(
-			collectionName,
-			async ({ collection, fields: collectionFields, databaseId }) => {
-				const { key } = autoFields(collectionFields);
+	): ResultAsync<{ item: RecordRow; signInMethods?: SignInMethod[] } | null, RecordsError> {
+		return this.run(async () => {
+			const context = await this.context(collectionName);
+			const { key } = autoFields(context.fields);
 
-				if (!collectionFields.length) {
-					return null;
-				}
+			if (!context.fields.length) {
+				return null;
+			}
 
-				const columns = [`"${key}"`, ...collectionFields.map(columnExpression)];
+			const { items, signInMethods } = await readGrid(
+				this.services,
+				context,
+				`WHERE "${key}" = ?`,
+				keyParams(key, [id])
+			);
+			const [item] = items;
 
-				// The relation targets don't depend on the row, so they're read at the same time.
-				const [[row], targets] = await Promise.all([
-					queryDatabase(
-						databaseId,
-						`SELECT ${columns.join(', ')} FROM "${collection.name}" WHERE "${key}" = ?`,
-						keyParams(key, [id])
-					),
-					this.relationTargets(
-						collectionFields
-							.filter((field) => isRelationType(field.type) && field.options.collectionId)
-							.map((field) => field.options.collectionId!)
-					)
-				]);
-
-				if (!row) {
-					return null;
-				}
-
-				const item = toRecord(collectionFields, row);
-				const [, signInMethods] = await Promise.all([
-					this.resolveRelations(databaseId, collectionFields, [item], targets),
-					collection.system && collection.name === USERS_COLLECTION
-						? this.signInMethods(databaseId, [item._key])
-						: undefined,
-					this.deserialize(collectionFields, [item])
-				]);
-
-				return { item, signInMethods: signInMethods?.[item._key] };
-			},
-			(error) => this.error(8011, 'GET_RECORD_FAILED', error)
-		);
+			return item ? { item, signInMethods: signInMethods?.[item._key] } : null;
+		}, this.failed);
 	}
 
 	/**
@@ -787,115 +244,73 @@ export class RecordsService extends Service {
 		collectionName: string,
 		options: ApiListOptions,
 		access: ApiAccess | undefined
-	): ResultAsync<ApiRecordList, IncludeError | ServiceError<8000, 'LIST_RECORDS_FAILED'>> {
-		return this.context(collectionName).andThen((context) =>
-			this.guard(context, 'list', access).andThen((rule) => {
-				const { collection, fields: collectionFields, databaseId } = context;
-				const readable = visibleFields(collectionFields, access);
-				const { key, created } = autoFields(collectionFields);
+	): ResultAsync<ApiRecordList, RecordsError> {
+		return this.run(async () => {
+			const context = await this.context(collectionName);
+			const { collection, fields: collectionFields, databaseId } = context;
+			const { key, created } = autoFields(collectionFields);
+			const rule = await this.guard(context, 'list', access);
+			const empty = { items: [], total: 0, limit: options.limit, offset: options.offset };
 
-				// Without fields the collection has no table yet.
-				if (!collectionFields.length) {
-					return okAsync({ items: [], total: 0, limit: options.limit, offset: options.offset });
+			// Without fields the collection has no table yet.
+			if (!collectionFields.length) {
+				return empty;
+			}
+
+			const { where, sort, tree, selected } = await this.compileQuery(
+				context,
+				rule,
+				options,
+				access
+			);
+			// Without an order, records come in the order they were created.
+			const order = [...(sort.length ? sort : [`"${created[0] ?? key}" ASC`]), `"${key}" ASC`].join(
+				', '
+			);
+			const columns = selected.map((field) => `"${field.name}"`).join(', ');
+			const [[total], rows] = await batchDatabase(databaseId, [
+				{
+					sql: `SELECT count(*) FROM "${collection.name}" WHERE ${where.sql}`,
+					params: where.params
+				},
+				{
+					sql: `SELECT ${columns} FROM "${collection.name}" WHERE ${where.sql} ORDER BY ${order} LIMIT ? OFFSET ?`,
+					params: [...where.params, options.limit, options.offset]
 				}
+			]);
+			const items = rows.map((row) => toApiRecord(selected, row));
 
-				return this.filterRelations([options.where], access)
-					.andThen((relations) =>
-						this.userFields(options.where, access).map((userFields) => ({
-							relations,
-							userFields
-						}))
-					)
-					.andThen(({ relations, userFields }) =>
-						this.compileQuery('where', () => {
-							if (userFields) {
-								checkUserFields(options.where, userFields);
-							}
+			await deserialize(this.services.plugins(), collectionFields, items);
+			await includeRelated(this.includeHost, collectionFields, items, tree, access);
 
-							return options.where?.trim()
-								? both(
-										rule,
-										compileFilter(options.where, readable, {
-											user: accessUser(access),
-											table: collection.name,
-											relations
-										})
-									)
-								: rule;
-						})
-					)
-					.andThen((where) =>
-						this.compileQuery('order', () => compileOrder(options.order ?? '', readable))
-							.andThen((sort) =>
-								this.compileQuery('include', () => includeTree(readable, options.include)).map(
-									(tree) => ({ sort, tree })
-								)
-							)
-							.andThen(({ sort, tree }) =>
-								this.compileQuery('select', () =>
-									selectFields(readable, withIncluded(options.select, tree))
-								).map((selected) => ({ sort, tree, selected }))
-							)
-							.andThen(({ sort, tree, selected }) => {
-								// Without an order, records come in the order they were created.
-								const order = [
-									...(sort.length ? sort : [`"${created[0] ?? key}" ASC`]),
-									`"${key}" ASC`
-								];
-								const columns = selected.map((field) => `"${field.name}"`).join(', ');
-
-								return fromPromise(
-									batchDatabase(databaseId, [
-										{
-											sql: `SELECT count(*) FROM "${collection.name}" WHERE ${where.sql}`,
-											params: where.params
-										},
-										{
-											sql: `SELECT ${columns} FROM "${collection.name}" WHERE ${where.sql} ORDER BY ${order.join(', ')} LIMIT ? OFFSET ?`,
-											params: [...where.params, options.limit, options.offset]
-										}
-									]),
-									(error) => this.error(8000, 'LIST_RECORDS_FAILED', error)
-								)
-									.map(([[total], rows]) => {
-										return {
-											items: rows.map((row) => toApiRecord(selected, row)),
-											total: Number(total?.[0] ?? 0),
-											limit: options.limit,
-											offset: options.offset
-										} satisfies ApiRecordList;
-									})
-									.andThen((list) => this.deserialize(collectionFields, list.items).map(() => list))
-									.andThen((list) =>
-										this.include(collectionFields, list.items, tree, access).map(() => list)
-									);
-							})
-					);
-			})
-		);
+			return { ...empty, items, total: Number(total?.[0] ?? 0) };
+		}, this.failed);
 	}
 
 	/**
 	 * One record for the records API; `null` when it doesn't exist or the collection's view rule
-	 * doesn't match it. Without `access`, the rule isn't checked. `fields` limits the fields and
-	 * `expand` replaces relations by their records (see `include()`).
+	 * doesn't match it. Without `access`, the rule isn't checked; with `checkRule: false`, only
+	 * the visibility of fields and included records is (for a record that was just written, and
+	 * the user's own record). `select` limits the fields and `include` replaces relations by their
+	 * records (see `include()`).
 	 */
 	apiGet(
 		collectionName: string,
 		id: string,
-		options: ApiReadOptions & { access?: ApiAccess } = {}
-	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
-		return this.readApiRecord(collectionName, id, options, options.access, options.access);
+		options: ApiReadOptions & { access?: ApiAccess; checkRule?: boolean } = {}
+	): ResultAsync<ApiRecord | null, RecordsError> {
+		return this.run(
+			async () => this.readOne(await this.context(collectionName), id, options),
+			this.failed
+		);
 	}
 
 	/**
 	 * The signed-in user's own record, as `/api/auth/me` returns it: whatever the view rule of
 	 * `users` says, but without the hidden fields, like every record an app user reads.
 	 */
-	apiSelf(
-		user: Record<string, unknown>
-	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
-		return this.readApiRecord(USERS_COLLECTION, String(user.id), {}, undefined, { user });
+	apiSelf(user: Record<string, unknown>): ResultAsync<ApiRecord | null, RecordsError> {
+		return this.apiGet(USERS_COLLECTION, String(user.id), { access: { user }, checkRule: false });
 	}
 
 	/** Creates a record through the records API (see `create`) and returns it (see `apiGet`). */
@@ -904,15 +319,12 @@ export class RecordsService extends Service {
 		input: RecordInput,
 		access: ApiAccess | undefined,
 		options: ApiReadOptions = {}
-	): ResultAsync<
-		ApiRecord,
-		| ErrorOf<ReturnType<RecordsService['create']>>
-		| ErrorOf<ReturnType<RecordsService['apiGet']>>
-		| ServiceError<8003, 'RECORD_NOT_FOUND'>
-	> {
-		return this.create(collectionName, input, { access }).andThen(({ id }) =>
-			this.found(collectionName, id, options, access)
-		);
+	): ResultAsync<ApiRecord, RecordsError> {
+		return this.run(async () => {
+			const { id } = await this.must(this.create(collectionName, input, { access }));
+
+			return this.found(collectionName, id, options, access);
+		}, this.failed);
 	}
 
 	/**
@@ -925,46 +337,72 @@ export class RecordsService extends Service {
 		input: RecordInput,
 		access: ApiAccess | undefined,
 		options: ApiReadOptions = {}
-	): ResultAsync<
-		ApiRecord,
-		ErrorOf<ReturnType<RecordsService['update']>> | ErrorOf<ReturnType<RecordsService['apiGet']>>
-	> {
-		return this.update(collectionName, id, input, { partial: true, access }).andThen(() =>
-			this.found(collectionName, id, options, access)
-		);
+	): ResultAsync<ApiRecord, RecordsError> {
+		return this.run(async () => {
+			await this.must(this.update(collectionName, id, input, { partial: true, access }));
+
+			return this.found(collectionName, id, options, access);
+		}, this.failed);
+	}
+
+	/**
+	 * Checks a query of the records API without running it: the collection offers `view` to
+	 * `access` (its view rule compiles and isn't locked), and `where`, `select` and `include` are
+	 * valid for the fields `access` may read; `include` is followed through the related
+	 * collections. For realtime subscriptions, which run the same query on every event.
+	 */
+	checkQuery(
+		collectionName: string,
+		query: ApiQuery,
+		access: ApiAccess | undefined
+	): ResultAsync<void, RecordsError> {
+		return this.run(async () => {
+			const context = await this.context(collectionName);
+			const rule = await this.guard(context, 'view', access);
+			const { tree } = await this.compileQuery(context, rule, query, access);
+
+			await includeRelated(this.includeHost, context.fields, [], tree, access);
+		}, this.failed);
+	}
+
+	/**
+	 * Expands the relations in `expand` of `records` of a collection in place, as `?include=` does
+	 * (see `include()`), for realtime events. Without records it only checks `expand`: every path
+	 * must be a chain of relations to collections whose view rule `access` may use.
+	 */
+	apiInclude(
+		collectionName: string,
+		records: ApiRecord[],
+		expand: string[],
+		access: ApiAccess | undefined
+	): ResultAsync<void, RecordsError> {
+		return this.run(async () => {
+			const { fields: collectionFields } = await this.context(collectionName);
+			const tree = this.query('include', () =>
+				includeTree(visibleFields(collectionFields, access), expand)
+			);
+
+			await includeRelated(this.includeHost, collectionFields, records, tree, access);
+		}, this.failed);
 	}
 
 	/** Records of a collection to pick from in a relation field. */
-	listOptions(
-		collectionId: string
-	): ResultAsync<
-		RelationRef[],
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<8007, 'LIST_OPTIONS_FAILED'>
-	> {
-		return this.services
-			.database()
-			.requireApp()
-			.andThen((appDatabase) =>
-				fromPromise(
-					(async () => {
-						const target = await this.relationTarget(collectionId);
+	listOptions(collectionId: string): ResultAsync<RelationRef[], RecordsError> {
+		return this.run(async () => {
+			const appDatabase = await this.must(this.services.database().requireApp());
+			const target = await relationTarget(collectionId);
 
-						if (!target?.id) {
-							return [];
-						}
+			if (!target?.id) {
+				return [];
+			}
 
-						const rows = await queryDatabase(
-							appDatabase.id,
-							`SELECT "${target.id}", "${target.label ?? target.id}" FROM "${target.collection.name}" ORDER BY "${target.created ?? 'rowid'}" DESC LIMIT 200`
-						);
-
-						return rows.map(([id, label]) => ({ id: String(id), label: String(label ?? id) }));
-					})(),
-					(error) => this.error(8007, 'LIST_OPTIONS_FAILED', error)
-				)
+			const rows = await queryDatabase(
+				appDatabase.id,
+				`SELECT "${target.id}", "${target.label ?? target.id}" FROM "${target.collection.name}" ORDER BY "${target.created ?? 'rowid'}" DESC LIMIT 200`
 			);
+
+			return rows.map(([id, label]) => ({ id: String(id), label: String(label ?? id) }));
+		}, this.failed);
 	}
 
 	/**
@@ -973,42 +411,30 @@ export class RecordsService extends Service {
 	 */
 	fileFields(
 		collectionName: string
-	): ResultAsync<
-		{ name: string; accept: string[]; maxSize: number }[],
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| ServiceError<8008, 'LIST_FILE_FIELDS_FAILED'>
-	> {
-		return this.context(collectionName).andThen(({ fields: collectionFields }) =>
-			fromPromise(
-				(async () => {
-					const found: { name: string; accept: string[]; maxSize: number }[] = [];
+	): ResultAsync<{ name: string; accept: string[]; maxSize: number }[], RecordsError> {
+		return this.run(async () => {
+			const { fields: collectionFields } = await this.context(collectionName);
+			const found: { name: string; accept: string[]; maxSize: number }[] = [];
 
-					for (const field of collectionFields) {
-						if (field.type === 'file') {
-							found.push({ name: field.name, ...fileFieldRules(field.options) });
-							continue;
-						}
+			for (const field of collectionFields) {
+				if (field.type === 'file') {
+					found.push({ name: field.name, ...fileFieldRules(field.options) });
+					continue;
+				}
 
-						if (field.type !== 'relation' || field.options.multiple) {
-							continue;
-						}
+				if (field.type !== 'relation' || field.options.multiple) {
+					continue;
+				}
 
-						const target = await this.relationTarget(field.options.collectionId);
+				const target = await relationTarget(field.options.collectionId);
 
-						if (target?.collection.system && target.collection.name === FILES_COLLECTION) {
-							found.push({ name: field.name, ...fileFieldRules({}) });
-						}
-					}
+				if (target?.collection.system && target.collection.name === FILES_COLLECTION) {
+					found.push({ name: field.name, ...fileFieldRules({}) });
+				}
+			}
 
-					return found;
-				})(),
-				(error) => this.error(8008, 'LIST_FILE_FIELDS_FAILED', error)
-			)
-		);
+			return found;
+		}, this.failed);
 	}
 
 	/**
@@ -1019,111 +445,96 @@ export class RecordsService extends Service {
 		collectionName: string,
 		input: RecordInput,
 		options: { access?: ApiAccess } = {}
-	): ResultAsync<
-		{ id: string },
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| InvalidRecordError
-		| UniqueViolationError
-		| ServiceError<8004, 'CREATE_RECORD_FAILED'>
-		| ServiceError<8012, 'NO_FIELDS'>
-		| ServiceError<8017, 'RULE_DENIED'>
-		| GuardError
-	> {
-		return this.context(collectionName).andThen((context) => {
-			const { collection, fields: collectionFields, databaseId } = context;
+	): ResultAsync<{ id: string }, RecordsError> {
+		return this.run(
+			async () => {
+				const context = await this.context(collectionName);
+				const { collection, fields: collectionFields, databaseId } = context;
+				const condition = await this.guard(context, 'create', options.access, input);
 
-			return this.guard(context, 'create', options.access, input).andThen((condition) =>
-				this.requireFields(collectionFields, this.error(8012, 'NO_FIELDS'))
-					.andThen(() =>
-						this.validate(databaseId, collectionFields, input, 8004, 'CREATE_RECORD_FAILED', {
-							creating: true
-						})
-					)
-					.andThen((values) => this.sqlDefaults(databaseId, collectionFields, values))
-					.andThen((values) => {
-						const auto = autoFields(collectionFields);
-						const now = Date.now();
-						const filled: Record<string, string | number> = Object.fromEntries(
-							[...auto.created, ...auto.updated].map((name) => [name, now])
-						);
-						// `autoincrement` ids are assigned by the database.
-						const id = auto.generator && generateId(auto.generator);
+				if (!collectionFields.length) {
+					this.fail(8012, 'NO_FIELDS');
+				}
 
-						if (auto.id && id) {
-							filled[auto.id] = id;
-						}
+				const values = await validateInput(
+					this.services.plugins(),
+					context,
+					collectionFields,
+					input,
+					{ creating: true }
+				);
 
-						for (const field of collectionFields) {
-							if (
-								field.type === 'date' &&
-								field.defaultValue === NOW_DEFAULT &&
-								values[field.name] === null
-							) {
-								filled[field.name] = new Date(now).toISOString();
-							}
-						}
+				await fillSqlDefaults(databaseId, collectionFields, values);
 
-						return this.compute(
-							collection.name,
-							collectionFields,
-							{ ...values, ...filled },
-							null,
-							8004,
-							'CREATE_RECORD_FAILED'
-						).map((computed) => ({ key: auto.key, values: { ...values, ...filled, ...computed } }));
-					})
-					.andThen(({ key, values }) => {
-						// Empty values are left out, so the column's DEFAULT applies.
-						const entries = Object.entries(values).filter(([, value]) => value !== null);
-						const columns = entries.map(([name]) => `"${name}"`).join(', ');
+				const auto = autoFields(collectionFields);
+				const now = Date.now();
+				const filled: Record<string, string | number> = Object.fromEntries(
+					[...auto.created, ...auto.updated].map((name) => [name, now])
+				);
+				// `autoincrement` ids are assigned by the database.
+				const id = auto.generator && generateId(auto.generator);
 
-						if (condition === ALWAYS) {
-							const insert = entries.length
-								? `(${columns}) VALUES (${entries.map(() => '?').join(', ')})`
-								: 'DEFAULT VALUES';
+				if (auto.id && id) {
+					filled[auto.id] = id;
+				}
 
-							return fromPromise(
-								queryDatabase(
-									databaseId,
-									`INSERT INTO "${collection.name}" ${insert} RETURNING ${returning(key, collectionFields)}`,
-									entries.map(([, value]) => value)
-								),
-								(error) => this.writeError(error, 8004, 'CREATE_RECORD_FAILED')
-							).map((rows) => {
-								this.announce(collection.name, 'create', collectionFields, rows);
-								return { id: String(rows[0][0]) };
-							});
-						}
+				for (const field of collectionFields) {
+					if (
+						field.type === 'date' &&
+						field.defaultValue === NOW_DEFAULT &&
+						values[field.name] === null
+					) {
+						filled[field.name] = new Date(now).toISOString();
+					}
+				}
 
-						// The rule runs on the new record: a row with every field's value, which is only
-						// inserted when it matches, in the same statement.
-						const row = apiFields(collectionFields).map((field) => field.name);
-						const target = entries.length ? `(${columns})` : '("rowid")';
-						const selected = entries.length ? columns : 'NULL';
+				const computed = await computeValues(
+					collection.name,
+					collectionFields,
+					{ ...values, ...filled },
+					null
+				);
+				const record = { ...values, ...filled, ...computed };
+				// Empty values are left out, so the column's DEFAULT applies.
+				const entries = Object.entries(record).filter(([, value]) => value !== null);
+				const columns = entries.map(([name]) => `"${name}"`).join(', ');
+				const returned = returning(auto.key, collectionFields);
+				let rows: unknown[][];
 
-						return fromPromise(
-							queryDatabase(
-								databaseId,
-								`INSERT INTO "${collection.name}" ${target} SELECT ${selected} FROM (SELECT ${row.map((name) => `? AS "${name}"`).join(', ')}) AS "${collection.name}" WHERE ${condition.sql} RETURNING ${returning(key, collectionFields)}`,
-								[...row.map((name) => values[name] ?? null), ...condition.params]
-							),
-							(error) => this.writeError(error, 8004, 'CREATE_RECORD_FAILED')
-						).andThen((rows) => {
-							if (!rows.length) {
-								return errAsync(this.error(8017, 'RULE_DENIED'));
-							}
+				if (condition === ALWAYS) {
+					const insert = entries.length
+						? `(${columns}) VALUES (${placeholders(entries)})`
+						: 'DEFAULT VALUES';
 
-							this.announce(collection.name, 'create', collectionFields, rows);
+					rows = await queryDatabase(
+						databaseId,
+						`INSERT INTO "${collection.name}" ${insert} RETURNING ${returned}`,
+						entries.map(([, value]) => value)
+					);
+				} else {
+					// The rule runs on the new record: a row with every field's value, which is only
+					// inserted when it matches, in the same statement.
+					const row = apiFields(collectionFields).map((field) => field.name);
+					const target = entries.length ? `(${columns})` : '("rowid")';
+					const selected = entries.length ? columns : 'NULL';
 
-							return okAsync({ id: String(rows[0][0]) });
-						});
-					})
-			);
-		});
+					rows = await queryDatabase(
+						databaseId,
+						`INSERT INTO "${collection.name}" ${target} SELECT ${selected} FROM (SELECT ${row.map((name) => `? AS "${name}"`).join(', ')}) AS "${collection.name}" WHERE ${condition.sql} RETURNING ${returned}`,
+						[...row.map((name) => record[name] ?? null), ...condition.params]
+					);
+
+					if (!rows.length) {
+						this.fail(8017, 'RULE_DENIED');
+					}
+				}
+
+				this.announce(collection.name, 'create', collectionFields, rows);
+
+				return { id: String(rows[0][0]) };
+			},
+			(error) => this.writeFailure(error)
+		);
 	}
 
 	/**
@@ -1136,93 +547,72 @@ export class RecordsService extends Service {
 		id: string,
 		input: RecordInput,
 		options: { partial?: boolean; access?: ApiAccess } = {}
-	): ResultAsync<
-		{ id: string },
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| InvalidRecordError
-		| UniqueViolationError
-		| ServiceError<8003, 'RECORD_NOT_FOUND'>
-		| ServiceError<8005, 'UPDATE_RECORD_FAILED'>
-		| GuardError
-	> {
-		return this.context(collectionName).andThen((context) => {
-			const { collection, fields: collectionFields, databaseId } = context;
+	): ResultAsync<{ id: string }, RecordsError> {
+		return this.run(
+			async () => {
+				const context = await this.context(collectionName);
+				const { collection, fields: collectionFields, databaseId } = context;
+				const condition = await this.guard(context, 'update', options.access, input);
 
-			return this.guard(context, 'update', options.access, input).andThen((condition) =>
-				this.requireFields(collectionFields, this.error(8003, 'RECORD_NOT_FOUND'))
-					.andThen(() =>
-						this.validate(
-							databaseId,
-							options.partial
-								? collectionFields.filter((field) => field.name in input)
-								: collectionFields,
-							input,
-							8005,
-							'UPDATE_RECORD_FAILED',
-							{ creating: false }
-						)
-					)
-					.andThen((values) => {
-						const now = Date.now();
-						const updated = Object.fromEntries(
-							autoFields(collectionFields).updated.map((name) => [name, now])
-						);
+				if (!collectionFields.length) {
+					this.fail(8003, 'RECORD_NOT_FOUND');
+				}
 
-						if (!computedSpecs(collectionFields).length) {
-							return okAsync({ values: { ...updated, ...values } });
-						}
+				const values = await validateInput(
+					this.services.plugins(),
+					context,
+					options.partial
+						? collectionFields.filter((field) => field.name in input)
+						: collectionFields,
+					input,
+					{ creating: false }
+				);
+				const now = Date.now();
+				const updated = Object.fromEntries(
+					autoFields(collectionFields).updated.map((name) => [name, now])
+				);
+				let record: Record<string, StoredValue> = { ...updated, ...values };
 
-						// Computed fields see the whole record: the stored one with this save's changes.
-						return this.readRecord(databaseId, collection.name, collectionFields, id)
-							.andThen((previous) =>
-								previous ? okAsync(previous) : errAsync(this.error(8003, 'RECORD_NOT_FOUND'))
-							)
-							.andThen((previous) =>
-								this.compute(
-									collection.name,
-									collectionFields,
-									{ ...previous, ...updated, ...values },
-									previous,
-									8005,
-									'UPDATE_RECORD_FAILED'
-								)
-							)
-							.map((computed) => ({ values: { ...updated, ...values, ...computed } }));
-					})
-					.andThen(({ values }) => {
-						const { key } = autoFields(collectionFields);
-						const entries = Object.entries(values);
-						const assignments = entries.map(([name]) => `"${name}" = ?`).join(', ');
-						const where = `"${key}" = ? AND (${condition.sql})`;
+				if (computedSpecs(collectionFields).length) {
+					// Computed fields see the whole record: the stored one with this save's changes.
+					const previous =
+						(await readStoredRecord(databaseId, collection.name, collectionFields, id)) ??
+						this.fail(8003, 'RECORD_NOT_FOUND');
+					const computed = await computeValues(
+						collection.name,
+						collectionFields,
+						{ ...previous, ...record },
+						previous
+					);
 
-						return fromPromise(
-							queryDatabase(
-								databaseId,
-								// Nothing to write (no fields left to save): only check that the record exists.
-								entries.length
-									? `UPDATE "${collection.name}" SET ${assignments} WHERE ${where} RETURNING ${returning(key, collectionFields)}`
-									: `SELECT "${key}" FROM "${collection.name}" WHERE ${where}`,
-								[...entries.map(([, value]) => value), ...keyParams(key, [id]), ...condition.params]
-							),
-							(error) => this.writeError(error, 8005, 'UPDATE_RECORD_FAILED')
-						).andThen((rows) => {
-							if (!rows.length) {
-								return errAsync(this.error(8003, 'RECORD_NOT_FOUND'));
-							}
+					record = { ...record, ...computed };
+				}
 
-							if (entries.length) {
-								this.announce(collection.name, 'update', collectionFields, rows);
-							}
+				const { key } = autoFields(collectionFields);
+				const entries = Object.entries(record);
+				const assignments = entries.map(([name]) => `"${name}" = ?`).join(', ');
+				const where = `"${key}" = ? AND (${condition.sql})`;
+				const rows = await queryDatabase(
+					databaseId,
+					// Nothing to write (no fields left to save): only check that the record exists.
+					entries.length
+						? `UPDATE "${collection.name}" SET ${assignments} WHERE ${where} RETURNING ${returning(key, collectionFields)}`
+						: `SELECT "${key}" FROM "${collection.name}" WHERE ${where}`,
+					[...entries.map(([, value]) => value), ...keyParams(key, [id]), ...condition.params]
+				);
 
-							return okAsync({ id });
-						});
-					})
-			);
-		});
+				if (!rows.length) {
+					this.fail(8003, 'RECORD_NOT_FOUND');
+				}
+
+				if (entries.length) {
+					this.announce(collection.name, 'update', collectionFields, rows);
+				}
+
+				return { id };
+			},
+			(error) => this.writeFailure(error)
+		);
 	}
 
 	/**
@@ -1238,300 +628,446 @@ export class RecordsService extends Service {
 		collectionName: string,
 		ids: string[],
 		options: { access?: ApiAccess } = {}
-	): ResultAsync<
-		{ deleted: number },
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| ServiceError<8006, 'DELETE_RECORDS_FAILED'>
-		| RecordInUseError
-		| ServiceError<8020, 'CASCADE_TOO_LARGE'>
-		| RecordIsDefaultError
-		| GuardError
-	> {
+	): ResultAsync<{ deleted: number }, RecordsError> {
 		const unique = [...new Set(ids)].slice(0, MAX_IDS);
 
 		if (!unique.length) {
 			return okAsync({ deleted: 0 });
 		}
 
-		return this.context(collectionName).andThen((context) => {
-			const { collection, fields: collectionFields, databaseId } = context;
+		return this.run(
+			async () => {
+				const context = await this.context(collectionName);
+				const { collection, fields: collectionFields, databaseId } = context;
+				const condition = await this.guard(context, 'delete', options.access);
+				const { key } = autoFields(collectionFields);
+				const params = keyParams(key, unique);
 
-			return this.guard(context, 'delete', options.access).andThen((condition) =>
-				fromPromise(
-					(async () => {
-						const { key } = autoFields(collectionFields);
-						const params = keyParams(key, unique);
+				if (!collectionFields.length || !params.length) {
+					return { deleted: 0 };
+				}
 
-						if (!collectionFields.length || !params.length) {
-							return { deleted: 0 };
-						}
+				const relations = await allRelations();
 
-						const placeholders = params.map(() => '?').join(', ');
-						const relations = await this.relations();
+				// Nothing links to this collection: one statement deletes what the rule allows.
+				if (!relations.some((relation) => linksTo(relation, collection.id))) {
+					const stored = await storedFiles(context, unique);
+					const rows = await queryDatabase(
+						databaseId,
+						`DELETE FROM "${collection.name}" WHERE "${key}" IN (${placeholders(params)}) AND (${condition.sql}) RETURNING ${returning(key, collectionFields)}`,
+						[...params, ...condition.params]
+					);
 
-						// Nothing links to this collection: one statement deletes what the rule allows.
-						if (!relations.some((relation) => linksTo(relation, collection.id))) {
-							const stored = await this.storedFiles(context, unique);
-							const rows = await queryDatabase(
-								databaseId,
-								`DELETE FROM "${collection.name}" WHERE "${key}" IN (${placeholders}) AND (${condition.sql}) RETURNING ${returning(key, collectionFields)}`,
-								[...params, ...condition.params]
-							);
+					await this.afterDelete(context, rows, stored);
 
-							await this.afterDelete(context, rows, stored);
+					return { deleted: rows.length };
+				}
 
-							return { deleted: rows.length };
-						}
+				const allowed = await queryDatabase(
+					databaseId,
+					`SELECT "${key}" FROM "${collection.name}" WHERE "${key}" IN (${placeholders(params)}) AND (${condition.sql})`,
+					[...params, ...condition.params]
+				);
 
-						const allowed = await queryDatabase(
-							databaseId,
-							`SELECT "${key}" FROM "${collection.name}" WHERE "${key}" IN (${placeholders}) AND (${condition.sql})`,
-							[...params, ...condition.params]
-						);
+				if (!allowed.length) {
+					return { deleted: 0 };
+				}
 
-						if (!allowed.length) {
-							return { deleted: 0 };
-						}
+				const plan = await deletionPlan(
+					context,
+					allowed.map(([id]) => String(id)),
+					relations,
+					(name) => this.relatedContext(name)
+				);
+				// Read before the delete: afterwards the rows are gone.
+				const stored = await Promise.all(
+					[...plan.deletes.values()].map((entry) => storedFiles(entry.context, [...entry.ids]))
+				);
+				const { unlinked, deleted } = await executeDeletion(databaseId, plan);
 
-						const plan = await this.deletionPlan(
-							context,
-							allowed.map(([id]) => String(id)),
-							relations
-						);
-						const deletes = [...plan.deletes.values()];
-						const stored = await Promise.all(
-							deletes.map((entry) => this.storedFiles(entry.context, [...entry.ids]))
-						);
-						// Unlinking repeats the ids in its statement, so it takes half as many.
-						const unlinks = plan.unlinks.flatMap((unlink) =>
-							chunks(unlink.ids, Math.floor(MAX_IDS / 2)).map((chunk) => ({
-								context: unlink.context,
-								statement: unlinkStatement(unlink.context, unlink.field, chunk)
-							}))
-						);
-						const removals = deletes.flatMap((entry) => {
-							const entryKey = autoFields(entry.context.fields).key;
+				for (const unlink of unlinked) {
+					this.announce(
+						unlink.context.collection.name,
+						'update',
+						unlink.context.fields,
+						unlink.rows
+					);
+				}
 
-							return chunks<string | number>(keyParams(entryKey, [...entry.ids]), MAX_IDS).map(
-								(chunk) => ({
-									entry,
-									statement: {
-										sql: `DELETE FROM "${entry.context.collection.name}" WHERE "${entryKey}" IN (${chunk.map(() => '?').join(', ')}) RETURNING ${returning(entryKey, entry.context.fields)}`,
-										params: chunk
-									}
-								})
-							);
-						});
-						const results = await batchDatabase(databaseId, [
-							...unlinks.map(({ statement }) => statement),
-							...removals.map(({ statement }) => statement)
-						]);
+				let count = 0;
 
-						for (const [index, unlink] of unlinks.entries()) {
-							this.announce(
-								unlink.context.collection.name,
-								'update',
-								unlink.context.fields,
-								results[index]
-							);
-						}
+				for (const [index, entry] of deleted.entries()) {
+					await this.afterDelete(entry.context, entry.rows, stored[index]);
 
-						let deleted = 0;
-
-						for (const [index, entry] of deletes.entries()) {
-							const rows = removals.flatMap((removal, removalIndex) =>
-								removal.entry === entry ? results[unlinks.length + removalIndex] : []
-							);
-
-							await this.afterDelete(entry.context, rows, stored[index]);
-
-							// Only the requested records count, not those the delete cascaded to.
-							if (entry.context.collection.id === collection.id) {
-								deleted += rows.filter(([id]) => unique.includes(String(id))).length;
-							}
-						}
-
-						return { deleted };
-					})(),
-					(error) => {
-						if (error instanceof RecordInUseFailure) {
-							return {
-								...this.error(8019, 'RECORD_IN_USE'),
-								data: { collection: error.collection, field: error.field }
-							};
-						}
-
-						if (error instanceof RecordIsDefaultFailure) {
-							return {
-								...this.error(8021, 'RECORD_IS_DEFAULT'),
-								data: { collection: error.collection, field: error.field }
-							};
-						}
-
-						if (error instanceof CascadeTooLargeFailure) {
-							return this.error(8020, 'CASCADE_TOO_LARGE');
-						}
-
-						return this.error(8006, 'DELETE_RECORDS_FAILED', error);
+					// Only the requested records count, not those the delete cascaded to.
+					if (entry.context.collection.id === collection.id) {
+						count += entry.rows.filter(([id]) => unique.includes(String(id))).length;
 					}
-				)
+				}
+
+				return { deleted: count };
+			},
+			(error) => {
+				if (error instanceof RecordInUseFailure) {
+					return {
+						...this.error(8019, 'RECORD_IN_USE'),
+						data: { collection: error.collection, field: error.field }
+					};
+				}
+
+				if (error instanceof RecordIsDefaultFailure) {
+					return {
+						...this.error(8021, 'RECORD_IS_DEFAULT'),
+						data: { collection: error.collection, field: error.field }
+					};
+				}
+
+				if (error instanceof CascadeTooLargeFailure) {
+					return this.error(8020, 'CASCADE_TOO_LARGE');
+				}
+
+				return this.failed(error);
+			}
+		);
+	}
+
+	/**
+	 * Runs a computed field's calculation on the newest records without saving anything, so a
+	 * script can be tried out (see `previewComputed` in `records/write.ts`).
+	 */
+	previewComputed(
+		collectionName: string,
+		options: FieldOptions
+	): ResultAsync<ComputedPreview, RecordsError> {
+		return this.run(
+			async () => previewComputed(await this.context(collectionName), options),
+			this.failed
+		);
+	}
+
+	/**
+	 * Recalculates the computed fields of records that were written without this service, such as
+	 * users created by a sign-up or uploaded files.
+	 */
+	refreshComputed(collectionName: string, ids: string[]): ResultAsync<void, RecordsError> {
+		return this.run(async () => {
+			const {
+				collection,
+				fields: collectionFields,
+				databaseId
+			} = await this.context(collectionName);
+
+			// Lenient: these rows are already saved, so a failing script leaves its field empty.
+			await fillComputedColumns(
+				databaseId,
+				collection.name,
+				readableColumns(collectionFields),
+				computedSpecs(collectionFields),
+				{ ids, key: autoFields(collectionFields).key, lenient: true }
 			);
+		}, this.failed);
+	}
+
+	/**
+	 * Sends the realtime events of records that another service wrote directly, such as sign-ups
+	 * and uploads. Best effort: it never fails, so callers run it with `inBackground()`.
+	 */
+	announceStored(
+		collectionName: string,
+		action: 'create' | 'update',
+		ids: string[]
+	): ResultAsync<void, never> {
+		return this.run(async () => {
+			const {
+				collection,
+				fields: collectionFields,
+				databaseId
+			} = await this.context(collectionName);
+			const { key } = autoFields(collectionFields);
+			const params = keyParams(key, ids);
+
+			if (!collectionFields.length || !params.length) {
+				return;
+			}
+
+			const rows = await queryDatabase(
+				databaseId,
+				`SELECT ${returning(key, collectionFields)} FROM "${collection.name}" WHERE "${key}" IN (${placeholders(params)})`,
+				params
+			);
+
+			this.announce(collection.name, action, collectionFields, rows);
+		}, this.failed).orElse((failure) => {
+			console.error('[realtime] could not read the changed records', failure);
+
+			return okAsync(undefined);
 		});
 	}
 
-	/** Every relation field of every collection, to follow when records are deleted. */
-	private async relations(): Promise<Relation[]> {
-		const rows = await this.db
-			.select({ field: fields, collection: collections.name })
-			.from(fields)
-			.innerJoin(collections, eq(collections.id, fields.collectionId))
-			.where(eq(fields.type, 'relation'));
-
-		return rows.map(({ field, collection }) => ({
-			collection,
-			field,
-			onDelete: relationOnDelete(field.options)
-		}));
+	/**
+	 * The collections that relations point to, when one of `texts` (conditions) has a path such as
+	 * `author.role`; `undefined` otherwise, so plain conditions read nothing. Related records are
+	 * checked against their view rule for `access` (see `relatedCollections`).
+	 */
+	filterRelations(
+		texts: (string | null | undefined)[],
+		access?: ApiAccess
+	): ResultAsync<FilterContext['relations'], ServiceError<6000, 'COLLECTIONS_FAILED'>> {
+		return this.run(
+			() => this.relationsFor(texts, access),
+			(error) => this.error(6000, 'COLLECTIONS_FAILED', error)
+		);
 	}
 
-	/**
-	 * What deleting `ids` of the collection of `root` does through the relation fields that link
-	 * to it, followed from collection to collection for cascades. Throws a `RecordInUseFailure`
-	 * when a record that stays links to a deleted one through a restricting field, and a
-	 * `CascadeTooLargeFailure` beyond `MAX_CASCADE` records.
-	 */
-	private async deletionPlan(
-		root: RecordContext,
-		ids: string[],
-		relations: Relation[]
-	): Promise<DeletionPlan> {
-		const { databaseId } = root;
-		const contexts = new Map([[root.collection.name, root]]);
-		const deletes: DeletionPlan['deletes'] = new Map([
-			[root.collection.name, { context: root, ids: new Set(ids) }]
+	/** The error of anything unexpected: the reason says what broke. */
+	private failed = (error: unknown) => this.error(8000, 'RECORDS_FAILED', error);
+
+	/** The error of a failed write: the field of a unique index that refused the value, or `failed`. */
+	private writeFailure(error: unknown) {
+		const field = uniqueViolation(error);
+
+		return field
+			? { ...this.error(8002, 'UNIQUE_VIOLATION'), data: { field } }
+			: this.failed(error);
+	}
+
+	/** The collection, its fields and the app database id, read in parallel. */
+	private async context(collectionName: string): Promise<RecordContext> {
+		const [{ collection, fields: collectionFields }, appDatabase] = await Promise.all([
+			this.must(this.services.collections().requireWithFields(collectionName)),
+			this.must(this.services.database().requireApp())
 		]);
-		const unlinks: DeletionPlan['unlinks'] = [];
-		const restricts: DeletionPlan['unlinks'] = [];
-		const queue = [{ context: root, ids }];
-		let total = ids.length;
 
-		const contextOf = async (name: string) => {
-			const known = contexts.get(name);
-
-			if (known) {
-				return known;
-			}
-
-			const result = await this.context(name);
-
-			if (result.isErr()) {
-				throw new Error(`Could not read collection ${name}: ${result.error.message}`);
-			}
-
-			contexts.set(name, result.value);
-
-			return result.value;
-		};
-
-		const linked = async (source: RecordContext, field: Field, targetIds: string[]) => {
-			const results = await batchDatabase(
-				databaseId,
-				chunks(targetIds, MAX_IDS).map((chunk) => linkedSelect(source, field, chunk))
-			);
-
-			return [...new Set(results.flat().map(([id]) => String(id)))];
-		};
-
-		for (let next = queue.shift(); next; next = queue.shift()) {
-			const target = next;
-
-			for (const relation of relations.filter((candidate) =>
-				linksTo(candidate, target.context.collection.id)
-			)) {
-				const source = await contextOf(relation.collection);
-
-				if (relation.onDelete !== 'cascade') {
-					(relation.onDelete === 'restrict' ? restricts : unlinks).push({
-						context: source,
-						field: relation.field,
-						ids: target.ids
-					});
-					continue;
-				}
-
-				const entry = deletes.get(source.collection.name) ?? {
-					context: source,
-					ids: new Set<string>()
-				};
-				const added = (await linked(source, relation.field, target.ids)).filter(
-					(id) => !entry.ids.has(id)
-				);
-
-				if (!added.length) {
-					continue;
-				}
-
-				total += added.length;
-
-				if (total > MAX_CASCADE) {
-					throw new CascadeTooLargeFailure();
-				}
-
-				added.forEach((id) => entry.ids.add(id));
-				deletes.set(source.collection.name, entry);
-				queue.push({ context: source, ids: added });
-			}
-		}
-
-		// New records would link to a deleted default value.
-		for (const relation of relations) {
-			const defaultValue = relation.field.defaultValue;
-			const target = [...deletes.values()].find((entry) =>
-				linksTo(relation, entry.context.collection.id)
-			);
-
-			if (defaultValue && target?.ids.has(defaultValue)) {
-				throw new RecordIsDefaultFailure(relation.collection, relation.field.name);
-			}
-		}
-
-		// Checked once every cascade is known: records that are deleted too don't hold it back.
-		for (const restrict of restricts) {
-			const doomed = deletes.get(restrict.context.collection.name)?.ids;
-			const holding = (await linked(restrict.context, restrict.field, restrict.ids)).find(
-				(id) => !doomed?.has(id)
-			);
-
-			if (holding) {
-				throw new RecordInUseFailure(restrict.context.collection.name, restrict.field.name);
-			}
-		}
-
-		return { deletes, unlinks };
+		return { collection, fields: collectionFields, databaseId: appDatabase.id };
 	}
 
 	/**
-	 * The stored files of these records when the collection is the built-in `files`, to remove
-	 * from storage once they are deleted (see `afterDelete()`).
+	 * The context of a collection that another one's records link to; when it can't be read, the
+	 * operation on the other collection fails (not with the related collection's error).
 	 */
-	private async storedFiles({ collection, databaseId }: RecordContext, ids: string[]) {
-		if (!ids.length || !collection.system || collection.name !== FILES_COLLECTION) {
-			return [];
+	private async relatedContext(collectionName: string): Promise<RecordContext> {
+		try {
+			return await this.context(collectionName);
+		} catch (error) {
+			throw new Error(`Could not read collection ${collectionName}: ${reasonOf(error)}`, {
+				cause: error
+			});
+		}
+	}
+
+	/**
+	 * One record as the records API returns it, or `null`. The view rule is checked for `access`
+	 * unless `checkRule` is `false`; the visibility of fields and included records always is.
+	 */
+	private async readOne(
+		context: RecordContext,
+		id: string,
+		{
+			select,
+			include,
+			access,
+			checkRule = true
+		}: ApiReadOptions & { access?: ApiAccess; checkRule?: boolean }
+	): Promise<ApiRecord | null> {
+		const { collection, fields: collectionFields, databaseId } = context;
+		const rule = checkRule ? await this.guard(context, 'view', access) : ALWAYS;
+		const readable = visibleFields(collectionFields, access);
+		const { key } = autoFields(collectionFields);
+
+		if (!collectionFields.length) {
+			return null;
 		}
 
-		const results = await batchDatabase(
+		const tree = this.query('include', () => includeTree(readable, include));
+		const selected = this.query('select', () => selectFields(readable, withIncluded(select, tree)));
+		const [row] = await queryDatabase(
 			databaseId,
-			chunks(ids, MAX_IDS).map((chunk) => ({
-				sql: `SELECT "id", "key", "thumbnails" FROM "files" WHERE "id" IN (${chunk.map(() => '?').join(', ')})`,
-				params: chunk
-			}))
+			`SELECT ${selected.map((field) => `"${field.name}"`).join(', ')} FROM "${collection.name}" WHERE "${key}" = ? AND (${rule.sql})`,
+			[...keyParams(key, [id]), ...rule.params]
 		);
 
-		return results.flat();
+		if (!row) {
+			return null;
+		}
+
+		const record = toApiRecord(selected, row);
+
+		await deserialize(this.services.plugins(), collectionFields, [record]);
+		await includeRelated(this.includeHost, collectionFields, [record], tree, access);
+
+		return record;
+	}
+
+	/**
+	 * A record that was just written, as the API returns it, whatever its view rule; the records it
+	 * links to only when their view rules let `access` see them.
+	 */
+	private async found(
+		collectionName: string,
+		id: string,
+		options: ApiReadOptions,
+		access: ApiAccess | undefined
+	): Promise<ApiRecord> {
+		const record = await this.readOne(await this.context(collectionName), id, {
+			...options,
+			access,
+			checkRule: false
+		});
+
+		return record ?? this.fail(8003, 'RECORD_NOT_FOUND');
+	}
+
+	/**
+	 * The parts of a query of the records API: the condition (the rule and `where`), the
+	 * `ORDER BY` terms, the include tree and the fields to select, for what `access` may read.
+	 */
+	private async compileQuery(
+		context: RecordContext,
+		rule: SqlCondition,
+		query: ApiQuery,
+		access: ApiAccess | undefined
+	) {
+		const { collection, fields: collectionFields } = context;
+		const readable = visibleFields(collectionFields, access);
+		const relations = await this.relationsFor([query.where], access);
+		const userFields = await this.userFieldsOf(query.where, access);
+		const where = this.query('where', () => {
+			if (userFields) {
+				checkUserFields(query.where, userFields);
+			}
+
+			return query.where?.trim()
+				? both(
+						rule,
+						compileFilter(query.where, readable, {
+							user: accessUser(access),
+							table: collection.name,
+							relations
+						})
+					)
+				: rule;
+		});
+		const sort = this.query('order', () => compileOrder(query.order ?? '', readable));
+		const tree = this.query('include', () => includeTree(readable, query.include ?? undefined));
+		const selected = this.query('select', () =>
+			selectFields(readable, withIncluded(query.select ?? undefined, tree))
+		);
+
+		return { where, sort, tree, selected };
+	}
+
+	/** Runs `compile` for a query parameter; a `FilterError` becomes an `INVALID_QUERY`. */
+	private query<T>(param: ApiQueryParam, compile: () => T): T {
+		try {
+			return compile();
+		} catch (error) {
+			return this.fail(8015, 'INVALID_QUERY', {
+				data: {
+					param,
+					message: error instanceof FilterError ? error.message : `Invalid ${param}`
+				}
+			});
+		}
+	}
+
+	/**
+	 * The SQL condition of the collection's API rule for `action`, for a request with `access`;
+	 * without `access` (the dashboard), every record. Fails when the API doesn't offer the action
+	 * for this collection, when the rule is locked or invalid, or when `input` writes a protected
+	 * field.
+	 */
+	private async guard(
+		context: RecordContext,
+		action: ApiRuleAction,
+		access: ApiAccess | undefined,
+		input?: RecordInput
+	): Promise<SqlCondition> {
+		const { collection, fields: collectionFields } = context;
+
+		if (!access) {
+			return ALWAYS;
+		}
+
+		if (!apiActions(collection).includes(action)) {
+			this.fail(8013, 'ACTION_NOT_AVAILABLE');
+		}
+
+		if ('plugin' in access && !pluginMay(access.plugin, action, collection.name)) {
+			this.fail(8014, 'RULE_LOCKED');
+		}
+
+		const written = protectedWrites(collection, collectionFields, access, input);
+
+		if (written.length) {
+			throw invalidRecord(
+				Object.fromEntries(
+					written.map((name) => [name, "Can't be changed through the records API"])
+				)
+			);
+		}
+
+		if ('plugin' in access) {
+			return ALWAYS;
+		}
+
+		const rule = collection.settings.rules?.[action];
+		// The rule's own paths through relations see every related record.
+		const relations = await this.relationsFor([rule], undefined);
+		let condition: SqlCondition | null;
+
+		try {
+			condition = compileRule(rule, apiFields(collectionFields), {
+				user: access.user,
+				input,
+				table: collection.name,
+				relations
+			});
+		} catch (error) {
+			return this.fail(8016, 'INVALID_RULE', {
+				data: { action, message: error instanceof Error ? error.message : String(error) }
+			});
+		}
+
+		return condition ?? this.fail(8014, 'RULE_LOCKED');
+	}
+
+	/** See `filterRelations()`. */
+	private async relationsFor(
+		texts: (string | null | undefined)[],
+		access: ApiAccess | undefined
+	): Promise<FilterContext['relations']> {
+		if (!usesRelations(texts)) {
+			return undefined;
+		}
+
+		const all = await this.must(this.services.collections().listWithFields());
+
+		return relatedCollections(all, access);
+	}
+
+	/**
+	 * The fields of `users` that `access` may read through `$user` in a condition of its own, when
+	 * `text` uses `$user` and `access` is an app user; `null` otherwise (nothing to check).
+	 */
+	private async userFieldsOf(text: string | null | undefined, access: ApiAccess | undefined) {
+		if (!access || !('user' in access) || !text?.includes('$user.')) {
+			return null;
+		}
+
+		const { fields: userFields } = await this.context(USERS_COLLECTION);
+
+		return visibleFields(userFields, access);
+	}
+
+	/** What `includeRelated()` needs from this service. */
+	private get includeHost(): IncludeHost {
+		return {
+			context: (name) => this.context(name),
+			collectionById: (id) => this.must(this.services.collections().getById(id)),
+			guard: (context, action, access) => this.guard(context, action, access),
+			query: (param, compile) => this.query(param, compile),
+			plugins: this.services.plugins()
+		};
 	}
 
 	/**
@@ -1546,173 +1082,16 @@ export class RecordsService extends Service {
 
 		// Deleted users lose their linked provider accounts too.
 		if (deleted.length && collection.system && collection.name === USERS_COLLECTION) {
-			await batchDatabase(
-				databaseId,
-				chunks(deleted, MAX_IDS).flatMap((chunk) => {
-					const placeholders = chunk.map(() => '?').join(', ');
-
-					return [
-						{
-							sql: `DELETE FROM "_external_auths" WHERE "user_id" IN (${placeholders})`,
-							params: chunk
-						},
-						{ sql: `DELETE FROM "_passwords" WHERE "user_id" IN (${placeholders})`, params: chunk }
-					];
-				})
-			);
+			await batchDatabase(databaseId, userCleanupStatements(deleted));
 		}
 
 		// Deleted files are removed from storage too (the original and every stored thumbnail);
 		// leftovers don't break anything.
-		const keys = stored
-			.filter(([id]) => deleted.includes(String(id)))
-			.flatMap(([, key, thumbnails]) =>
-				storageKeys({ key: String(key), thumbnails: parseThumbnailList(thumbnails) })
-			);
+		const keys = storageKeysOf(stored, deleted);
 
 		if (keys.length) {
 			await this.services.storage().delete(keys);
 		}
-	}
-
-	/**
-	 * Runs a computed field's calculation on the newest records without saving anything, so a
-	 * script can be tried out. `error` is set when the script doesn't compile.
-	 */
-	previewComputed(
-		collectionName: string,
-		options: FieldOptions
-	): ResultAsync<
-		{ error?: string; rows: { id: string; value?: string | null; error?: string }[] },
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| ServiceError<8010, 'PREVIEW_COMPUTED_FAILED'>
-	> {
-		return this.context(collectionName).andThen(
-			({ collection, fields: collectionFields, databaseId }) =>
-				fromPromise(
-					(async () => {
-						// Field names can't start with `_`, so this never shadows a real field.
-						const [spec] = computedSpecs([
-							...collectionFields,
-							{ name: '_preview', type: 'computed', options }
-						]).filter((candidate) => candidate.name === '_preview');
-
-						if (!spec) {
-							return { error: 'Choose a source field or write a script', rows: [] };
-						}
-
-						let computer;
-
-						try {
-							computer = await createComputer(collection.name, [spec]);
-						} catch (error) {
-							if (error instanceof ComputeError) {
-								return { error: error.message, rows: [] };
-							}
-
-							throw error;
-						}
-
-						try {
-							const { key, created } = autoFields(collectionFields);
-							const columns = readableColumns(collectionFields).map((name) => `"${name}"`);
-							// Field names can't start with `_`, so the alias never shadows a column.
-							const rows = await queryObjects(
-								databaseId,
-								`SELECT ${[`"${key}" AS "_key"`, ...columns].join(', ')} FROM "${collection.name}" ORDER BY "${created[0] ?? key}" DESC LIMIT 5`
-							);
-
-							return {
-								rows: rows.map(({ _key, ...row }) => {
-									try {
-										return { id: String(_key), value: computer.compute(row, row)._preview };
-									} catch (error) {
-										if (error instanceof ComputeError) {
-											return { id: String(_key), error: error.message };
-										}
-
-										throw error;
-									}
-								})
-							};
-						} finally {
-							computer.dispose();
-						}
-					})(),
-					(error) => this.error(8010, 'PREVIEW_COMPUTED_FAILED', error)
-				)
-		);
-	}
-
-	/**
-	 * Recalculates the computed fields of records that were written without this service, such as
-	 * users created by a sign-up or uploaded files.
-	 */
-	refreshComputed(
-		collectionName: string,
-		ids: string[]
-	): ResultAsync<
-		void,
-		| ServiceError<1004, 'APP_DATABASE_MISSING'>
-		| ServiceError<5000, 'GET_SETTING_FAILED'>
-		| ServiceError<6001, 'GET_COLLECTION_FAILED'>
-		| ServiceError<6006, 'COLLECTION_NOT_FOUND'>
-		| ServiceError<7000, 'LIST_FIELDS_FAILED'>
-		| ServiceError<8009, 'REFRESH_COMPUTED_FAILED'>
-	> {
-		return this.context(collectionName).andThen(
-			({ collection, fields: collectionFields, databaseId }) =>
-				fromPromise(
-					// Lenient: these rows are already saved, so a failing script leaves its field empty.
-					fillComputedColumns(
-						databaseId,
-						collection.name,
-						readableColumns(collectionFields),
-						computedSpecs(collectionFields),
-						{ ids, key: autoFields(collectionFields).key, lenient: true }
-					),
-					(error) => this.error(8009, 'REFRESH_COMPUTED_FAILED', error)
-				)
-		);
-	}
-
-	/**
-	 * Sends the realtime events of records that another service wrote directly, such as sign-ups
-	 * and uploads. Best effort: it never fails, so callers run it with `inBackground()`.
-	 */
-	announceStored(
-		collectionName: string,
-		action: 'create' | 'update',
-		ids: string[]
-	): ResultAsync<void, never> {
-		return this.context(collectionName)
-			.andThen(({ collection, fields: collectionFields, databaseId }) => {
-				const { key } = autoFields(collectionFields);
-				const params = keyParams(key, ids);
-
-				if (!collectionFields.length || !params.length) {
-					return okAsync(undefined);
-				}
-
-				return fromPromise(
-					queryDatabase(
-						databaseId,
-						`SELECT ${returning(key, collectionFields)} FROM "${collection.name}" WHERE "${key}" IN (${params.map(() => '?').join(', ')})`,
-						params
-					),
-					(error) => this.error(8011, 'GET_RECORD_FAILED', error)
-				).map((rows) => {
-					this.announce(collection.name, action, collectionFields, rows);
-				});
-			})
-			.orElse((failure) => {
-				console.error('[realtime] could not read the changed records', failure);
-				return okAsync(undefined);
-			});
 	}
 
 	/**
@@ -1743,831 +1122,5 @@ export class RecordsService extends Service {
 				}))
 			)
 		);
-	}
-
-	/**
-	 * Values of the computed fields for a record about to be saved. A failing script becomes a
-	 * form issue on its field.
-	 */
-	private compute<Code extends number, Message extends string>(
-		collectionName: string,
-		collectionFields: Field[],
-		record: Record<string, unknown>,
-		previous: Record<string, unknown> | null,
-		failureCode: Code,
-		failureMessage: Message
-	): ResultAsync<Record<string, string | null>, InvalidRecordError | ServiceError<Code, Message>> {
-		const specs = computedSpecs(collectionFields);
-
-		if (!specs.length) {
-			return okAsync({});
-		}
-
-		return fromPromise(
-			(async () => {
-				const computer = await createComputer(collectionName, specs);
-
-				try {
-					return computer.compute(record, previous);
-				} finally {
-					computer.dispose();
-				}
-			})(),
-			(error): InvalidRecordError | ServiceError<Code, Message> =>
-				error instanceof ComputeError
-					? {
-							code: 8001,
-							message: 'INVALID_RECORD',
-							data: { issues: { [error.field]: error.message } }
-						}
-					: this.error(failureCode, failureMessage, error)
-		);
-	}
-
-	/** A stored record with every column a script can read; `null` when it doesn't exist. */
-	private readRecord(
-		databaseId: string,
-		table: string,
-		collectionFields: Field[],
-		id: string
-	): ResultAsync<Record<string, unknown> | null, ServiceError<8005, 'UPDATE_RECORD_FAILED'>> {
-		const { key } = autoFields(collectionFields);
-		const columns = readableColumns(collectionFields).map((name) => `"${name}"`);
-
-		return fromPromise(
-			queryObjects(
-				databaseId,
-				`SELECT ${columns.join(', ')} FROM "${table}" WHERE "${key}" = ?`,
-				keyParams(key, [id])
-			),
-			(error) => this.error(8005, 'UPDATE_RECORD_FAILED', error)
-		).map(([row]) => row ?? null);
-	}
-
-	/**
-	 * Fills the empty fields whose default value is a SQL expression, evaluated on the app database
-	 * in one query. The results are checked like submitted values; a bad result becomes a form
-	 * issue on its field.
-	 */
-	private sqlDefaults(
-		databaseId: string,
-		collectionFields: Field[],
-		values: Record<string, string | number | null>
-	): ResultAsync<
-		Record<string, string | number | null>,
-		InvalidRecordError | ServiceError<8004, 'CREATE_RECORD_FAILED'>
-	> {
-		const defaulted = collectionFields.filter(
-			(field) => field.options.defaultSql && field.defaultValue && values[field.name] === null
-		);
-
-		if (!defaulted.length) {
-			return okAsync(values);
-		}
-
-		return fromPromise(
-			queryDatabase(
-				databaseId,
-				`SELECT ${defaulted.map((field) => sqlDefaultSelect(field.type, field.defaultValue!)).join(', ')}`
-			),
-			(error) => this.error(8004, 'CREATE_RECORD_FAILED', error)
-		).andThen(([row]) => {
-			const filled = { ...values };
-			const issues: RecordIssues = {};
-
-			for (const [index, field] of defaulted.entries()) {
-				const parsed = parseValue(field, row?.[index]);
-
-				if ('error' in parsed) {
-					issues[field.name] = `The default value gave an invalid value: ${parsed.error}`;
-				} else {
-					filled[field.name] = parsed.value;
-				}
-			}
-
-			return Object.keys(issues).length
-				? errAsync<never, InvalidRecordError>({
-						code: 8001,
-						message: 'INVALID_RECORD',
-						data: { issues }
-					})
-				: okAsync(filled);
-		});
-	}
-
-	/**
-	 * Expands the relations in `expand` of `records` of a collection in place, as `?include=` does
-	 * (see `include()`), for realtime events. Without records it only checks `expand`: every path
-	 * must be a chain of relations to collections whose view rule `access` may use.
-	 */
-	apiInclude(
-		collectionName: string,
-		records: ApiRecord[],
-		expand: string[],
-		access: ApiAccess | undefined
-	): ResultAsync<void, IncludeError> {
-		return this.context(collectionName).andThen(({ fields: collectionFields }) =>
-			this.compileQuery('include', () =>
-				includeTree(visibleFields(collectionFields, access), expand)
-			).andThen((tree) => this.include(collectionFields, records, tree, access))
-		);
-	}
-
-	/**
-	 * A record that was just written, as the API returns it, whatever its view rule; the records it
-	 * links to only when their view rules let `access` see them.
-	 */
-	private found(
-		collectionName: string,
-		id: string,
-		options: ApiReadOptions,
-		access: ApiAccess | undefined
-	): ResultAsync<
-		ApiRecord,
-		ErrorOf<ReturnType<RecordsService['apiGet']>> | ServiceError<8003, 'RECORD_NOT_FOUND'>
-	> {
-		return this.readApiRecord(collectionName, id, options, undefined, access).andThen((record) =>
-			record ? okAsync(record) : errAsync(this.error(8003, 'RECORD_NOT_FOUND'))
-		);
-	}
-
-	/**
-	 * One record as the records API returns it, or `null`. The view rule of the record is checked
-	 * for `viewer`, those of the records it expands for `access` (neither when `undefined`).
-	 */
-	private readApiRecord(
-		collectionName: string,
-		id: string,
-		options: ApiReadOptions,
-		viewer: ApiAccess | undefined,
-		access: ApiAccess | undefined
-	): ResultAsync<ApiRecord | null, IncludeError | ServiceError<8011, 'GET_RECORD_FAILED'>> {
-		return this.context(collectionName).andThen((context) =>
-			this.guard(context, 'view', viewer).andThen((rule) => {
-				const { collection, fields: collectionFields, databaseId } = context;
-				const readable = visibleFields(collectionFields, access);
-				const { key } = autoFields(collectionFields);
-
-				if (!collectionFields.length) {
-					return okAsync(null);
-				}
-
-				return this.compileQuery('include', () => includeTree(readable, options.include)).andThen(
-					(tree) =>
-						this.compileQuery('select', () =>
-							selectFields(readable, withIncluded(options.select, tree))
-						).andThen((selected) =>
-							fromPromise(
-								queryDatabase(
-									databaseId,
-									`SELECT ${selected.map((field) => `"${field.name}"`).join(', ')} FROM "${collection.name}" WHERE "${key}" = ? AND (${rule.sql})`,
-									[...keyParams(key, [id]), ...rule.params]
-								),
-								(error) => this.error(8011, 'GET_RECORD_FAILED', error)
-							).andThen(([row]) => {
-								if (!row) {
-									return okAsync(null);
-								}
-
-								const record = toApiRecord(selected, row);
-
-								return this.deserialize(collectionFields, [record])
-									.andThen(() => this.include(collectionFields, [record], tree, access))
-									.map(() => record);
-							})
-						)
-				);
-			})
-		);
-	}
-
-	/**
-	 * Replaces the relation fields in `tree` of `records` (of a collection with `collectionFields`)
-	 * by the records they point to, as the API returns them, and expands those in turn. A single
-	 * relation becomes a record or `null`, a multiple one an array of records. With `access`, only
-	 * related records that the view rule of their collection matches are included; fails when the
-	 * API doesn't show records of that collection at all.
-	 */
-	private include(
-		collectionFields: Field[],
-		records: ApiRecord[],
-		tree: IncludeTree,
-		access: ApiAccess | undefined
-	): ResultAsync<void, IncludeError> {
-		// Without records, every level is still checked.
-		if (!tree.size) {
-			return okAsync(undefined);
-		}
-
-		return ResultAsync.combine(
-			[...tree].map(([name, subtree]) => {
-				const field = collectionFields.find((field) => field.name === name)!;
-
-				return this.services
-					.collections()
-					.getById(field.options.collectionId ?? '')
-					.andThen((target) =>
-						target
-							? this.context(target.name).andThen((context) =>
-									this.related(context, records, name, subtree, access)
-								)
-							: okAsync(new Map<string, ApiRecord>())
-					)
-					.map((related) => {
-						for (const record of records) {
-							const found = relatedIds(record[name]).flatMap((id) => related.get(id) ?? []);
-
-							record[name] = isMultiple(field) ? found : (found[0] ?? null);
-						}
-					});
-			})
-		).map(() => undefined);
-	}
-
-	/**
-	 * The records of `context` that field `name` of `records` points to, by id and expanded by
-	 * `subtree`: only those its view rule lets `access` see.
-	 */
-	private related(
-		context: RecordContext,
-		records: ApiRecord[],
-		name: string,
-		subtree: IncludeTree,
-		access: ApiAccess | undefined
-	): ResultAsync<Map<string, ApiRecord>, IncludeError> {
-		const { collection, fields: collectionFields, databaseId } = context;
-		const readable = visibleFields(collectionFields, access);
-		const { id: idColumn } = autoFields(collectionFields);
-		const ids = [...new Set(records.flatMap((record) => relatedIds(record[name])))];
-
-		return this.guard(context, 'view', access)
-			.mapErr((error): IncludeError =>
-				error.code === 8013 || error.code === 8014
-					? {
-							...this.error(8015, 'INVALID_QUERY'),
-							data: {
-								param: 'include',
-								message: `the API doesn't show records of \`${collection.name}\`, so \`${name}\` can't be included`
-							}
-						}
-					: error
-			)
-			.andThen((rule) =>
-				this.compileQuery('include', () => includeTree(readable, subtree)).map(() => rule)
-			)
-			.andThen((rule) => {
-				if (!idColumn || !ids.length) {
-					return this.include(collectionFields, [], subtree, access).map(
-						() => new Map<string, ApiRecord>()
-					);
-				}
-
-				// Every statement binds the rule's parameters as well as the ids.
-				const size = Math.max(MAX_IDS - rule.params.length, 1);
-				const chunks: string[][] = [];
-
-				for (let start = 0; start < ids.length; start += size) {
-					chunks.push(ids.slice(start, start + size));
-				}
-
-				const columns = readable.map((field) => `"${field.name}"`).join(', ');
-
-				return fromPromise(
-					batchDatabase(
-						databaseId,
-						chunks.map((chunk) => ({
-							sql: `SELECT ${columns} FROM "${collection.name}" WHERE "${idColumn}" IN (${chunk.map(() => '?').join(', ')}) AND (${rule.sql})`,
-							params: [...chunk, ...rule.params]
-						}))
-					),
-					(error) => this.error(8018, 'EXPAND_RECORDS_FAILED', error)
-				).andThen((results) => {
-					const found = results.flat().map((row) => toApiRecord(readable, row));
-
-					return this.deserialize(collectionFields, found)
-						.andThen(() => this.include(collectionFields, found, subtree, access))
-						.map(() => new Map(found.map((record) => [String(record[idColumn]), record])));
-				});
-			});
-	}
-
-	/**
-	 * The SQL condition of the collection's API rule for `action`, for a request with `access`;
-	 * without `access` (the dashboard), every record. Fails when the API doesn't offer the action
-	 * for this collection, when the rule is locked or invalid, or when `input` writes a protected
-	 * field.
-	 */
-	private guard(
-		{ collection, fields: collectionFields }: RecordContext,
-		action: ApiRuleAction,
-		access: ApiAccess | undefined,
-		input?: RecordInput
-	): ResultAsync<SqlCondition, GuardError> {
-		if (!access) {
-			return okAsync(ALWAYS);
-		}
-
-		if (!apiActions(collection).includes(action)) {
-			return errAsync(this.error(8013, 'ACTION_NOT_AVAILABLE'));
-		}
-
-		if ('plugin' in access && !pluginMay(access.plugin, action, collection.name)) {
-			return errAsync(this.error(8014, 'RULE_LOCKED'));
-		}
-
-		// App users can't write hidden fields, as they can't read them either.
-		const hidden =
-			'user' in access
-				? collectionFields.filter((field) => field.hidden).map((field) => field.name)
-				: [];
-		const written = [...protectedApiFields(collection), ...hidden].filter(
-			(name) => input && name in input
-		);
-
-		if (written.length) {
-			return errAsync<never, InvalidRecordError>({
-				code: 8001,
-				message: 'INVALID_RECORD',
-				data: {
-					issues: Object.fromEntries(
-						written.map((name) => [name, "Can't be changed through the records API"])
-					)
-				}
-			});
-		}
-
-		if ('plugin' in access) {
-			return okAsync(ALWAYS);
-		}
-
-		const rule = collection.settings.rules?.[action];
-
-		// The rule's own paths through relations see every related record.
-		return this.filterRelations([rule]).andThen((relations) => {
-			let condition: SqlCondition | null;
-
-			try {
-				condition = compileRule(rule, apiFields(collectionFields), {
-					user: access.user,
-					input,
-					table: collection.name,
-					relations
-				});
-			} catch (error) {
-				return errAsync({
-					...this.error(8016, 'INVALID_RULE'),
-					data: { action, message: error instanceof Error ? error.message : String(error) }
-				});
-			}
-
-			return condition ? okAsync(condition) : errAsync(this.error(8014, 'RULE_LOCKED'));
-		});
-	}
-
-	/**
-	 * The collections that relations point to, when one of `texts` (conditions) has a path such as
-	 * `author.role`; `undefined` otherwise, so plain conditions read nothing. Related records are
-	 * checked against their view rule for `access` (see `relatedCollections`).
-	 */
-	filterRelations(
-		texts: (string | null | undefined)[],
-		access?: ApiAccess
-	): ResultAsync<FilterContext['relations'], ServiceError<6000, 'LIST_COLLECTIONS_FAILED'>> {
-		if (!usesRelations(texts)) {
-			return okAsync(undefined);
-		}
-
-		return this.services
-			.collections()
-			.listWithFields()
-			.map((all) => relatedCollections(all, access));
-	}
-
-	/**
-	 * The fields of `users` that `access` may read through `$user` in a condition of its own, when
-	 * `text` uses `$user` and `access` is an app user; `null` otherwise (nothing to check).
-	 */
-	userFields(
-		text: string | null | undefined,
-		access: ApiAccess | undefined
-	): ResultAsync<Field[] | null, ContextError> {
-		if (!access || !('user' in access) || !text?.includes('$user.')) {
-			return okAsync(null);
-		}
-
-		return this.context(USERS_COLLECTION).map(({ fields: userFields }) =>
-			visibleFields(userFields, access)
-		);
-	}
-
-	/** Runs `compile` for a query parameter; a `FilterError` becomes an `INVALID_QUERY`. */
-	private compileQuery<T>(
-		param: ApiQueryParam,
-		compile: () => T
-	): ResultAsync<T, InvalidQueryError> {
-		try {
-			return okAsync(compile());
-		} catch (error) {
-			return errAsync({
-				...this.error(8015, 'INVALID_QUERY'),
-				data: {
-					param,
-					message: error instanceof FilterError ? error.message : `Invalid ${param}`
-				}
-			});
-		}
-	}
-
-	/** Fails with `error` when the collection has no fields, and so no table yet. */
-	private requireFields<E>(collectionFields: Field[], error: E): ResultAsync<void, E> {
-		return collectionFields.length ? okAsync(undefined) : errAsync(error);
-	}
-
-	/** The collection, its fields and the app database id: what every record operation needs. */
-	private context(collectionName: string): ResultAsync<RecordContext, ContextError> {
-		return this.services
-			.collections()
-			.requireWithFields(collectionName)
-			.andThen(({ collection, fields: collectionFields }) =>
-				this.services
-					.database()
-					.requireApp()
-					.map((appDatabase) => ({
-						collection,
-						fields: collectionFields,
-						databaseId: appDatabase.id
-					}))
-			)
-			.map((context) => {
-				contexts.set(collectionName, context);
-				return context;
-			})
-			.mapErr((error) => {
-				contexts.delete(collectionName);
-				return error;
-			});
-	}
-
-	/**
-	 * Runs `run` with the context, for reads only. When this isolate has read the context before,
-	 * `run` starts right away with that one while the context is read again, so both take one
-	 * round-trip together; if the schema changed in between, `run` is repeated with the new one.
-	 */
-	private read<T, E>(
-		collectionName: string,
-		run: (context: RecordContext) => Promise<T>,
-		onError: (error: unknown) => E
-	): ResultAsync<T, ContextError | E> {
-		const cached = contexts.get(collectionName);
-
-		if (!cached) {
-			return this.context(collectionName).andThen((context) => fromPromise(run(context), onError));
-		}
-
-		// Settled right away, so a failure with an outdated schema is never an unhandled rejection.
-		const early = run(cached).then(
-			(value) => ({ ok: true as const, value }),
-			(error: unknown) => ({ ok: false as const, error })
-		);
-
-		return this.context(collectionName).andThen((context) =>
-			fromPromise(
-				JSON.stringify(context) === JSON.stringify(cached)
-					? early.then((result) => (result.ok ? result.value : Promise.reject(result.error)))
-					: run(context),
-				onError
-			)
-		);
-	}
-
-	/**
-	 * Parses every field of the input and checks that related records exist.
-	 * Blob fields are never written here.
-	 */
-	private validate<Code extends number, Message extends string>(
-		databaseId: string,
-		collectionFields: Field[],
-		input: RecordInput,
-		failureCode: Code,
-		failureMessage: Message,
-		{ creating }: { creating: boolean }
-	): ResultAsync<
-		Record<string, string | number | null>,
-		InvalidRecordError | ServiceError<Code, Message>
-	> {
-		const values: Record<string, string | number | null> = {};
-		const issues: RecordIssues = {};
-
-		for (const field of collectionFields) {
-			if (field.type === 'blob' || field.type === 'computed' || isAutoType(field.type)) {
-				continue;
-			}
-
-			// Their plugin checks them, below.
-			if (isPluginFieldType(field.type)) {
-				continue;
-			}
-
-			const parsed = parseValue(field, input[field.name]);
-
-			if ('error' in parsed) {
-				issues[field.name] = parsed.error;
-			} else {
-				values[field.name] = parsed.value;
-			}
-		}
-
-		const relations = collectionFields.filter(
-			(field) => isRelationType(field.type) && values[field.name] !== null && !issues[field.name]
-		);
-
-		return fromPromise(
-			(async () => {
-				for (const field of relations) {
-					const target = await this.relationTarget(field.options.collectionId);
-					const ids = parseIds(values[field.name]);
-
-					if (!target) {
-						issues[field.name] = 'The related collection no longer exists';
-						continue;
-					}
-
-					if (!target.id) {
-						issues[field.name] = 'The related collection has no id field';
-						continue;
-					}
-
-					const found = await queryDatabase(
-						databaseId,
-						`SELECT "${target.id}" FROM "${target.collection.name}" WHERE "${target.id}" IN (${ids.map(() => '?').join(', ')})`,
-						ids
-					);
-
-					if (found.length !== new Set(ids).size) {
-						issues[field.name] = 'A selected record no longer exists';
-					}
-				}
-			})(),
-			(error) => this.error(failureCode, failureMessage, error)
-		)
-			.andThen(() =>
-				this.pluginValues(collectionFields, input, creating).mapErr((error) =>
-					this.error(failureCode, failureMessage, error)
-				)
-			)
-			.andThen((plugin) => {
-				Object.assign(values, plugin.values);
-				Object.assign(issues, plugin.issues);
-
-				return Object.keys(issues).length
-					? errAsync<never, InvalidRecordError>({
-							code: 8001,
-							message: 'INVALID_RECORD',
-							data: { issues }
-						})
-					: okAsync(values);
-			});
-	}
-
-	/**
-	 * The values to store for the fields with a plugin's type, checked and serialized by their
-	 * plugins (one call per plugin), and the validation messages (see `planPluginWrites`).
-	 */
-	private pluginValues(
-		collectionFields: Field[],
-		input: RecordInput,
-		creating: boolean
-	): ResultAsync<
-		{ values: Record<string, string | number | null>; issues: RecordIssues },
-		| ErrorOf<ReturnType<PluginsService['fieldTypes']>>
-		| ErrorOf<ReturnType<PluginsService['writeFieldValues']>>
-	> {
-		if (!hasPluginFields(collectionFields)) {
-			return okAsync({ values: {}, issues: {} });
-		}
-
-		const plugins = this.services.plugins();
-
-		return plugins.fieldTypes().andThen((types) => {
-			const plan = planPluginWrites(
-				collectionFields,
-				input,
-				new Set(types.map((type) => type.id)),
-				{ creating }
-			);
-
-			return ResultAsync.combine(
-				plan.batches.map((batch) => plugins.writeFieldValues(batch.pluginId, batch.items))
-			).map((results) => applyPluginWrites(plan, results));
-		});
-	}
-
-	/**
-	 * Turns the stored values of the fields with a plugin's type in `records` into what their
-	 * plugins return (`deserialize`), in place; one call per plugin. Fields whose plugin isn't
-	 * installed keep their stored values. Never fails: when a plugin can't be reached, the stored
-	 * values are returned and the failure is logged.
-	 */
-	private deserialize(
-		collectionFields: Field[],
-		records: Record<string, unknown>[]
-	): ResultAsync<void, never> {
-		if (!records.length || !hasPluginFields(collectionFields)) {
-			return okAsync(undefined);
-		}
-
-		const plugins = this.services.plugins();
-
-		return plugins
-			.fieldTypes()
-			.andThen((types) => {
-				const batches = planPluginReads(
-					collectionFields,
-					records,
-					new Set(types.map((type) => type.id))
-				);
-
-				return ResultAsync.combine(
-					batches.map((batch) => plugins.readFieldValues(batch.pluginId, batch.items))
-				).map((answers) => applyPluginReads(batches, answers, records));
-			})
-			.orElse((failure) => {
-				console.error('[plugins] could not read the values of plugin fields', failure);
-				return okAsync(undefined);
-			});
-	}
-
-	private writeError<Code extends number, Message extends string>(
-		error: unknown,
-		code: Code,
-		message: Message
-	): UniqueViolationError | ServiceError<Code, Message> {
-		const field = uniqueViolation(error);
-
-		return field
-			? { code: 8002, message: 'UNIQUE_VIOLATION', data: { field } }
-			: this.error(code, message, error);
-	}
-
-	/** The related collection and the field used as its label. Throws on database errors. */
-	private async relationTarget(collectionId: string | undefined) {
-		return collectionId
-			? ((await this.relationTargets([collectionId])).get(collectionId) ?? null)
-			: null;
-	}
-
-	/**
-	 * The related collections and their label fields, by collection id, read in one round-trip.
-	 * Collections that don't exist are left out. Throws on database errors.
-	 */
-	private async relationTargets(collectionIds: string[]) {
-		const targets = new Map<string, RelationTarget>();
-		const ids = [...new Set(collectionIds)];
-
-		if (!ids.length) {
-			return targets;
-		}
-
-		const [targetCollections, targetFields] = await this.db.batch([
-			this.db.select().from(collections).where(inArray(collections.id, ids)),
-			this.db
-				.select({ collectionId: fields.collectionId, name: fields.name, type: fields.type })
-				.from(fields)
-				.where(inArray(fields.collectionId, ids))
-				.orderBy(asc(fields.position), asc(fields.createdAt))
-		]);
-
-		for (const collection of targetCollections) {
-			const own = targetFields.filter((field) => field.collectionId === collection.id);
-			const named = (match: (type: Field['type']) => boolean) =>
-				own.find((field) => match(field.type))?.name ?? null;
-
-			targets.set(collection.id, {
-				collection,
-				label: named((type) => LABEL_TYPES.has(type)),
-				id: named((type) => type === 'id'),
-				created: named((type) => type === 'created')
-			});
-		}
-
-		return targets;
-	}
-
-	/**
-	 * Linked OAuth accounts and passwords of these users, read from the internal `_external_auths`
-	 * and `_passwords` tables. Throws on database errors.
-	 */
-	private async signInMethods(databaseId: string, userIds: string[]) {
-		const methods: Record<string, SignInMethod[]> = Object.fromEntries(
-			userIds.map((id) => [id, []])
-		);
-
-		if (!userIds.length) {
-			return methods;
-		}
-
-		const placeholders = userIds.map(() => '?').join(', ');
-		// Labels and logos are a nicety: without them the provider id is shown.
-		const providers = this.services
-			.oauthProviders()
-			.labels()
-			.unwrapOr(new Map<string, { label: string; iconUrl: string | null }>());
-		const [linked, passwords] = await batchDatabase(databaseId, [
-			{
-				sql: `SELECT "user_id", "provider", "provider_id", "created_at" FROM "_external_auths" WHERE "user_id" IN (${placeholders}) ORDER BY "created_at"`,
-				params: userIds
-			},
-			{
-				sql: `SELECT "user_id", "updated_at" FROM "_passwords" WHERE "user_id" IN (${placeholders})`,
-				params: userIds
-			}
-		]);
-
-		const info = await providers;
-
-		for (const [userId, provider, providerId, createdAt] of linked) {
-			const id = String(provider);
-
-			methods[String(userId)]?.push({
-				provider: id,
-				label: info.get(id)?.label ?? id,
-				iconUrl: info.get(id)?.iconUrl ?? null,
-				providerId: String(providerId),
-				linkedAt: Number(createdAt)
-			});
-		}
-
-		for (const [userId, updatedAt] of passwords) {
-			methods[String(userId)]?.push({
-				provider: 'password',
-				label: 'Password',
-				iconUrl: null,
-				providerId: null,
-				linkedAt: Number(updatedAt)
-			});
-		}
-
-		return methods;
-	}
-
-	/**
-	 * Replaces relation ids in the rows with `{ id, label }` references, and returns the collection
-	 * each relation field points to (`relationTargets`, see `relationTargets()`). Fields are resolved
-	 * in parallel. Throws on database errors.
-	 */
-	private async resolveRelations(
-		databaseId: string,
-		collectionFields: Field[],
-		rows: RecordRow[],
-		relationTargets: Map<string, RelationTarget>
-	) {
-		const targets: Record<string, string> = {};
-		const relationFields = collectionFields.filter((field) => isRelationType(field.type));
-
-		await Promise.all(
-			relationFields.map(async (field) => {
-				const idsByRow = rows.map((row) => {
-					try {
-						return parseIds(row[field.name]);
-					} catch {
-						return [];
-					}
-				});
-				const ids = [...new Set(idsByRow.flat())];
-				const labels = new Map<string, string>();
-				const target = relationTargets.get(field.options.collectionId ?? '');
-
-				if (target) {
-					targets[field.name] = target.collection.name;
-				}
-
-				if (target?.id && ids.length) {
-					const { id: idColumn, label } = target;
-					const chunks: string[][] = [];
-
-					for (let start = 0; start < ids.length; start += MAX_IDS) {
-						chunks.push(ids.slice(start, start + MAX_IDS));
-					}
-
-					const results = await batchDatabase(
-						databaseId,
-						chunks.map((chunk) => ({
-							sql: `SELECT "${idColumn}", "${label ?? idColumn}" FROM "${target.collection.name}" WHERE "${idColumn}" IN (${chunk.map(() => '?').join(', ')})`,
-							params: chunk
-						}))
-					);
-
-					for (const [id, label] of results.flat()) {
-						labels.set(String(id), String(label ?? id));
-					}
-				}
-
-				rows.forEach((row, index) => {
-					row[field.name] = idsByRow[index].map((id) => ({ id, label: labels.get(id) ?? id }));
-				});
-			})
-		);
-
-		return targets;
 	}
 }
