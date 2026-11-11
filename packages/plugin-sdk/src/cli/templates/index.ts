@@ -4,6 +4,7 @@ export {
 	EXAMPLE_PROVIDER_HOST,
 	entrySource,
 	fieldEntry,
+	functionEntry,
 	pageEntry,
 	providerEntry,
 	routeEntry,

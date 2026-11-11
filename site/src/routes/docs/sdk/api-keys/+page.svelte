@@ -25,9 +25,8 @@
 	<p>
 		Email and the schema need an API key (<Code.Root>pbk_…</Code.Root>). Create one in the dashboard
 		(see <a href={resolve('/docs/platform/api-keys')}>API keys</a>) and pass it as
-		<Code.Root>apiKey</Code.Root>. A <a href={resolve('/docs/platform/functions')}>function</a> gets
-		<Code.Root>env.POUCHBASE_URL</Code.Root> and a key of its own in
-		<Code.Root>env.POUCHBASE_API_KEY</Code.Root>.
+		<Code.Root>apiKey</Code.Root>. A <a href={resolve('/docs/platform/functions')}>function</a> has
+		such a client ready as <Code.Root>ctx.pouch</Code.Root>.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

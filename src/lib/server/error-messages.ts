@@ -193,6 +193,7 @@ export const ERROR_MESSAGES: Record<number, string | [number, string]> = {
 	19020: [409, "A collection with the name of one of the plugin's collections already exists"],
 	19021: [400, "One of the plugin's collections is invalid"],
 	19023: [409, "Another collection links to one of the plugin's collections"],
+	19024: [409, "A function with the name of one of the plugin's functions already exists"],
 
 	// Environments
 	20000: 'Could not complete the environments operation',

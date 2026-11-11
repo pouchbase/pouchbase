@@ -47,9 +47,9 @@ function toPosix(path: string) {
 /**
  * The source of the server entry: it imports `plugin.ts` and default-exports what the host runs (a
  * `ServerDefinition`): the settings, the field types and auth providers without their components
- * and icons, and a key per route and method (`"GET /items/:id"`) for every function a route module
- * has under a method's name. The source has no other imports, so a bundler only needs to resolve
- * the project files.
+ * and icons, a key per route and method (`"GET /items/:id"`) for every function a route module has
+ * under a method's name, and the handler of every function. The source has no other imports, so a
+ * bundler only needs to resolve the project files.
  */
 export function generateServerEntry(
 	input: ServerEntryInput,
@@ -96,11 +96,23 @@ function routes(modules) {
 	return result;
 }
 
+/** The handler of every function, by name. */
+function functions(definitions) {
+	const result = {};
+
+	for (const [name, definition] of Object.entries(definitions ?? {})) {
+		result[name] = definition?.handler;
+	}
+
+	return result;
+}
+
 export default {
 	settings: plugin?.settings ?? [],
 	fields: without(plugin?.fields, ['input', 'preview', 'icon']),
 	authProviders: without(plugin?.authProviders, ['icon']),
-	routes: routes(plugin?.routes)
+	routes: routes(plugin?.routes),
+	functions: functions(plugin?.functions)
 };
 `;
 }

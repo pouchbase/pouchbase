@@ -8,6 +8,7 @@ describe('describeContributions', () => {
 		pages: [{ path: 'overview', title: 'Demo' }],
 		authProviders: [],
 		routes: ['GET /info', 'POST /echo', 'GET /github-status'],
+		functions: ['get-posts'],
 		settings: [
 			{ key: 'greeting', label: 'Greeting' },
 			{ key: 'token', label: 'Token' }
@@ -16,13 +17,13 @@ describe('describeContributions', () => {
 
 	it('names fields, pages and providers and counts the rest', () => {
 		expect(describeContributions(summary)).toBe(
-			'1 field type (Rating), 1 page (Demo), 3 routes, 2 settings'
+			'1 field type (Rating), 1 page (Demo), 3 routes, 1 function, 2 settings'
 		);
 	});
 
 	it('only counts without names', () => {
 		expect(describeContributions(summary, { names: false })).toBe(
-			'1 field type, 1 page, 3 routes, 2 settings'
+			'1 field type, 1 page, 3 routes, 1 function, 2 settings'
 		);
 	});
 

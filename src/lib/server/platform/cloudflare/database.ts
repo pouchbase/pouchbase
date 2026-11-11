@@ -2,11 +2,13 @@ import type { DatabaseDriver, DatabaseInfo, QueryResult, SqlImport, Statement } 
 
 import { api, cloudflareFetch, CloudflareApiError, failure } from './api';
 import { attachBindings, d1Binding } from './bindings';
+import { attachGateway, gatewayQuery, hasGateway } from './gateway';
 
 /**
- * D1 through a binding when the deployed Worker has one for the database (see `./bindings`), and
- * through the HTTP API otherwise; the `/raw` endpoint returns rows as arrays. Every API call is a
- * round-trip to the API, so related statements go through `batch` (one request) where possible.
+ * D1 through a binding when the deployed Worker has one for the database (see `./bindings`),
+ * through the D1 gateway on Node (see `./gateway`), and through the HTTP API otherwise; the `/raw`
+ * endpoint returns rows as arrays. Every API or gateway call is a round-trip, so related
+ * statements go through `batch` (one request) where possible.
  */
 
 interface D1DatabaseInfo {
@@ -127,6 +129,15 @@ export const database: DatabaseDriver = {
 			return { columns, rows };
 		}
 
+		const viaGateway = await gatewayQuery(databaseId, {
+			path: '/query',
+			statement: { sql, params }
+		});
+
+		if (viaGateway) {
+			return viaGateway[0] ?? { columns: [], rows: [] };
+		}
+
 		const [result] = await api<D1RawResult[]>(`/d1/database/${databaseId}/raw`, {
 			method: 'POST',
 			body: JSON.stringify({ sql, params })
@@ -150,6 +161,12 @@ export const database: DatabaseDriver = {
 			return results.map((result) => objectsToResult(result.results as Record<string, unknown>[]));
 		}
 
+		const viaGateway = await gatewayQuery(databaseId, { path: '/batch', statements });
+
+		if (viaGateway) {
+			return statements.map((_, index) => viaGateway[index] ?? { columns: [], rows: [] });
+		}
+
 		const results = await api<D1RawResult[]>(`/d1/database/${databaseId}/raw`, {
 			method: 'POST',
 			body: JSON.stringify({
@@ -160,10 +177,16 @@ export const database: DatabaseDriver = {
 		return statements.map((_, index) => toResult(results[index]));
 	},
 
-	attach: attachBindings,
+	async attach(databaseIds) {
+		await Promise.all([attachBindings(databaseIds), attachGateway(databaseIds)]);
+	},
 
 	route(databaseId) {
-		return d1Binding(databaseId) ? 'binding' : 'api';
+		if (d1Binding(databaseId)) {
+			return 'binding';
+		}
+
+		return hasGateway(databaseId) ? 'gateway' : 'api';
 	},
 
 	async exportSql(databaseId, bookmark) {

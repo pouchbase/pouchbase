@@ -19,8 +19,8 @@ const HELP = `Usage: pouchbase-plugin <command> [options]
 
 Commands:
   init <dir>             Create a plugin in a new directory; its name becomes the plugin id
-  add <kind> <id>        Add a field, page, auth-provider or route: its files and its entry in
-                         plugin.ts; or a setting (add setting <key>)
+  add <kind> <id>        Add a field, page, auth-provider, route or function: its files and its
+                         entry in plugin.ts; or a setting (add setting <key>)
   validate               Check the plugin: plugin.ts, pouchbase-plugin.json and the components
   manifest               Print the manifest the plugin builds into, as JSON
   build                  Build the bundle into dist/

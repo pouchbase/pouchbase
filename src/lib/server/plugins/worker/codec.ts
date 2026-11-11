@@ -13,7 +13,10 @@ export const CALL_PATH = '/__call';
 /** Prefix of the route requests: `/__route/items/42` runs the route of `/items/42`. */
 export const ROUTE_PATH = '/__route';
 
-/** Request header of a route request with its context as JSON; see `routeContextHeader`. */
+/** Prefix of the function requests: `/__function/get-posts` runs the function `get-posts`. */
+export const FUNCTION_PATH = '/__function';
+
+/** Request header of a route or function request with its context as JSON; see `routeContextHeader`. */
 export const CONTEXT_HEADER = 'x-pouchbase-plugin-context';
 
 /** Response header that marks a route handler that failed, instead of a response of its own. */

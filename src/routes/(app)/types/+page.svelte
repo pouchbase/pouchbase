@@ -33,8 +33,8 @@
 
 <Page.Layout title="Types" gap="tight">
 	{#snippet description()}
-		TypeScript types of your collections and email templates, for the JavaScript SDK:
-		<span class="font-mono">createClient&lt;Schema, MailTemplates&gt;(url)</span>.
+		TypeScript types of your collections, email templates and functions, for the JavaScript SDK:
+		<span class="font-mono">createClient&lt;Schema, MailTemplates, Functions&gt;(url)</span>.
 	{/snippet}
 
 	<Card.Root>

@@ -35,6 +35,12 @@ export {
 	pluginCollectionName,
 	type CollectionContribution
 } from './collections.js';
+export {
+	FUNCTION_NAME_PATTERN,
+	MAX_FUNCTION_NAME_LENGTH,
+	pluginFunctionName,
+	type FunctionContribution
+} from './functions.js';
 export { pluginSettingsSchema, type PluginSetting } from './settings-schema.js';
 export { resolveSettings } from './settings.js';
 export { manifestJsonSchema } from './manifest-json-schema.js';

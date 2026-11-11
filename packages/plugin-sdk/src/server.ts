@@ -169,7 +169,8 @@ export type PluginContext = {
 	 * collections (`collections` of `definePlugin`, by their full name, e.g. `demo_reviews`) and of
 	 * those in `permissions.collections`; other collections fail with a `forbidden` error. The
 	 * collections' API rules don't apply to it, so check `ctx.user` before acting for a user.
-	 * Realtime, files, mail, functions and the schema API aren't available to plugins.
+	 * Realtime, files, mail, calling functions and the schema API aren't available to plugins; a
+	 * plugin adds functions of its own with `functions` of `definePlugin`.
 	 */
 	pouch: Pouchbase;
 };
@@ -281,6 +282,32 @@ export type RouteMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
  */
 export type RouteModule = Partial<Record<RouteMethod, RouteHandler>>;
 
+/**
+ * Handles every request to a function of the plugin, whatever its method or path below the
+ * function's URL; `request.url` is the URL the caller used.
+ */
+export type FunctionHandler = (
+	request: Request,
+	ctx: PluginContext
+) => Response | Promise<Response>;
+
+/**
+ * A function of the plugin, in `functions` of `definePlugin`: its key is its name without the
+ * prefix (`get-posts` becomes `<plugin>-get-posts`, see `pluginFunctionName`). Apps call it like any
+ * other function, at `/api/functions/<plugin>-get-posts` or with `pouch.functions.invoke()`, and it
+ * is listed on the Functions page. It runs in the plugin's Worker, with the plugin's `ctx`.
+ */
+export type FunctionDefinition = {
+	/** One sentence, shown on the Functions page and in the generated types. */
+	description?: string;
+	/**
+	 * Whether callers must be signed in as an app user (`ctx.user`); others get a 401 before the
+	 * handler runs. Default `false`: anyone may call the function, so check what `ctx.user` may do.
+	 */
+	requireAuth?: boolean;
+	handler: FunctionHandler;
+};
+
 /** A dashboard page, in `pages` of `definePlugin`: its key is its path below `/plugins/<id>/`. */
 export type PageDefinition = {
 	/** The page: `import Stats from './pages/stats.svelte'`. */
@@ -387,6 +414,11 @@ export type PluginDefinition = {
 	 * segment is a parameter, in `ctx.params`; `'/'` is the plugin's root.
 	 */
 	routes?: Record<`/${string}`, RouteModule>;
+	/**
+	 * Functions by name, without the prefix: `{ 'get-posts': getPosts }` adds `<plugin>-get-posts`,
+	 * called through `/api/functions/<plugin>-get-posts`. Lowercase letters, numbers and dashes.
+	 */
+	functions?: Record<string, FunctionDefinition>;
 };
 
 /**
@@ -399,6 +431,7 @@ export type ServerDefinition = {
 	fields?: Record<string, FieldTypeHandler>;
 	authProviders?: Record<string, AuthProviderHandler>;
 	routes?: Record<`${RouteMethod} /${string}`, RouteHandler>;
+	functions?: Record<string, FunctionHandler>;
 };
 
 /**
@@ -416,6 +449,11 @@ export function defineField<T extends FieldDefinition>(definition: T): T {
 
 /** Types a collection written outside `definePlugin`; returns it unchanged. */
 export function defineCollection<T extends CollectionDefinition>(definition: T): T {
+	return definition;
+}
+
+/** Types a function written outside `definePlugin`; returns it unchanged. */
+export function defineFunction<T extends FunctionDefinition>(definition: T): T {
 	return definition;
 }
 

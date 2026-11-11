@@ -1,12 +1,17 @@
 import type { RequestHandler } from './$types';
 
 import { bearerToken, json } from '#lib/server/api.js';
+import { pluginUser } from '#lib/server/plugins/protocol.js';
+import { isSameOriginRequest } from '#lib/server/plugins/requests.js';
 
 /**
  * Calls a function: the request (method, headers, body, and the path and query string after the
- * name) goes to the function's Worker, and its response comes back as it is. A valid bearer token
- * of an app user is passed on as the user (`pouchbaseUser(request)` in the function); functions
- * that require sign-in answer 401 without one. Like the rest of the API, any origin may call it.
+ * name) goes to the function's Worker, and its response comes back as it is. A bearer token must
+ * be a valid token of an app user; `ctx.pouch` in the function acts with it. Functions that require
+ * sign-in answer 401 without one. Like the rest of the API, any origin may call it.
+ *
+ * A plugin's function runs in the plugin's Worker instead, and sees the same caller as a plugin's
+ * route: `ctx.user` for the bearer token, and `ctx.admin` for an admin in the dashboard.
  *
  * Responses are served from the admin's own origin, so they are sandboxed: HTML a function
  * returns can't run scripts here.
@@ -80,7 +85,10 @@ export const fallback: RequestHandler = async (event) => {
 
 	const result = await services
 		.functions()
-		.invoke(params.name, request, `/${params.path}${url.search}`, user);
+		.invoke(params.name, request, `/${params.path}${url.search}`, {
+			admin: locals.user !== null && isSameOriginRequest(request.headers),
+			user: user ? pluginUser(user as Record<string, unknown> & { id: unknown }) : null
+		});
 
 	if (result.isErr()) {
 		if (result.error.code === 18001 || result.error.code === 18009) {

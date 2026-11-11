@@ -45,7 +45,7 @@ export interface DatabaseDriver {
 	batch(databaseId: string, statements: Statement[]): Promise<QueryResult[]>;
 	/**
 	 * Makes these databases faster to reach where the platform supports it (Cloudflare: D1 bindings
-	 * on the deployed Worker). Optional; queries work without it.
+	 * on the deployed Worker, the D1 gateway on Node). Optional; queries work without it.
 	 */
 	attach?(databaseIds: string[]): Promise<void>;
 	/**

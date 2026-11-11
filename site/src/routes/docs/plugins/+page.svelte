@@ -34,7 +34,8 @@
 			title: 'Routes',
 			href: resolve('/docs/plugins/routes'),
 			icon: 'lucide:route',
-			description: 'HTTP endpoints under /api/plugins/<id>/, for your pages, apps and webhooks.'
+			description:
+				'HTTP endpoints under /api/plugins/<id>/ for your pages and webhooks, and functions for your apps.'
 		},
 		{
 			title: 'Sign-in providers',

@@ -13,6 +13,16 @@ declare module 'virtual:pouchbase/plugin-worker' {
 	export const guard: string;
 }
 
+/** The entry of a function's Worker, bundled with the JS SDK; see `vite/function-worker.ts`. */
+declare module 'virtual:pouchbase/function-worker' {
+	export const entry: string;
+}
+
+/** The JS SDK's declarations for the functions editor; see `vite/function-worker.ts`. */
+declare module 'virtual:pouchbase/function-typings' {
+	export const sdkTypings: string;
+}
+
 /** The generated server entry of a built-in plugin: default-exports what the host runs. */
 declare module 'virtual:pouchbase/embedded-plugins/server/*' {
 	const definition: import('@pouchbasejs/plugin-sdk/server').ServerDefinition | undefined;

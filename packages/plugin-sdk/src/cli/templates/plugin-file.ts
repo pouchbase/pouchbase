@@ -49,7 +49,7 @@ export function pluginFileSource(
 		);
 	}
 
-	for (const key of ['fields', 'pages', 'authProviders', 'routes'] as const) {
+	for (const key of ['fields', 'pages', 'authProviders', 'routes', 'functions'] as const) {
 		const records = entries.filter((entry) => entry.key === key);
 
 		if (records.length) {
@@ -67,7 +67,8 @@ ${imports.length ? `\n${imports.join('\n')}\n` : ''}
  * The plugin: everything it adds, by id. Settings are filled in by an admin on the Plugins page and
  * read with \`await ctx.settings.get(key)\` (a number setting comes back as a number, a boolean
  * setting as a boolean, the others as strings; \`null\` while there is no value, unless the setting
- * has a default). \`pouchbase-plugin add field|page|auth-provider|route|setting <id>\` adds one.
+ * has a default). \`pouchbase-plugin add field|page|auth-provider|route|function|setting <id>\` adds
+ * one.
  */
 const plugin = definePlugin({${properties.length ? `\n\t${properties.join(',\n\t')}\n` : ''}});
 

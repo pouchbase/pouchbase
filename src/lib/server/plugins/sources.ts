@@ -8,7 +8,12 @@ import type { FieldColumn } from '@pouchbasejs/plugin-sdk/server';
 import type { PluginFieldTypeId } from '#lib/fields/field-types.js';
 import type { PluginCallContext } from './protocol';
 
-import { contributionSummary, pluginFieldTypeId, resolveSettings } from '@pouchbasejs/plugin-sdk';
+import {
+	contributionSummary,
+	pluginFieldTypeId,
+	pluginFunctionName,
+	resolveSettings
+} from '@pouchbasejs/plugin-sdk';
 import { pluginImagePath } from '#lib/auth/oauth-providers.js';
 
 import { plugins } from '../db';
@@ -117,6 +122,20 @@ export type PluginFieldType = {
 	iconUrl: string | null;
 };
 
+/** A function a plugin contributes, as the Functions pages and the public API use it. */
+export type PluginFunction = {
+	/** `<plugin>-<name>`, as apps call it. */
+	name: string;
+	/** The plugin's own name of the function, e.g. `get-posts`. */
+	localName: string;
+	pluginId: string;
+	pluginName: string;
+	description: string;
+	requireAuth: boolean;
+	/** When the plugin was last installed or updated; `null` for a built-in plugin. */
+	updatedAt: Date | null;
+};
+
 /** The URL of an image of the plugin (its icon, or that of a contribution); `null` without. */
 export function imageUrl(manifest: PluginManifest, path: string | undefined) {
 	return path ? pluginImagePath(manifest.id, path, manifest.version) : null;
@@ -175,6 +194,21 @@ export function toFieldTypes(source: PluginSource): PluginFieldType[] {
 		input: field.input,
 		preview: field.preview ?? null,
 		iconUrl: imageUrl(manifest, field.icon)
+	}));
+}
+
+export function toFunctions(source: PluginSource): PluginFunction[] {
+	const { manifest, row } = source;
+
+	// The stored manifest of a plugin installed before plugins had functions doesn't have the list.
+	return (manifest.contributes.functions ?? []).map((fn) => ({
+		name: pluginFunctionName(manifest.id, fn.name),
+		localName: fn.name,
+		pluginId: manifest.id,
+		pluginName: row?.name ?? manifest.name,
+		description: fn.description ?? '',
+		requireAuth: fn.requireAuth,
+		updatedAt: row?.updatedAt ?? null
 	}));
 }
 

@@ -33,7 +33,9 @@
 	<p>
 		<Code.Root>invoke()</Code.Root> calls <Code.Root>/api/functions/&lt;name&gt;</Code.Root> with the
 		signed-in user's token, so the function knows who calls it. See
-		<a href={resolve('/docs/platform/functions')}>Functions</a> to write them.
+		<a href={resolve('/docs/platform/functions')}>Functions</a> to write them. With the generated
+		<a href="{resolve('/docs/sdk/types')}#functions"><Code.Root>Functions</Code.Root></a>,
+		TypeScript checks the function's name.
 	</p>
 
 	<CodeBlock.Root title="TypeScript">

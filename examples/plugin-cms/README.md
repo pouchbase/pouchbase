@@ -12,6 +12,7 @@ An example [Pouchbase](https://pouchbase.io) plugin that turns an instance into 
   - **Add new post** (`/plugins/cms/posts/new`): the editor for a new post, with `layout: 'full'`, so it takes all of the space below the dashboard's top bar;
   - **Edit post** (`/plugins/cms/posts/edit/<id>`): the same editor for an existing post, without a sidebar link (`navigation: false`); the id is the path below the page (`params`). The longest page path wins, so `posts/new` and `posts/edit` aren't taken for `posts`;
 - eight **routes** under `/api/plugins/cms/`, all for admins of the dashboard (`ctx.admin`) except `GET /site`: `GET`/`POST /posts`, `GET`/`PATCH`/`DELETE /posts/:id`, `GET`/`POST /categories` and `GET /site`;
+- one **function**, `cms-get-posts` (`functions/get-posts.ts`), at `/api/functions/cms-get-posts`: a page of the published posts, for apps that would rather call an endpoint than query the collection;
 - one **setting**, `site_url`: where the posts are published. The editor shows a post's permalink (`<site URL>/<slug>`) and links to it once it is published.
 
 ## The editor
@@ -38,6 +39,12 @@ const posts = await pouch.db.cms_posts.findMany({
 });
 ```
 
+Or through the plugin's function, which picks the published posts itself:
+
+```ts
+const page = await pouch.functions.invoke('cms-get-posts', { query: { page: 2 } });
+```
+
 Sanitize `content` before rendering it, as with any HTML that admins write.
 
 ## Layout
@@ -45,7 +52,7 @@ Sanitize `content` before rendering it, as with any HTML that admins write.
 ```
 plugin-cms/
 ├── pouchbase-plugin.json     # id, name, categories, engines
-├── plugin.ts                 # definePlugin({ settings, collections, pages, routes })
+├── plugin.ts                 # definePlugin({ settings, collections, pages, routes, functions })
 ├── icon.svg
 ├── collections/              # posts.ts, categories.ts: defineCollection
 ├── pages/
@@ -58,6 +65,7 @@ plugin-cms/
 │   └── editor/               # post-editor.svelte and its parts: editor-header, block, block-toolbar,
 │                             # block-inserter, slash-menu, rich-text, post-sidebar, block-settings, …
 ├── routes/                   # posts.ts, post.ts, categories.ts, site.ts
+├── functions/                # get-posts.ts: defineFunction
 ├── lib/
 │   ├── posts.ts              # the post model and parsePostInput, shared by the routes and the pages
 │   ├── store.ts              # server code of the routes: ctx.pouch, admin check, unique slugs

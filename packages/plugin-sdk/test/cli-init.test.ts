@@ -123,7 +123,8 @@ describe('init', () => {
 			fields: [],
 			pages: [],
 			authProviders: [],
-			collections: []
+			collections: [],
+			functions: []
 		});
 		expect(Object.keys(bundle.files)).toEqual(['ui/icon.svg']);
 	});

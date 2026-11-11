@@ -47,6 +47,7 @@ describe('declarations', () => {
 				field('c2', 'secret', { hidden: true })
 			],
 			none,
+			[],
 			[]
 		);
 
@@ -80,6 +81,7 @@ describe('declarations', () => {
 			[collection('a', 'blog_posts'), collection('b', 'blog__posts')],
 			[],
 			none,
+			[],
 			[]
 		);
 
@@ -88,18 +90,24 @@ describe('declarations', () => {
 	});
 
 	it('declares the variables of the email templates', () => {
-		const code = declarations([], [], none, [
-			{
-				name: 'welcome-email',
-				description: 'Sent after sign-up.',
-				variables: [
-					{ name: 'name', required: true },
-					{ name: 'promo', required: false }
-				]
-			},
-			{ name: 'plain', description: '', variables: [] },
-			{ name: 'broken', description: '', variables: null }
-		]);
+		const code = declarations(
+			[],
+			[],
+			none,
+			[
+				{
+					name: 'welcome-email',
+					description: 'Sent after sign-up.',
+					variables: [
+						{ name: 'name', required: true },
+						{ name: 'promo', required: false }
+					]
+				},
+				{ name: 'plain', description: '', variables: [] },
+				{ name: 'broken', description: '', variables: null }
+			],
+			[]
+		);
 
 		expect(code).toContain('\t"welcome-email": {');
 		expect(code).toContain('\t\tname: unknown;');
@@ -108,10 +116,31 @@ describe('declarations', () => {
 		expect(code).toContain('\tbroken: Record<string, unknown>;');
 	});
 
+	it('declares the names of the functions', () => {
+		const code = declarations(
+			[],
+			[],
+			none,
+			[],
+			[
+				{ name: 'send-invoice', description: 'Mails an invoice.', requireAuth: true },
+				{ name: 'hello', description: '', requireAuth: false }
+			]
+		);
+
+		expect(code).toContain(
+			'export interface Functions {\n\t/** Mails an invoice. Requires sign-in. */\n\t"send-invoice": unknown;\n\thello: unknown;\n}'
+		);
+	});
+
 	it('closes JSDoc comments safely', () => {
-		const code = declarations([posts], [field('c1', 'x')], none, [
-			{ name: 'tricky', description: 'ends with */ here', variables: [] }
-		]);
+		const code = declarations(
+			[posts],
+			[field('c1', 'x')],
+			none,
+			[{ name: 'tricky', description: 'ends with */ here', variables: [] }],
+			[]
+		);
 
 		expect(code).toContain('/** ends with * / here */');
 	});

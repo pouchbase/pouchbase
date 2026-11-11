@@ -2,6 +2,7 @@ import { definePlugin } from '@pouchbasejs/plugin-sdk/server';
 
 import categories from './collections/categories.js';
 import posts from './collections/posts.js';
+import getPosts from './functions/get-posts.js';
 import EditPost from './pages/edit-post.svelte';
 import NewPost from './pages/new-post.svelte';
 import Posts from './pages/posts.svelte';
@@ -45,7 +46,10 @@ const plugin = definePlugin({
 		'/posts/:id': post,
 		'/categories': categoriesRoute,
 		'/site': site
-	}
+	},
+
+	// `cms-get-posts`, at `/api/functions/cms-get-posts`: for apps, and on the Functions page.
+	functions: { 'get-posts': getPosts }
 });
 
 export default plugin;

@@ -203,6 +203,19 @@ describe('auth', () => {
 		expect(pouch.session.user).toEqual({ id: 'u1', name: 'Ada Lovelace' });
 	});
 
+	it('sends the token to /api/auth/me on a client with an API key', async () => {
+		const { fetch, calls } = mockFetch([200, { id: 'u1', name: 'Ada Lovelace' }]);
+		const pouch = new Pouchbase('https://pouch.example.com', {
+			fetch,
+			apiKey: 'pbk_service',
+			session: signedIn('abc')
+		});
+
+		await expect(pouch.auth.me()).resolves.toEqual({ id: 'u1', name: 'Ada Lovelace' });
+		expect(new Headers(calls[0]?.init.headers).get('authorization')).toBe('Bearer abc');
+		expect(pouch.session.token).toBe('abc');
+	});
+
 	it('ends the session when /api/auth/me rejects the token', async () => {
 		const { fetch } = mockFetch([401, { message: 'Invalid or expired token' }]);
 		const pouch = new Pouchbase('https://pouch.example.com', { fetch, session: signedIn('abc') });
@@ -310,6 +323,27 @@ describe('functions', () => {
 		expect(calls[0]?.init.method).toBe('POST');
 		expect(JSON.parse(String(calls[0]?.init.body))).toEqual({ name: 'Ada' });
 		expect(new Headers(calls[0]?.init.headers).get('authorization')).toMatch(/^Bearer /);
+	});
+
+	it('types the names of the generated Functions', async () => {
+		interface Functions {
+			hello: unknown;
+			'send-invoice': unknown;
+		}
+
+		const { fetch, calls } = mockFetch([200, { message: 'Hello' }]);
+		const pouch = createClient<object, object, Functions>('https://pouch.example.com', { fetch });
+
+		const { message } = await pouch.functions.invoke<{ message: string }>('send-invoice');
+
+		expect(message).toBe('Hello');
+		expect(calls[0]?.url).toBe('https://pouch.example.com/api/functions/send-invoice');
+
+		// Only type-checked, never run.
+		expectTypeOf(() => {
+			// @ts-expect-error: there is no function named `helo`.
+			void pouch.functions.invoke('helo');
+		}).toBeFunction();
 	});
 
 	it('throws the message of a failed function', async () => {

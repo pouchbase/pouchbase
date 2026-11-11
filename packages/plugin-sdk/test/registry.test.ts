@@ -177,6 +177,7 @@ describe('contribution summary', () => {
 				authProviders: [],
 				collections: [],
 				routes: ['GET /stats', 'POST /sync'],
+				functions: [],
 				settings: [{ key: 'api_key', label: 'API key' }]
 			});
 		}
@@ -192,6 +193,7 @@ describe('contribution summary', () => {
 			authProviders: [],
 			collections: [],
 			routes: ['GET /x'],
+			functions: [],
 			settings: []
 		});
 	});

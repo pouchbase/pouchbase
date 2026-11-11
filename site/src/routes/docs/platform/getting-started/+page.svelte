@@ -86,14 +86,15 @@
 	</div>
 
 	<p>
-		<strong>Run it as a Worker when speed matters.</strong> A Worker queries D1 through bindings;
-		Docker and the single binary go through the D1 HTTP API, a few hundred milliseconds per
-		round-trip. With <Code.Root>POUCHBASE_LOG_TIMING=true</Code.Root>, every <Code.Root
-			>[db]</Code.Root
-		>
-		log line says whether a query used a <Code.Root>binding</Code.Root> or the <Code.Root
-			>api</Code.Root
-		>.
+		<strong>Run it as a Worker when speed matters.</strong> A Worker queries D1 through bindings.
+		Docker and the single binary deploy a small gateway Worker (<Code.Root
+			>&lt;instance&gt;-gateway</Code.Root
+		>) with bindings for their databases and query through it, which avoids the rate limits of the D1
+		HTTP API, but every query still crosses the internet from your server. The gateway needs the
+		account's workers.dev subdomain, and its requests count toward your Workers requests. With
+		<Code.Root>POUCHBASE_LOG_TIMING=true</Code.Root>, every <Code.Root>[db]</Code.Root> log line
+		says whether a query used a <Code.Root>binding</Code.Root>, the <Code.Root>gateway</Code.Root>
+		or the <Code.Root>api</Code.Root>.
 	</p>
 
 	<h2 id="before-you-start">Before you start</h2>

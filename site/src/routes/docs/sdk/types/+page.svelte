@@ -12,13 +12,14 @@
 		{ id: 'what-is-in-the-file', title: 'What is in the file' },
 		{ id: 'a-typed-client', title: 'A typed client' },
 		{ id: 'email-templates', title: 'Email templates' },
+		{ id: 'functions', title: 'Functions' },
 		{ id: 'from-code', title: 'From code' }
 	];
 </script>
 
 <DocsPage
 	title="TypeScript types"
-	description="Generate types for your collections and email templates, so field names, filters, the values you send, the records you get back and the emails you send are all checked by TypeScript."
+	description="Generate types for your collections, email templates and functions, so field names, filters, the values you send, the records you get back, the emails you send and the functions you call are all checked by TypeScript."
 	{sections}
 >
 	<h2 id="download-the-types">Download the types</h2>
@@ -36,7 +37,9 @@
 		<CodeBlock.Source code={data.code.typesCli} />
 	</CodeBlock.Root>
 
-	<p>Run it again after changing your collections or templates, for example from a script:</p>
+	<p>
+		Run it again after changing your collections, templates or functions, for example from a script:
+	</p>
 
 	<CodeBlock.Root title="package.json">
 		<CodeBlock.Source code={data.code.typesScript} />
@@ -45,8 +48,9 @@
 	<h2 id="what-is-in-the-file">What is in the file</h2>
 
 	<p>
-		Per collection, the file has two types, plus a <Code.Root>Schema</Code.Root> with all of them and
-		<a href="#email-templates"><Code.Root>MailTemplates</Code.Root></a>:
+		Per collection, the file has two types, plus a <Code.Root>Schema</Code.Root> with all of them,
+		<a href="#email-templates"><Code.Root>MailTemplates</Code.Root></a> and
+		<a href="#functions"><Code.Root>Functions</Code.Root></a>:
 	</p>
 
 	<ul>
@@ -96,6 +100,23 @@
 	<p>
 		The values are <Code.Root>unknown</Code.Root>: a template says where a value goes, not what it
 		is. Built-in emails aren't in it, since only Pouchbase sends them.
+	</p>
+
+	<h2 id="functions">Functions</h2>
+
+	<p>
+		<Code.Root>Functions</Code.Root> lists every deployed function that
+		<a href={resolve('/docs/sdk/functions')}><Code.Root>pouch.functions.invoke()</Code.Root></a> can call.
+		Pass it as the third type to check the names:
+	</p>
+
+	<CodeBlock.Root title="TypeScript">
+		<CodeBlock.Source code={data.code.typedFunctions} />
+	</CodeBlock.Root>
+
+	<p>
+		It only has the names: the code of a function doesn't say what it takes or returns, so pass the
+		type of the response yourself.
 	</p>
 
 	<h2 id="from-code">From code</h2>

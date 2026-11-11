@@ -4,6 +4,7 @@ import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import { MAX_CATEGORIES } from '../categories.js';
+import { functionContributionSchema } from '../functions.js';
 import {
 	MANIFEST_FILE,
 	authProviderContributionSchema,
@@ -24,6 +25,7 @@ import {
 	camelCase,
 	fieldEntry,
 	freeName,
+	functionEntry,
 	json,
 	pageEntry,
 	pascalCase,
@@ -46,7 +48,14 @@ import {
  * `add setting <key>` appends a setting to `definePlugin({ settings })`.
  */
 
-export const CONTRIBUTION_KINDS = ['field', 'page', 'auth-provider', 'route', 'setting'] as const;
+export const CONTRIBUTION_KINDS = [
+	'field',
+	'page',
+	'auth-provider',
+	'route',
+	'function',
+	'setting'
+] as const;
 
 export type ContributionKind = (typeof CONTRIBUTION_KINDS)[number];
 
@@ -63,7 +72,8 @@ export type AddOptions = {
 const ID_SCHEMAS = {
 	field: fieldContributionSchema.shape.type,
 	page: pageContributionSchema.shape.path,
-	'auth-provider': authProviderContributionSchema.shape.id
+	'auth-provider': authProviderContributionSchema.shape.id,
+	function: functionContributionSchema.shape.name
 };
 
 /** Messages for an id that can't be one of its kind. */
@@ -76,6 +86,8 @@ const INVALID_ID: Record<ContributionKind, (id: string) => string> = {
 		`"${id}" can't be a provider id; use lowercase words separated by dashes, e.g. gitlab`,
 	route: (id) =>
 		`"${id}" can't be a route path; use lowercase words separated by slashes, with :name or [name] for a param, e.g. items/:id`,
+	function: (id) =>
+		`"${id}" can't be a function name; use lowercase letters, numbers and dashes, e.g. get-posts`,
 	setting: (id) =>
 		`"${id}" can't be a setting key; use lowercase letters, numbers and underscores, e.g. api_key`
 };
@@ -271,6 +283,17 @@ async function addToPlugin(
 			hints.push(`export POST, PUT, PATCH or DELETE from ${routeFile} to answer other methods.`);
 			break;
 		}
+
+		case 'function':
+			entry = functionEntry(
+				id,
+				freeName(camelCase(id), 'Function', used),
+				typeof manifest.id === 'string' ? manifest.id : null
+			);
+			hints.push(
+				`set the description in functions/${id}.ts, and requireAuth: true if only signed-in users may call it.`
+			);
+			break;
 	}
 
 	// Checked before any file is written, so a failure leaves the plugin as it was.

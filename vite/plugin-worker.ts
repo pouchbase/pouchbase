@@ -25,6 +25,31 @@ const WORKER_DIR = 'src/lib/server/plugins/worker';
 /** The modules of the Worker that stay imports: generated per plugin, or bundled on their own. */
 const EXTERNAL = new Set(['./pouchbase-config.js', './pouchbase-guard.js', './plugin.js']);
 
+/** Bundles a Worker module into one minified ES module; `external` imports stay imports. */
+export async function bundleWorkerModule(
+	input: string,
+	external: Set<string>,
+	watch: (module: string) => void
+) {
+	const build = await rolldown({
+		input,
+		platform: 'neutral',
+		external: (specifier) => external.has(specifier),
+		logLevel: 'silent'
+	});
+	const { output } = await build.generate({ format: 'esm', minify: true });
+
+	await build.close();
+
+	const [chunk] = output;
+
+	for (const module of chunk.moduleIds) {
+		watch(module);
+	}
+
+	return chunk.code;
+}
+
 export function pluginWorker(): Plugin {
 	let root = process.cwd();
 
@@ -41,25 +66,10 @@ export function pluginWorker(): Plugin {
 				return undefined;
 			}
 
-			const bundle = async (file: string) => {
-				const build = await rolldown({
-					input: resolve(root, WORKER_DIR, file),
-					platform: 'neutral',
-					external: (specifier) => EXTERNAL.has(specifier),
-					logLevel: 'silent'
-				});
-				const { output } = await build.generate({ format: 'esm', minify: true });
-
-				await build.close();
-
-				const [chunk] = output;
-
-				for (const module of chunk.moduleIds) {
-					this.addWatchFile(module);
-				}
-
-				return chunk.code;
-			};
+			const bundle = (file: string) =>
+				bundleWorkerModule(resolve(root, WORKER_DIR, file), EXTERNAL, (module) =>
+					this.addWatchFile(module)
+				);
 
 			const [entry, guard] = await Promise.all([
 				bundle('pouchbase.ts'),

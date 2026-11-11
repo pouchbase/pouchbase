@@ -103,8 +103,9 @@
 		<Card.Header>
 			<Card.Title>Request</Card.Title>
 			<Card.Description>
-				Sent to the deployed version without a signed-in user, also when the function requires
-				sign-in: <code>pouchbaseUser(request)</code> returns <code>null</code>.
+				Sent to the deployed version, also when the function requires sign-in. Without an
+				<code>Authorization</code> header, <code>ctx.pouch.auth.me()</code> returns
+				<code>null</code>.
 			</Card.Description>
 		</Card.Header>
 

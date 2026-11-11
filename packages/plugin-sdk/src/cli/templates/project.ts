@@ -79,7 +79,7 @@ Scripts:
   \`@pouchbasejs/plugin-sdk/testing\`); \`pnpm check\` type-checks the code and the components.
 - \`pnpm build\` writes the bundle to \`dist/\`.
 - \`pnpm release\` publishes it to the registry (needs \`POUCHBASE_REGISTRY_TOKEN\`).
-- \`npx pouchbase-plugin add field|page|auth-provider|route <id>\` creates the files of a
+- \`npx pouchbase-plugin add field|page|auth-provider|route|function <id>\` creates the files of a
   contribution and adds it to \`plugin.ts\`;
   \`npx pouchbase-plugin add setting <key> [--type text|secret|number|boolean|url]\` adds a setting.
 

@@ -48,6 +48,12 @@ export type DefaultCollections = { users: User };
 export type DefaultMailTemplates = Record<string, Record<string, unknown>>;
 
 /**
+ * The functions that can be called, by name, such as the `Functions` interface that
+ * `pouchbase types` generates. Without one, any name is allowed.
+ */
+export type DefaultFunctions = Record<string, unknown>;
+
+/**
  * The record type of the `users` collection in `C`: a `Schema` entry (`{ $record }`) or a record
  * type.
  */

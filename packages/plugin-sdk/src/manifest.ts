@@ -8,6 +8,11 @@ import {
 	collectionContributionSchema,
 	pluginCollectionName
 } from './collections.js';
+import {
+	MAX_FUNCTION_NAME_LENGTH,
+	functionContributionSchema,
+	pluginFunctionName
+} from './functions.js';
 import { pluginSettingsSchema } from './settings-schema.js';
 
 /**
@@ -263,12 +268,13 @@ export const manifestSchema = z
 				fields: z.array(fieldContributionSchema).max(20).default([]),
 				pages: z.array(pageContributionSchema).max(20).default([]),
 				authProviders: z.array(authProviderContributionSchema).max(10).default([]),
-				collections: z.array(collectionContributionSchema).max(20).default([])
+				collections: z.array(collectionContributionSchema).max(20).default([]),
+				functions: z.array(functionContributionSchema).max(20).default([])
 			})
-			.default({ fields: [], pages: [], authProviders: [], collections: [] })
+			.default({ fields: [], pages: [], authProviders: [], collections: [], functions: [] })
 	})
 	.superRefine((manifest, ctx) => {
-		const { fields, pages, authProviders, collections } = manifest.contributes;
+		const { fields, pages, authProviders, collections, functions } = manifest.contributes;
 
 		manifest.categories.forEach((category, index) => {
 			if (manifest.categories.indexOf(category) !== index) {
@@ -284,7 +290,8 @@ export const manifestSchema = z
 			['fields', fields.map((field) => field.type)],
 			['pages', pages.map((page) => page.path)],
 			['authProviders', authProviders.map((provider) => provider.id)],
-			['collections', collections.map((collection) => collection.name)]
+			['collections', collections.map((collection) => collection.name)],
+			['functions', functions.map((fn) => fn.name)]
 		] as const) {
 			ids.forEach((id, index) => {
 				if (ids.indexOf(id) !== index) {
@@ -309,12 +316,32 @@ export const manifestSchema = z
 			}
 		});
 
+		functions.forEach((fn, index) => {
+			const name = pluginFunctionName(manifest.id, fn.name);
+
+			if (name.length > MAX_FUNCTION_NAME_LENGTH) {
+				ctx.addIssue({
+					code: 'custom',
+					path: ['contributes', 'functions', index, 'name'],
+					message: `${name} is longer than ${MAX_FUNCTION_NAME_LENGTH} characters`
+				});
+			}
+		});
+
 		// Sign-in runs on the server: the provider's `profile` function maps the user.
 		if (authProviders.length && !manifest.server) {
 			ctx.addIssue({
 				code: 'custom',
 				path: ['server'],
 				message: 'Auth providers need server code'
+			});
+		}
+
+		if (functions.length && !manifest.server) {
+			ctx.addIssue({
+				code: 'custom',
+				path: ['server'],
+				message: 'Functions need server code'
 			});
 		}
 	});

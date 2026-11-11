@@ -9,6 +9,7 @@ import { describeEmbedded } from './in-process';
 import { matchRoute } from './routes';
 import {
 	dispatch,
+	dispatchFunction,
 	dispatchRoute,
 	PluginCallError,
 	pluginContext,
@@ -178,7 +179,8 @@ describe('dispatch of field calls', () => {
 describe('writeFieldValues and readFieldValues', () => {
 	const runtime = (answer: unknown): PluginRuntime => ({
 		call: async () => answer,
-		route: async () => new Response()
+		route: async () => new Response(),
+		invoke: async () => new Response()
 	});
 	const item = { type: 'rating', name: 'stars', options: {}, value: 1 };
 
@@ -322,6 +324,48 @@ describe('dispatchRoute', () => {
 		await expect(dispatchRoute(PLUGIN, request('/wrong'), '/wrong', ctx)).rejects.toThrow(
 			'did not return a Response'
 		);
+	});
+});
+
+describe('dispatchFunction', () => {
+	const request = new Request('https://pouchbase.example.com/api/functions/demo-hello');
+	const definition: ServerDefinition = {
+		functions: {
+			hello: (_request, handlerCtx) => Response.json({ plugin: handlerCtx.plugin.id }),
+			boom: () => {
+				throw new Error('boom');
+			},
+			wrong: () => 'not a response' as unknown as Response
+		}
+	};
+
+	it('runs the handler by name', async () => {
+		const response = await dispatchFunction(definition, request, 'hello', ctx);
+
+		await expect(response.json()).resolves.toEqual({ plugin: ctx.plugin.id });
+	});
+
+	it('answers 404 for an unknown name, also one of Object.prototype', async () => {
+		expect((await dispatchFunction(definition, request, 'nope', ctx)).status).toBe(404);
+		expect((await dispatchFunction(definition, request, 'toString', ctx)).status).toBe(404);
+		expect((await dispatchFunction(undefined, request, 'hello', ctx)).status).toBe(404);
+	});
+
+	it('throws PluginCallError when the handler fails', async () => {
+		await expect(dispatchFunction(definition, request, 'boom', ctx)).rejects.toThrow(
+			new PluginCallError('boom')
+		);
+		await expect(dispatchFunction(definition, request, 'wrong', ctx)).rejects.toThrow(
+			'The function handler did not return a Response'
+		);
+	});
+
+	it('is part of describe', async () => {
+		const description = describeResultSchema.parse(
+			await dispatch(definition, { type: 'describe' }, ctx)
+		);
+
+		expect(description.functions).toEqual(['hello', 'boom', 'wrong']);
 	});
 });
 

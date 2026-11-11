@@ -82,13 +82,14 @@ export const guard: Handle = async ({ event, resolve }) => {
 			return failService(ready.error);
 		}
 
-		// Gives the Worker D1 bindings when it has none yet (right after installing, or after a
-		// deploy replaced them). Queries use the REST API until then, so this runs in the background.
+		// Gives the Worker D1 bindings, or a Node server its D1 gateway, when it has none yet (right
+		// after installing, after a deploy replaced them, or on a new process). Queries use the
+		// REST API until then, so this runs in the background.
 		const attached = services
 			.database()
 			.attach()
 			.mapErr((failure) => {
-				console.error('[pouchbase] Could not add D1 bindings', failure);
+				console.error('[pouchbase] Could not attach the databases', failure);
 			});
 
 		background(Promise.resolve(attached));

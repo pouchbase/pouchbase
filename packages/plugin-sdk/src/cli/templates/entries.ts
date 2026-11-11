@@ -15,7 +15,7 @@ const PROVIDER_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height
  * and the imports that entry needs.
  */
 export type PluginEntry = {
-	key: 'fields' | 'pages' | 'authProviders' | 'routes';
+	key: 'fields' | 'pages' | 'authProviders' | 'routes' | 'functions';
 	/** Its id: the key in the record. */
 	id: string;
 	/** The value's source, e.g. `color` or `{ title: 'Stats', component: Stats }`. */
@@ -149,6 +149,37 @@ export function routeEntry(
  */
 export const GET: RouteHandler = (_request, ctx) =>
 	Response.json({ path: '${path}'${hasParams ? ', params: ctx.params' : ''}, admin: ctx.admin });
+`
+		}
+	};
+}
+
+/** A function in `functions/<name>.ts`; `variable` the import in `plugin.ts`. */
+export function functionEntry(
+	name: string,
+	variable: string,
+	pluginId: string | null
+): PluginEntry {
+	const url = `/api/functions/${pluginId ?? '<plugin>'}-${name}`;
+
+	return {
+		key: 'functions',
+		id: name,
+		value: variable,
+		imports: [`import ${variable} from './functions/${name}.js';`],
+		files: {
+			[`functions/${name}.ts`]: `import { defineFunction } from '@pouchbasejs/plugin-sdk/server';
+
+/**
+ * Served at ${url}, for every method; apps call it with pouch.functions.invoke(). Without
+ * requireAuth anyone may call it: check ctx.user (the app user of the request's bearer token)
+ * before doing something that needs one.
+ */
+export default defineFunction({
+	description: ${quote(`${title(name)}.`)},
+	requireAuth: false,
+	handler: (_request, ctx) => Response.json({ user: ctx.user?.id ?? null })
+});
 `
 		}
 	};

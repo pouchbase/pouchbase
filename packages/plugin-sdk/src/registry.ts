@@ -62,6 +62,8 @@ const contributionSummarySchema = z.object({
 	collections: z.array(z.string()).default([]),
 	/** Route keys of the server code, e.g. `GET /stats`. */
 	routes: z.array(z.string()).default([]),
+	/** Names of the plugin's functions, without the prefix (see `pluginFunctionName`). */
+	functions: z.array(z.string()).default([]),
 	settings: z.array(z.object({ key: z.string(), label: z.string() })).default([])
 });
 
@@ -123,7 +125,7 @@ export function contributionSummary(
 	manifest: Pick<PluginManifest, 'contributes' | 'settings'>,
 	routes: readonly string[] = []
 ): ContributionSummary {
-	const { fields, pages, authProviders, collections } = manifest.contributes;
+	const { fields, pages, authProviders, collections, functions } = manifest.contributes;
 
 	return {
 		fields: fields.map(({ type, label }) => ({ type, label })),
@@ -131,6 +133,7 @@ export function contributionSummary(
 		authProviders: authProviders.map(({ id, label }) => ({ id, label })),
 		collections: (collections ?? []).map(({ name }) => name),
 		routes: [...routes].sort(),
+		functions: (functions ?? []).map(({ name }) => name),
 		settings: (manifest.settings ?? []).map(({ key, label }) => ({ key, label }))
 	};
 }

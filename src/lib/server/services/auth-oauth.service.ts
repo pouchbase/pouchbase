@@ -385,6 +385,6 @@ export class OAuthService extends Service {
 	 * same one). Reads the request URL, so it can't be used inside a remote `query`.
 	 */
 	private callbackUrl(provider: OAuthProvider) {
-		return new URL(oauthCallbackPath(provider), this.ctx.url.origin).toString();
+		return new URL(oauthCallbackPath(provider), this.origin).toString();
 	}
 }

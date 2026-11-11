@@ -2,6 +2,7 @@ import type { Logger } from '../output.js';
 import type { Problem } from './problems.js';
 
 import type { CollectionContribution } from '../../collections.js';
+import type { FunctionContribution } from '../../functions.js';
 import type {
 	AuthProviderContribution,
 	FieldContribution,
@@ -18,6 +19,7 @@ import {
 	collectionContributions,
 	definitionRoutes,
 	fieldContributions,
+	functionContributions,
 	pageContributions,
 	type DefinitionScope,
 	type FileUse
@@ -34,6 +36,7 @@ export type PluginContents = {
 	collections: CollectionContribution[];
 	/** Route keys, e.g. `GET /items/:id`. */
 	routes: string[];
+	functions: FunctionContribution[];
 	/** The components the contributions name. */
 	components: FileUse[];
 	/** Project paths of the imported icon files. */
@@ -113,6 +116,7 @@ export async function readDefinition(
 	const authProviders = await authProviderContributions(scope);
 	const collections = collectionContributions(scope);
 	const routes = definitionRoutes(scope);
+	const functions = functionContributions(scope);
 
 	if (problems.length) {
 		fail(problems, `Problems in ${file}`);
@@ -125,6 +129,7 @@ export async function readDefinition(
 		authProviders,
 		collections,
 		routes,
+		functions,
 		components: scope.components,
 		iconFiles: icons.iconFiles,
 		iconifyIcons: icons.iconifyIcons

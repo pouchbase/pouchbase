@@ -102,6 +102,12 @@ export interface PluginRuntime {
 	 * `PluginCallError` when the handler fails or doesn't answer in time.
 	 */
 	route(request: Request, info: PluginRouteInfo, context: PluginRouteContext): Promise<Response>;
+	/**
+	 * Runs the plugin's function `name` (its name without the prefix) for `request`, whose URL stays
+	 * the original one; a 404 JSON response when there is no such function. Throws `PluginCallError`
+	 * when the handler fails or doesn't answer in time.
+	 */
+	invoke(request: Request, name: string, context: PluginRouteContext): Promise<Response>;
 }
 
 /**
@@ -111,7 +117,8 @@ export interface PluginRuntime {
 export function withCallContext(runtime: PluginRuntime, context: PluginCallContext): PluginRuntime {
 	return {
 		call: (call, own) => runtime.call(call, own ?? context),
-		route: (request, info, routeContext) => runtime.route(request, info, routeContext)
+		route: (request, info, routeContext) => runtime.route(request, info, routeContext),
+		invoke: (request, name, routeContext) => runtime.invoke(request, name, routeContext)
 	};
 }
 
@@ -155,6 +162,8 @@ export const describeResultSchema = z.object({
 	authProviders: z.record(z.string(), providerConfigSchema),
 	fields: z.array(z.string()),
 	routes: z.array(z.string()),
+	/** Missing from the Worker of a plugin installed before plugins had functions. */
+	functions: z.array(z.string()).default([]),
 	/** By field type. */
 	fieldHandlers: z.record(z.string(), fieldHandlerSchema)
 });

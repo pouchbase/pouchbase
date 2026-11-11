@@ -103,6 +103,35 @@ describe('collections', () => {
 		expect(pluginCollectionName('color-picker', 'palettes')).toBe('color_picker_palettes');
 	});
 
+	it('checks the functions: names, length with the prefix, server code', () => {
+		const contributes = (functions: unknown[]) => ({
+			...valid,
+			server: 'server.js',
+			contributes: { functions }
+		});
+		const accepted = parseManifest(contributes([{ name: 'get-posts' }]));
+
+		expect(accepted.success).toBe(true);
+
+		if (accepted.success) {
+			expect(accepted.manifest.contributes.functions).toEqual([
+				{ name: 'get-posts', requireAuth: false }
+			]);
+		}
+
+		for (const functions of [
+			[{ name: 'Get_Posts' }],
+			[{ name: 'a' }, { name: 'a' }],
+			[{ name: 'x'.repeat(40) }]
+		]) {
+			expect(parseManifest(contributes(functions)).success).toBe(false);
+		}
+
+		expect(parseManifest({ ...contributes([{ name: 'a' }]), server: undefined }).success).toBe(
+			false
+		);
+	});
+
 	it('fills in the defaults of permissions and collections', () => {
 		const result = parseManifest({
 			...valid,

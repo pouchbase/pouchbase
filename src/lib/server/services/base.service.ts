@@ -22,6 +22,11 @@ export class Service {
 		this.ctx = getRequestEvent();
 	}
 
+	/** The origin of this Pouchbase; read from the request, as remote queries forbid `event.url`. */
+	protected get origin(): string {
+		return new URL(this.ctx.request.url).origin;
+	}
+
 	/**
 	 * Generically format an error object
 	 *

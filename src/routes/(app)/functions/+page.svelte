@@ -62,7 +62,9 @@
 							</div>
 						</Table.Cell>
 						<Table.Cell>
-							{#if fn.deployed}
+							{#if fn.plugin}
+								<Badge.Root variant="outline">Plugin: {fn.plugin.name}</Badge.Root>
+							{:else if fn.deployed}
 								<span class="flex items-center gap-2 tabular-nums">
 									v{fn.version}
 									<Badge.Root variant="outline">

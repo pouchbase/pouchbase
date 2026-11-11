@@ -1,4 +1,5 @@
 import type { PouchbaseClient, RequestOptions } from '../client.js';
+import type { DefaultFunctions } from '../types.js';
 
 /** Options for `pouch.functions.invoke()`. */
 export type InvokeOptions = {
@@ -17,8 +18,11 @@ export type InvokeOptions = {
 /**
  * Serverless functions (`/api/functions/<name>`). The signed-in user's token is sent along, so the
  * function knows who calls it; functions that require sign-in answer `401` without one.
+ *
+ * Pass the `Functions` from `pouchbase types` to check the names of the functions:
+ * `createClient<Schema, MailTemplates, Functions>(url)`.
  */
-export class FunctionsService {
+export class FunctionsService<F extends object = DefaultFunctions> {
 	readonly #pouch: PouchbaseClient;
 
 	constructor(pouch: PouchbaseClient) {
@@ -38,7 +42,7 @@ export class FunctionsService {
 	 * @throws {PouchbaseError} When the function answers with a non-2xx status, with its message
 	 *   when the body is JSON with a `message`.
 	 */
-	invoke<T = unknown>(name: string, options: InvokeOptions = {}): Promise<T> {
+	invoke<T = unknown>(name: keyof F & string, options: InvokeOptions = {}): Promise<T> {
 		const path = options.path ? `/${options.path.replace(/^\/+/, '')}` : '';
 
 		return this.#pouch.request<T>(`/api/functions/${encodeURIComponent(name)}${path}`, {

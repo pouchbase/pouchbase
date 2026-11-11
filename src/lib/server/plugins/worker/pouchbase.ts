@@ -1,15 +1,22 @@
-import type { PluginUser } from '@pouchbasejs/plugin-sdk/server';
+import type { PluginContext, PluginUser } from '@pouchbasejs/plugin-sdk/server';
 import type { PluginCall } from '../protocol';
 
 import { Pouchbase } from '@pouchbasejs/js-sdk';
 
-import { dispatch, dispatchRoute, pluginContext, routeRequestHeaders } from '../dispatch';
+import {
+	dispatch,
+	dispatchFunction,
+	dispatchRoute,
+	pluginContext,
+	routeRequestHeaders
+} from '../dispatch';
 import {
 	CALL_PATH,
 	CONTEXT_HEADER,
 	decodeCallJson,
 	encodeCallJson,
 	ERROR_HEADER,
+	FUNCTION_PATH,
 	ROUTE_PATH,
 	SECRET_HEADER
 } from './codec';
@@ -19,9 +26,9 @@ import definition from './plugin.js';
 
 /**
  * `pouchbase.js`, the entry of a plugin's Worker (see `worker.ts` for the whole picture): answers
- * `POST /__call` and `/__route/<path>` (any method, with `CONTEXT_HEADER`) with the plugin secret
- * in `SECRET_HEADER` (compared in constant time), and 404 to everything else. The calls and the
- * routes run through the same `dispatch.ts` as a plugin that runs inside Pouchbase. Bundled by
+ * `POST /__call`, `/__route/<path>` and `/__function/<name>` (any method, with `CONTEXT_HEADER`)
+ * with the plugin secret in `SECRET_HEADER` (compared in constant time), and 404 to everything
+ * else. They run through the same `dispatch.ts` as a plugin that runs inside Pouchbase. Bundled by
  * `vite/plugin-worker.ts`; the guard is imported first so it runs before `plugin.js`.
  */
 
@@ -95,8 +102,16 @@ function context(input: unknown, env: Env, route: { admin?: unknown; user?: unkn
 	});
 }
 
-/** A route request: rebuilt with its original URL, without the host's own headers. */
-async function route(request: Request, env: Env) {
+/**
+ * A route or function request: rebuilt with its original URL, without the host's own headers, and
+ * answered by `run`. `label` names it in the log.
+ */
+async function forwarded(
+	request: Request,
+	env: Env,
+	label: string,
+	run: (original: Request, ctx: PluginContext) => Promise<Response>
+) {
 	let input: RouteInput;
 
 	try {
@@ -105,9 +120,7 @@ async function route(request: Request, env: Env) {
 		return json({ ok: false, error: 'The route context is not valid JSON' }, 400);
 	}
 
-	const forwarded = new URL(request.url);
-	const path = forwarded.pathname.slice(ROUTE_PATH.length) || '/';
-	let url = forwarded.href;
+	let url = request.url;
 
 	try {
 		url = new URL(String(input?.url ?? '')).href;
@@ -126,10 +139,10 @@ async function route(request: Request, env: Env) {
 	} as RequestInit);
 
 	try {
-		return await dispatchRoute(definition, original, path, context(input, env, input ?? {}));
+		return await run(original, context(input, env, input ?? {}));
 	} catch (error) {
 		console.error(
-			`[plugin ${config.plugin.id}] Route ${original.method} ${path} failed`,
+			`[plugin ${config.plugin.id}] ${label} ${original.method} failed`,
 			message(error)
 		);
 
@@ -146,11 +159,23 @@ export default {
 		const { pathname } = new URL(request.url);
 
 		if (request.headers.has(CONTEXT_HEADER)) {
-			if (pathname !== ROUTE_PATH && !pathname.startsWith(`${ROUTE_PATH}/`)) {
-				return new Response('Not found', { status: 404 });
+			if (pathname === ROUTE_PATH || pathname.startsWith(`${ROUTE_PATH}/`)) {
+				const path = pathname.slice(ROUTE_PATH.length) || '/';
+
+				return forwarded(request, env, `Route ${path}`, (original, ctx) =>
+					dispatchRoute(definition, original, path, ctx)
+				);
 			}
 
-			return route(request, env);
+			if (pathname.startsWith(`${FUNCTION_PATH}/`)) {
+				const name = pathname.slice(FUNCTION_PATH.length + 1);
+
+				return forwarded(request, env, `Function ${name}`, (original, ctx) =>
+					dispatchFunction(definition, original, name, ctx)
+				);
+			}
+
+			return new Response('Not found', { status: 404 });
 		}
 
 		if (request.method !== 'POST' || pathname !== CALL_PATH) {

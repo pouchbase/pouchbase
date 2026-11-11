@@ -10,7 +10,12 @@ import type { Db } from './services/db.js';
 import { browserStorage, memoryStorage, Session } from './session.js';
 import type { SessionStorage } from './session.js';
 import type { WebSocketLike } from './realtime/connection.js';
-import type { DefaultCollections, DefaultMailTemplates, Issues } from './types.js';
+import type {
+	DefaultCollections,
+	DefaultFunctions,
+	DefaultMailTemplates,
+	Issues
+} from './types.js';
 
 /** Options for `new Pouchbase()`. */
 export type PouchbaseOptions = {
@@ -26,7 +31,8 @@ export type PouchbaseOptions = {
 	 * API key for server-side code (`pbk_…`), such as `env.POUCHBASE_API_KEY` in a function. The
 	 * client then acts as an admin: every request and realtime connection sends the key instead of
 	 * the session's token, so the collections' API rules don't apply, and `pouch.mail` and
-	 * `pouch.schema` work. Never put one in code that runs in a browser.
+	 * `pouch.schema` work. Only `pouch.auth.me()` sends the session's token, to look up its user.
+	 * Never put one in code that runs in a browser.
 	 */
 	apiKey?: string;
 	/** Headers sent with every request. */
@@ -39,8 +45,8 @@ export type PouchbaseOptions = {
 };
 
 /**
- * The members of a client that its services use. Any client fits, whatever its `Schema` and
- * `MailTemplates`.
+ * The members of a client that its services use. Any client fits, whatever its `Schema`,
+ * `MailTemplates` and `Functions`.
  */
 export type PouchbaseClient = Pick<
 	Pouchbase<object>,
@@ -74,7 +80,8 @@ export type RequestOptions = {
  *
  * Pass the `Schema` from `pouchbase types` to type your collections, or use `createClient()`:
  * `new Pouchbase<Schema>(url)`; `pouch.db.posts` then knows the fields of `posts`. The generated
- * `MailTemplates`, as the second type, types the names and variables of `pouch.mail.send()`.
+ * `MailTemplates`, as the second type, types the names and variables of `pouch.mail.send()`, and
+ * `Functions`, as the third, the names of `pouch.functions.invoke()`.
  *
  * With an `apiKey`, for server-side code, the client acts as an admin on every call:
  *
@@ -86,7 +93,8 @@ export type RequestOptions = {
  */
 export class Pouchbase<
 	C extends object = DefaultCollections,
-	M extends object = DefaultMailTemplates
+	M extends object = DefaultMailTemplates,
+	F extends object = DefaultFunctions
 > {
 	/** The instance's origin, without a trailing slash. */
 	readonly baseUrl: string;
@@ -97,7 +105,7 @@ export class Pouchbase<
 	/** URLs of files in the `files` collection. */
 	readonly files: FilesService;
 	/** Serverless functions. */
-	readonly functions: FunctionsService;
+	readonly functions: FunctionsService<F>;
 	/**
 	 * The records of every collection, typed by the schema: `pouch.db.posts.findMany({ … })`. What
 	 * a caller may do follows each collection's API rules, unless the client has an `apiKey`.
@@ -125,7 +133,7 @@ export class Pouchbase<
 		this.#headers = options.headers ?? {};
 		this.auth = new AuthService<C>(this);
 		this.files = new FilesService(this);
-		this.functions = new FunctionsService(this);
+		this.functions = new FunctionsService<F>(this);
 		this.db = createDb<C>(this);
 		this.realtime = new RealtimeService<C>(this, () => this.#credential() ?? '', options.webSocket);
 		this.mail = new MailService<M>(this, options.apiKey);
@@ -244,7 +252,8 @@ function isIssues(value: unknown): value is Issues {
 
 /**
  * Creates a client for one Pouchbase instance, typed by the `Schema` from `pouchbase types`, and
- * optionally by its `MailTemplates` for `pouch.mail.send()`:
+ * optionally by its `MailTemplates` for `pouch.mail.send()` and its `Functions` for
+ * `pouch.functions.invoke()`:
  *
  * ```ts
  * import type { MailTemplates, Schema } from './pouchbase';
@@ -258,7 +267,8 @@ function isIssues(value: unknown): value is Issues {
  */
 export function createClient<
 	S extends object = DefaultCollections,
-	M extends object = DefaultMailTemplates
->(baseUrl: string, options: PouchbaseOptions = {}): Pouchbase<S, M> {
-	return new Pouchbase<S, M>(baseUrl, options);
+	M extends object = DefaultMailTemplates,
+	F extends object = DefaultFunctions
+>(baseUrl: string, options: PouchbaseOptions = {}): Pouchbase<S, M, F> {
+	return new Pouchbase<S, M, F>(baseUrl, options);
 }

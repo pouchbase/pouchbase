@@ -310,6 +310,16 @@ const pouch = createClient<Schema, MailTemplates>(env.POUCHBASE_URL, { apiKey: e
 await pouch.mail.send('welcome', { to: 'ada@example.com', variables: { name: 'Ada' } });
 ```
 
+And `Functions`: every deployed function, by name. Pass it as the third type to check the names of `pouch.functions.invoke()`. It doesn't type the body or the response; pass your own response type as `invoke<T>()`:
+
+```ts
+import type { Functions, MailTemplates, Schema } from './pouchbase';
+
+const pouch = createClient<Schema, MailTemplates, Functions>('https://pouchbase.example.com');
+await pouch.functions.invoke<{ message: string }>('hello');
+await pouch.functions.invoke('helo'); // type error: no function helo
+```
+
 `fetchTypes(url)` downloads the types from code.
 
 ### Errors

@@ -9,8 +9,8 @@ import {
 } from './posts.js';
 
 /**
- * Server code of the routes: the plugin's collections through `ctx.pouch`, by their names in
- * Pouchbase (the plugin id as prefix). Only the routes import this file, never a component.
+ * Server code of the routes and the function: the plugin's collections through `ctx.pouch`, by
+ * their names in Pouchbase (the plugin id as prefix). Components never import this file.
  */
 export const POSTS = 'cms_posts';
 export const CATEGORIES = 'cms_categories';

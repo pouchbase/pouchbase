@@ -30,8 +30,8 @@ export const RESERVED_ENV_NAMES = [
 /** Most code a version may have (source and compiled JavaScript together), in bytes. */
 export const MAX_CODE_SIZE = 1024 * 1024;
 
-/** Request header with the signed-in app user as JSON (only ASCII: other characters are escaped). */
-export const USER_HEADER = 'x-pouchbase-user';
+/** Request header with the function's secret, from Pouchbase to the Worker. */
+export const SECRET_HEADER = 'x-pouchbase-function-secret';
 
 /** Methods the test panel can send. */
 export const TEST_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
@@ -49,14 +49,15 @@ const TYPESCRIPT_TEMPLATE = `/** Variables and secrets of this function (Secrets
 interface Env {
 	/** URL of this Pouchbase installation. */
 	POUCHBASE_URL: string;
-	/** API key of this function, e.g. to send email templates (pouch.mail.send of the JS SDK). */
+	/** API key of this function; ctx.pouch uses it. */
 	POUCHBASE_API_KEY: string;
 }
 
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
-		// The signed-in app user, when the request has a valid token; otherwise null.
-		const user = pouchbaseUser(request);
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		// ctx.pouch is the JS SDK acting as an admin, past the API rules. auth.me() is the signed-in
+		// user (null without a token), so check what the caller may do.
+		const user = await ctx.pouch.auth.me();
 		const { searchParams } = new URL(request.url);
 		const name = searchParams.get('name') ?? user?.email ?? 'world';
 
@@ -69,11 +70,13 @@ const JAVASCRIPT_TEMPLATE = `export default {
 	/**
 	 * @param {Request} request
 	 * @param {{ POUCHBASE_URL: string, POUCHBASE_API_KEY: string }} env Variables and secrets of this
-	 *   function (Secrets tab); the API key can send email templates (pouch.mail.send of the JS SDK).
+	 *   function (Secrets tab); ctx.pouch uses the API key.
+	 * @param {ExecutionContext} ctx
 	 */
-	async fetch(request, env) {
-		// The signed-in app user, when the request has a valid token; otherwise null.
-		const user = pouchbaseUser(request);
+	async fetch(request, env, ctx) {
+		// ctx.pouch is the JS SDK acting as an admin, past the API rules. auth.me() is the signed-in
+		// user (null without a token), so check what the caller may do.
+		const user = await ctx.pouch.auth.me();
 		const { searchParams } = new URL(request.url);
 		const name = searchParams.get('name') ?? user?.email ?? 'world';
 
@@ -82,35 +85,10 @@ const JAVASCRIPT_TEMPLATE = `export default {
 };
 `;
 
+/** Libraries of the editor: the Workers runtime has `fetch`, `Request` and friends, not the DOM. */
+export const FUNCTION_LIBS = ['es2022', 'webworker'];
+
 /** The code a new function starts with. */
 export function functionTemplate(language: FunctionLanguage) {
 	return language === 'typescript' ? TYPESCRIPT_TEMPLATE : JAVASCRIPT_TEMPLATE;
 }
-
-/**
- * Declarations for the editor: the parts of the Workers runtime that functions use most, and the
- * `pouchbaseUser` helper that the Worker defines around the function's code.
- */
-export const FUNCTION_TYPINGS = `
-interface ExecutionContext {
-	/** Keeps the Worker running until the promise settles, after the response was sent. */
-	waitUntil(promise: Promise<unknown>): void;
-	passThroughOnException(): void;
-}
-
-/** An app user, as \`GET /api/auth/me\` returns it. */
-interface PouchbaseUser {
-	id: string;
-	email: string;
-	[field: string]: unknown;
-}
-
-/**
- * The app user who called the function, from the token in the \`Authorization\` header; \`null\`
- * when the request has no valid token. Pouchbase checks the token before the request gets here.
- */
-declare function pouchbaseUser(request: Request): PouchbaseUser | null;
-`;
-
-/** Libraries of the editor: the Workers runtime has \`fetch\`, \`Request\` and friends, not the DOM. */
-export const FUNCTION_LIBS = ['es2022', 'webworker'];

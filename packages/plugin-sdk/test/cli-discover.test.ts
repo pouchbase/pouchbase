@@ -132,7 +132,7 @@ describe('discoverProject', () => {
 				{
 					path: 'plugin.ts',
 					message:
-						"definePlugin({ extra }) isn't something a plugin adds; use settings, fields, pages, authProviders, collections, routes"
+						"definePlugin({ extra }) isn't something a plugin adds; use settings, fields, pages, authProviders, collections, routes, functions"
 				},
 				{
 					path: 'plugin.ts',

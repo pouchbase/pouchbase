@@ -133,6 +133,7 @@ export async function dispatch(
 				),
 				fields: Object.keys(fields),
 				routes: Object.keys(plugin.routes ?? {}),
+				functions: Object.keys(plugin.functions ?? {}),
 				fieldHandlers: Object.fromEntries(
 					Object.keys(fields).map((type) => {
 						const handler = fieldHandler(plugin, type);
@@ -222,6 +223,25 @@ function routeNotFound(match: { status: 404 } | { status: 405; allow: string[] }
 		: Response.json({ message: 'Route not found' }, { status: 404 });
 }
 
+/** The `Response` of a handler; throws `PluginCallError` when it throws or returns anything else. */
+async function handlerResponse(kind: 'route' | 'function', run: () => unknown): Promise<Response> {
+	let response: unknown;
+
+	try {
+		response = await run();
+	} catch (error) {
+		throw new PluginCallError(error instanceof Error ? error.message : String(error), {
+			cause: error
+		});
+	}
+
+	if (!(response instanceof Response)) {
+		throw new PluginCallError(`The ${kind} handler did not return a Response`);
+	}
+
+	return response;
+}
+
 /**
  * Runs the route of `definition` that matches `request` and `path` (see `matchRoute`). Throws
  * `PluginCallError` when the handler throws or doesn't return a `Response`.
@@ -238,19 +258,25 @@ export async function dispatchRoute(
 		return routeNotFound(match);
 	}
 
-	let response: unknown;
+	return handlerResponse('route', () => match.handler(request, { ...ctx, params: match.params }));
+}
 
-	try {
-		response = await match.handler(request, { ...ctx, params: match.params });
-	} catch (error) {
-		throw new PluginCallError(error instanceof Error ? error.message : String(error), {
-			cause: error
-		});
+/**
+ * Runs the function `name` of `definition`, or answers 404 without one. Throws `PluginCallError`
+ * when the handler throws or doesn't return a `Response`.
+ */
+export async function dispatchFunction(
+	definition: ServerDefinition | undefined,
+	request: Request,
+	name: string,
+	ctx: PluginContext
+): Promise<Response> {
+	const functions = definition?.functions ?? {};
+	const handler = Object.hasOwn(functions, name) ? functions[name] : undefined;
+
+	if (typeof handler !== 'function') {
+		return Response.json({ message: 'Function not found' }, { status: 404 });
 	}
 
-	if (!(response instanceof Response)) {
-		throw new PluginCallError('The route handler did not return a Response');
-	}
-
-	return response;
+	return handlerResponse('function', () => handler(request, ctx));
 }

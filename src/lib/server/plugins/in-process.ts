@@ -1,6 +1,6 @@
 import type { Pouchbase } from '@pouchbasejs/js-sdk';
 import type { PluginManifest } from '@pouchbasejs/plugin-sdk';
-import type { ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
+import type { PluginContext, ServerDefinition } from '@pouchbasejs/plugin-sdk/server';
 import type { EmbeddedPlugin } from './embedded';
 import type {
 	DescribeResult,
@@ -11,7 +11,13 @@ import type {
 	PluginRuntime
 } from './protocol';
 
-import { dispatch, dispatchRoute, pluginContext, routeRequestHeaders } from './dispatch';
+import {
+	dispatch,
+	dispatchFunction,
+	dispatchRoute,
+	pluginContext,
+	routeRequestHeaders
+} from './dispatch';
 import { restrictedFetch } from './network';
 import { CALL_TIMEOUT, describePlugin, EMPTY_CALL_CONTEXT, withTimeout } from './protocol';
 
@@ -54,6 +60,27 @@ export class InProcessRuntime implements PluginRuntime {
 		info: PluginRouteInfo,
 		context: PluginRouteContext
 	): Promise<Response> {
+		return this.handle(request, context, (definition, forwarded, ctx) =>
+			dispatchRoute(definition, forwarded, info.path, ctx)
+		);
+	}
+
+	/** Runs the function directly, with the same request and context as a route. */
+	async invoke(request: Request, name: string, context: PluginRouteContext): Promise<Response> {
+		return this.handle(request, context, (definition, forwarded, ctx) =>
+			dispatchFunction(definition, forwarded, name, ctx)
+		);
+	}
+
+	private handle(
+		request: Request,
+		context: PluginRouteContext,
+		run: (
+			definition: ServerDefinition | undefined,
+			forwarded: Request,
+			ctx: PluginContext
+		) => Promise<Response>
+	): Promise<Response> {
 		const { manifest } = this.plugin;
 		const ctx = pluginContext(
 			manifest,
@@ -64,7 +91,7 @@ export class InProcessRuntime implements PluginRuntime {
 		const forwarded = new Request(request, { headers: routeRequestHeaders(request.headers) });
 
 		return withTimeout(
-			this.plugin.load().then((definition) => dispatchRoute(definition, forwarded, info.path, ctx)),
+			this.plugin.load().then((definition) => run(definition, forwarded, ctx)),
 			this.options.timeout ?? CALL_TIMEOUT
 		);
 	}

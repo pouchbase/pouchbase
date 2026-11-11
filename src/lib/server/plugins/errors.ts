@@ -33,7 +33,8 @@ export type PluginsError =
 	| (ServiceError<19021, 'INVALID_PLUGIN_COLLECTION'> & { data: { issues: ManifestIssue[] } })
 	| (ServiceError<19023, 'PLUGIN_COLLECTION_IN_USE'> & {
 			data: { collection: string; field: string; target: string };
-	  });
+	  })
+	| (ServiceError<19024, 'PLUGIN_FUNCTION_TAKEN'> & { data: { name: string } });
 
 /** The error of a plugin registry request. */
 export type RegistryError = Extract<PluginsError, { code: 19000 }>;

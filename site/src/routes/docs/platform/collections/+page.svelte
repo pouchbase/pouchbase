@@ -67,7 +67,7 @@
 		['Writes by app users', 'No', 'A create or update that sends it fails'],
 		['API rules', 'Yes', 'The rule can use the field, and $user.<field> for users'],
 		['Admins, API keys, plugins', 'Yes', 'They read and write it like any field'],
-		['Functions (pouchbaseUser)', 'Yes', 'The signed-in user with every field, on the server']
+		['Functions (ctx.pouch)', 'Yes', 'It has the function’s API key']
 	];
 
 	const topics = [

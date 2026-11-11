@@ -400,6 +400,26 @@ const plugin = definePlugin({
 
 export const routeUser = demo('typescript', demoMe);
 
+export const pluginFunction = snippet(
+	'typescript',
+	`
+import { defineFunction } from '@pouchbasejs/plugin-sdk/server';
+
+// In plugin.ts: functions: { 'get-posts': getPosts }
+// Apps call it: pouch.functions.invoke('<plugin>-get-posts')
+export default defineFunction({
+	description: 'The published posts.',
+	requireAuth: false, // true: only signed-in app users
+	handler: async (request, ctx) => {
+		const { items } = await ctx.pouch.db.$collection('posts').findMany({
+			where: { status: 'published' }
+		});
+
+		return Response.json(items);
+	}
+});`
+);
+
 export const authProvider = snippet(
 	'typescript',
 	`

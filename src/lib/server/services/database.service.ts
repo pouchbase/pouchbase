@@ -87,8 +87,9 @@ export class DatabaseService extends Service {
 
 	/**
 	 * Lets the platform connect the system and app databases more directly; on Cloudflare the
-	 * Worker adds D1 bindings for them to itself (see `platform/cloudflare/bindings.ts`). Queries
-	 * work without it, so callers run it in the background.
+	 * Worker adds D1 bindings for them to itself (see `platform/cloudflare/bindings.ts`) and a Node
+	 * server deploys its D1 gateway (see `platform/cloudflare/gateway.ts`). Queries work without
+	 * it, so callers run it in the background.
 	 */
 	attach(): ResultAsync<
 		void,

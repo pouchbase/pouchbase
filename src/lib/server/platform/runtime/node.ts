@@ -1,4 +1,7 @@
-/** No Worker, so no bindings: `vite dev`, Docker and the binary reach D1 over the REST API. */
+/**
+ * No Worker, so no bindings: Docker and the binary reach D1 through the D1 gateway (see
+ * `../cloudflare/gateway`), `vite dev` over the REST API.
+ */
 export function workerEnv(): Record<string, unknown> | null {
 	return null;
 }

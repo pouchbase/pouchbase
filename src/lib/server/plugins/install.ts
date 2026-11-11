@@ -2,7 +2,7 @@ import type { PluginManifest, PluginVersion } from '@pouchbasejs/plugin-sdk';
 import type { ApiKeysService } from '../services/api-keys.service';
 import type { Services } from '../services/services';
 import type { PluginRuntimes } from './runtimes';
-import type { InstalledRow, PluginRow } from './sources';
+import type { InstalledRow, PluginRow, PluginSource } from './sources';
 import type { CompiledUi } from './compile';
 import type { DescribeResult, PluginCallContext, PluginRuntime, ProviderConfig } from './protocol';
 
@@ -16,7 +16,7 @@ import {
 	parseBundle,
 	splitBundle
 } from '@pouchbasejs/plugin-sdk';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 import { dev } from '$app/env';
 import { POUCHBASE_INSTANCE, POUCHBASE_REGISTRY_URL } from '$app/env/private';
@@ -26,6 +26,7 @@ import { generateToken } from '../crypto';
 import {
 	apiKeys as apiKeyRows,
 	db,
+	functions as functionRows,
 	pluginAuthProviders,
 	pluginBundleParts,
 	pluginModules,
@@ -42,7 +43,7 @@ import { chunks } from '../db/query';
 import { moduleRows, MODULE_ROWS_PER_INSERT } from './modules';
 import { describePlugin } from './protocol';
 import { providerConfigs, providerRow } from './providers';
-import { INSTALLED_COLUMNS } from './sources';
+import { INSTALLED_COLUMNS, toFunctions } from './sources';
 import { ENTRY_MODULE, pluginScriptName, workerModules, WorkerRuntime } from './worker';
 
 /**
@@ -184,6 +185,34 @@ export async function fetchBundle(
 	return { version, bytes, manifest, files, server: files[SERVER_FILE] ?? null };
 }
 
+/**
+ * Fails with `PLUGIN_FUNCTION_TAKEN` when a function on the Functions page, or of another plugin in
+ * `sources`, has the name of one of the plugin's functions (`a-b` + `c` and `a` + `b-c` clash).
+ */
+export async function checkFunctionNames(manifest: PluginManifest, sources: PluginSource[]) {
+	const names = toFunctions({ manifest, row: null }).map((fn) => fn.name);
+
+	if (!names.length) {
+		return;
+	}
+
+	const [row] = await db
+		.select({ name: functionRows.name })
+		.from(functionRows)
+		.where(inArray(functionRows.name, names))
+		.limit(1);
+	const taken =
+		row?.name ??
+		sources
+			.filter((source) => source.manifest.id !== manifest.id)
+			.flatMap(toFunctions)
+			.find((fn) => names.includes(fn.name))?.name;
+
+	if (taken) {
+		fail({ code: 19024, message: 'PLUGIN_FUNCTION_TAKEN', data: { name: taken } });
+	}
+}
+
 function deployFailure(error: unknown): never {
 	return fail(
 		{ code: 19007, message: 'PLUGIN_DEPLOY_FAILED', data: { reason: describeError(error) } },
@@ -288,8 +317,8 @@ async function describeWithRetries(
 }
 
 /**
- * Asks the plugin's server code what it implements, with the plugin's settings, and checks it
- * has a handler for every sign-in provider the manifest contributes. A Worker that was just
+ * Asks the plugin's server code what it implements, with the plugin's settings, and checks it has
+ * a handler for every sign-in provider and function the manifest contributes. A Worker that was just
  * deployed is asked again while workers.dev doesn't serve it yet. Fails with `PLUGIN_CALL_FAILED`.
  */
 async function describeServer(
@@ -316,6 +345,18 @@ async function describeServer(
 			code: 19009,
 			message: 'PLUGIN_CALL_FAILED',
 			data: { reason: `The server code has no auth provider ${result.missing}` }
+		});
+	}
+
+	const missing = manifest.contributes.functions.find(
+		(fn) => !description.functions.includes(fn.name)
+	);
+
+	if (missing) {
+		fail({
+			code: 19009,
+			message: 'PLUGIN_CALL_FAILED',
+			data: { reason: `The server code has no function ${missing.name}` }
 		});
 	}
 

@@ -17,6 +17,7 @@ import {
 	testFunctionSchema
 } from '#lib/schemas/functions.js';
 import { fail } from '#lib/server/errors.js';
+import { functionTypings } from '#lib/server/function-worker/typings.js';
 
 const NO_SUBDOMAIN =
 	'The Cloudflare account has no workers.dev subdomain yet. Open Workers & Pages in the Cloudflare dashboard once to choose one, then try again.';
@@ -32,6 +33,19 @@ export const getFunctions = query(async () => {
 	}
 
 	return result.value;
+});
+
+/** Declarations for the editor: the JS SDK with the collections and functions of this instance. */
+export const getFunctionTypings = query(async () => {
+	const { services } = requireUser();
+
+	const result = await services.types().generate({ undeployed: true });
+
+	if (result.isErr()) {
+		fail(result.error);
+	}
+
+	return functionTypings(result.value);
 });
 
 /** A function with the code that runs. */

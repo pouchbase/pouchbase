@@ -9,12 +9,14 @@ import type {
 	FieldWriteItem,
 	FieldWriteResult,
 	PluginCallContext,
+	PluginRouteContext,
 	PluginRuntime
 } from '../plugins/protocol';
 import type { PluginSettingsState } from '../plugins/settings';
 import type {
 	InstalledPlugin,
 	PluginFieldType,
+	PluginFunction,
 	PluginPage,
 	PluginRow,
 	PluginSource,
@@ -40,6 +42,7 @@ import { embeddedPlugin, embeddedPlugins } from '../plugins/embedded';
 import { describeError } from '../errors';
 import { hasHooks, passThroughWrite, readInChunks } from '../plugins/field-values';
 import {
+	checkFunctionNames,
 	fetchBundle,
 	registryClient,
 	registryFailure,
@@ -64,6 +67,7 @@ import {
 	imageUrl,
 	INSTALLED_COLUMNS,
 	toFieldTypes,
+	toFunctions,
 	toInstalled
 } from '../plugins/sources';
 import { pluginScriptName } from '../plugins/worker';
@@ -71,7 +75,12 @@ import { Service } from './base.service';
 
 export type { PluginsError } from '../plugins/errors';
 export type { PluginModules } from '../plugins/modules';
-export type { InstalledPlugin, PluginFieldType, PluginPage } from '../plugins/sources';
+export type {
+	InstalledPlugin,
+	PluginFieldType,
+	PluginFunction,
+	PluginPage
+} from '../plugins/sources';
 
 /**
  * Plugins: those installed from a plugin registry (the public one on pouchbase.io, or
@@ -87,9 +96,10 @@ export type { InstalledPlugin, PluginFieldType, PluginPage } from '../plugins/so
  * their UI is compiled by Vite with the dashboard. Installing a plugin with the same id from the
  * registry shadows the built-in one.
  *
- * A plugin's routes answer at `/api/plugins/<id>/<path>` (`route()`), its pages open at
- * `/plugins/<id>/<path>` (`page()`), its field types run through `writeFieldValues()` and
- * `readFieldValues()`, and its settings (`plugin_settings`) reach every call as `ctx.settings`.
+ * A plugin's routes answer at `/api/plugins/<id>/<path>` (`route()`), its functions at
+ * `/api/functions/<id>-<name>` (`functions()`, `invokeFunction()`, through `FunctionsService`), its
+ * pages open at `/plugins/<id>/<path>` (`page()`), its field types run through `writeFieldValues()`
+ * and `readFieldValues()`, and its settings (`plugin_settings`) reach every call as `ctx.settings`.
  */
 
 /** Results per page when searching the registry. */
@@ -118,7 +128,7 @@ export type PluginAsset = { content: string; contentType: string };
 export class PluginsService extends Service {
 	private readonly registry = registryClient();
 
-	private readonly runtimes = new PluginRuntimes(this.ctx.url.origin, (input, init) =>
+	private readonly runtimes = new PluginRuntimes(this.origin, (input, init) =>
 		this.ctx.fetch(input, init)
 	);
 
@@ -184,6 +194,7 @@ export class PluginsService extends Service {
 			);
 
 			await checkProviderIds(manifest);
+			await checkFunctionNames(manifest, await this.sources());
 
 			const existing = await this.findRow(manifest.id);
 			const ui = await compileBundle(files);
@@ -379,29 +390,40 @@ export class PluginsService extends Service {
 		path: string,
 		caller: { admin: boolean; user: PluginUser | null }
 	): ResultAsync<Response | null, PluginsError> {
-		return this.run(async () => {
-			const source = await this.source(pluginId);
-			const runtime = source ? this.runtimes.of(source) : null;
+		return this.run(
+			() =>
+				this.answer(pluginId, caller, (runtime, context) =>
+					runtime.route(
+						request,
+						{ path: path.startsWith('/') ? path : `/${path}`, search: new URL(request.url).search },
+						context
+					)
+				),
+			this.failed
+		);
+	}
 
-			if (!source || !runtime) {
-				return null;
-			}
+	/** The functions of the installed and built-in plugins. */
+	functions(): ResultAsync<PluginFunction[], PluginsError> {
+		return this.run(async () => (await this.sources()).flatMap(toFunctions), this.failed);
+	}
 
-			const saved = await this.savedSettings([pluginId]);
-
-			try {
-				return await runtime.route(
-					request,
-					{ path: path.startsWith('/') ? path : `/${path}`, search: new URL(request.url).search },
-					{ ...callContext(source.manifest, saved.get(pluginId) ?? {}), ...caller }
-				);
-			} catch (error) {
-				return this.fail(19013, 'PLUGIN_ROUTE_FAILED', {
-					data: { reason: describeError(error) },
-					cause: error
-				});
-			}
-		}, this.failed);
+	/**
+	 * Runs the plugin's function for `request`, with `caller` as `ctx.admin` and `ctx.user`. Who may
+	 * call it is checked by the caller. `null` when the plugin isn't there or has no server code.
+	 */
+	invokeFunction(
+		fn: Pick<PluginFunction, 'pluginId' | 'localName'>,
+		request: Request,
+		caller: { admin: boolean; user: PluginUser | null }
+	): ResultAsync<Response | null, PluginsError> {
+		return this.run(
+			() =>
+				this.answer(fn.pluginId, caller, (runtime, context) =>
+					runtime.invoke(request, fn.localName, context)
+				),
+			this.failed
+		);
 	}
 
 	/**
@@ -610,6 +632,37 @@ export class PluginsService extends Service {
 
 			return typeof content === 'string' ? { content, contentType: 'image/svg+xml' } : null;
 		}, this.failed);
+	}
+
+	/**
+	 * Runs a route or function of the plugin with its settings and `caller`; fails with
+	 * `PLUGIN_ROUTE_FAILED` when it does. `null` when the plugin isn't there or has no server code.
+	 */
+	private async answer(
+		pluginId: string,
+		caller: { admin: boolean; user: PluginUser | null },
+		run: (runtime: PluginRuntime, context: PluginRouteContext) => Promise<Response>
+	): Promise<Response | null> {
+		const source = await this.source(pluginId);
+		const runtime = source ? this.runtimes.of(source) : null;
+
+		if (!source || !runtime) {
+			return null;
+		}
+
+		const saved = await this.savedSettings([pluginId]);
+
+		try {
+			return await run(runtime, {
+				...callContext(source.manifest, saved.get(pluginId) ?? {}),
+				...caller
+			});
+		} catch (error) {
+			return this.fail(19013, 'PLUGIN_ROUTE_FAILED', {
+				data: { reason: describeError(error) },
+				cause: error
+			});
+		}
 	}
 
 	/** `ensureEmbedded`, where a failure is logged and the providers registered before are used. */

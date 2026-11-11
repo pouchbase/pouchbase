@@ -17,6 +17,7 @@ import {
 	decodeCallJson,
 	encodeCallJson,
 	ERROR_HEADER,
+	FUNCTION_PATH,
 	ROUTE_PATH,
 	SECRET_HEADER
 } from './worker/codec';
@@ -26,8 +27,9 @@ import {
  * deployed with the Script Upload API like the functions (`<instance>-plugin-<id>`). It has four
  * modules (`workerModules`):
  *
- * - `ENTRY_MODULE`, the main module (`worker/pouchbase.ts`): answers `POST /__call` and
- *   `/__route/<path>` with the plugin secret in `SECRET_HEADER`, and 404 to everything else;
+ * - `ENTRY_MODULE`, the main module (`worker/pouchbase.ts`): answers `POST /__call`,
+ *   `/__route/<path>` and `/__function/<name>` with the plugin secret in `SECRET_HEADER`, and 404
+ *   to everything else;
  * - `GUARD_MODULE` (`worker/pouchbase-guard.ts`), imported first so it runs before any plugin
  *   code: replaces `globalThis.fetch` (and `WebSocket`) with versions limited to
  *   `permissions.network`;
@@ -48,7 +50,9 @@ import {
  * `CONTEXT_HEADER` holds `{ settings, admin, user, url }` as JSON (ASCII only). The Worker
  * rebuilds the request with the original `url`, without the cookie and the `x-pouchbase-plugin-*`
  * headers, and returns the handler's response as is; 404/405 when no route matches. When the
- * handler fails, it answers 500 `{ ok: false, error }` with `ERROR_HEADER`.
+ * handler fails, it answers 500 `{ ok: false, error }` with `ERROR_HEADER`. A function request goes
+ * the same way to `/__function/<name>`; it can't be reached through `/__route`, so the host's check
+ * of who may call a function can't be passed by.
  *
  * The allowlist covers `fetch` and `WebSocket`, the APIs plugin code is meant to use. It is not a
  * full sandbox (e.g. `cloudflare:sockets` is not covered): what keeps a plugin away from Pouchbase's
@@ -183,7 +187,6 @@ export class WorkerRuntime implements PluginRuntime {
 		info: PluginRouteInfo,
 		context: PluginRouteContext
 	): Promise<Response> {
-		const timeout = this.options.timeout ?? CALL_TIMEOUT;
 		const url = new URL(this.url);
 
 		url.pathname = `${ROUTE_PATH}${info.path.startsWith('/') ? info.path : `/${info.path}`}`;
@@ -194,6 +197,24 @@ export class WorkerRuntime implements PluginRuntime {
 			return Response.json({ message: 'Route not found' }, { status: 404 });
 		}
 
+		return this.forward(url, request, context);
+	}
+
+	/** Forwards `request` to `/__function/<name>` on the Worker, like a route. */
+	async invoke(request: Request, name: string, context: PluginRouteContext): Promise<Response> {
+		const url = new URL(this.url);
+
+		url.pathname = `${FUNCTION_PATH}/${encodeURIComponent(name)}`;
+
+		return this.forward(url, request, context);
+	}
+
+	private async forward(
+		url: URL,
+		request: Request,
+		context: PluginRouteContext
+	): Promise<Response> {
+		const timeout = this.options.timeout ?? CALL_TIMEOUT;
 		const headers = routeRequestHeaders(request.headers);
 
 		headers.set(SECRET_HEADER, this.secret);

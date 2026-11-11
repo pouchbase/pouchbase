@@ -103,7 +103,9 @@ export const functions: FunctionsDriver = {
 		const metadata = {
 			main_module: upload.mainModule,
 			compatibility_date: COMPATIBILITY_DATE,
-			compatibility_flags: ['nodejs_compat'],
+			// global_fetch_strictly_public: the Worker calls Pouchbase through the JS SDK; on workers.dev
+			// it can only reach another Worker on the account with this flag, like the app (wrangler.jsonc).
+			compatibility_flags: ['nodejs_compat', 'global_fetch_strictly_public'],
 			bindings: upload.bindings,
 			// Secrets set through the Secrets API stay; the bindings above replace the rest.
 			keep_bindings: ['secret_text'],

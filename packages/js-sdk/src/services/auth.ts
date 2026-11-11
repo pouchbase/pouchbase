@@ -161,8 +161,8 @@ export class AuthService<C extends object = { users: User }> {
 
 	/**
 	 * The signed-in user, also kept in `pouch.session.user`. Returns `null` when signed out, or when
-	 * the token is rejected and the session ends. Typed with the `users` record of the
-	 * client's collections, or pass your own type.
+	 * the token is rejected and the session ends. Sends the session's token, also on a client with an
+	 * `apiKey`. Typed with the `users` record of the client's collections, or pass your own type.
 	 */
 	async me<T extends { id: string } = UserOf<C>>(
 		options: { signal?: AbortSignal } = {}
@@ -175,7 +175,10 @@ export class AuthService<C extends object = { users: User }> {
 		}
 
 		try {
-			const user = await this.#pouch.request<T>('/api/auth/me', { signal: options.signal });
+			const user = await this.#pouch.request<T>('/api/auth/me', {
+				headers: { Authorization: `Bearer ${token}` },
+				signal: options.signal
+			});
 
 			session.begin({ token, userId: user.id, user: user as unknown as User });
 

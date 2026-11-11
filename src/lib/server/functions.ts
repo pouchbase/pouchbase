@@ -1,12 +1,10 @@
 import { POUCHBASE_INSTANCE } from '$app/env/private';
 
-import { USER_HEADER } from '#lib/functions/functions.js';
+import { entry } from 'virtual:pouchbase/function-worker';
 
 /**
- * The code around a function in its Worker. Functions are reached through `/api/functions/<name>`,
- * which checks the caller and forwards the request to the Worker's workers.dev URL with the
- * function's secret in `SECRET_HEADER`. The Worker only answers requests with that secret, removes
- * it before the function sees the request, and leaves the secret out of `env`.
+ * The Worker of a function has two modules: the function's own code and the entry around it
+ * (`function-worker/pouchbase.ts`), which checks the secret and gives the function the JS SDK.
  */
 
 /** Module with the function's own code. */
@@ -15,63 +13,9 @@ export const FUNCTION_MODULE = 'function.js';
 /** Main module of the Worker: the code below, which imports `FUNCTION_MODULE`. */
 export const ENTRY_MODULE = 'pouchbase.js';
 
-/** Request header with the function's secret, from Pouchbase to the Worker. */
-export const SECRET_HEADER = 'x-pouchbase-function-secret';
-
-export const ENTRY_CODE = `import handler from './${FUNCTION_MODULE}';
-
-const encoder = new TextEncoder();
-
-function matches(value, secret) {
-	const left = encoder.encode(value ?? '');
-	const right = encoder.encode(secret ?? '');
-
-	return left.byteLength > 0 && left.byteLength === right.byteLength && crypto.subtle.timingSafeEqual(left, right);
-}
-
-globalThis.pouchbaseUser = (request) => {
-	const value = request.headers.get('${USER_HEADER}');
-
-	if (!value) {
-		return null;
-	}
-
-	try {
-		return JSON.parse(value);
-	} catch {
-		return null;
-	}
-};
-
-export default {
-	async fetch(request, env, ctx) {
-		if (!matches(request.headers.get('${SECRET_HEADER}'), env.POUCHBASE_FUNCTION_SECRET)) {
-			return new Response('Not found', { status: 404 });
-		}
-
-		if (typeof handler?.fetch !== 'function') {
-			return new Response('The function does not export a fetch handler: export default { fetch(request, env) { ... } }', { status: 500 });
-		}
-
-		const headers = new Headers(request.headers);
-		headers.delete('${SECRET_HEADER}');
-
-		const { POUCHBASE_FUNCTION_SECRET, ...rest } = env;
-
-		return handler.fetch(new Request(request, { headers }), rest, ctx);
-	}
-};
-`;
+export const ENTRY_CODE = entry;
 
 /** The Worker of a function, prefixed with the instance so instances on one account don't clash. */
 export function scriptName(functionName: string) {
 	return `${POUCHBASE_INSTANCE}-fn-${functionName}`;
-}
-
-/** JSON in a header: characters outside ASCII are escaped, so the header stays valid. */
-export function headerJson(value: unknown) {
-	return JSON.stringify(value).replace(
-		/[\u007f-￿]/g,
-		(character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
-	);
 }

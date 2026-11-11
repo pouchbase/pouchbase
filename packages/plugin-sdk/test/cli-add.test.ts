@@ -117,6 +117,33 @@ import ReportsMonthly from './pages/reports/monthly.svelte';
 		]);
 	});
 
+	it('adds a function, into the manifest and the server code', async () => {
+		const root = await project('my-plugin', 'empty');
+
+		expect((await addContribution(root, 'function', 'get-posts')).created).toEqual([
+			'functions/get-posts.ts'
+		]);
+		expect(await readFile(join(root, 'plugin.ts'), 'utf8')).toContain("'get-posts': getPosts");
+
+		const { bundle } = await buildBundle(root);
+
+		expect(bundle.manifest.server).toBe('server.js');
+		expect(bundle.manifest.contributes.functions).toEqual([
+			{ name: 'get-posts', description: 'Get posts.', requireAuth: false }
+		]);
+		expect(contributionSummary(bundle.manifest).functions).toEqual(['get-posts']);
+
+		const definition = await serverDefinition(bundle);
+		const response = await definition.functions!['get-posts']!(new Request('https://x.test'), {
+			user: null
+		} as never);
+
+		await expect(response.json()).resolves.toEqual({ user: null });
+		await expect(addContribution(root, 'function', 'Get_Posts')).rejects.toThrow(
+			"can't be a function name"
+		);
+	});
+
 	it('adds routes, with :id params, in the order they are added', async () => {
 		const root = await project('my-plugin', 'empty');
 

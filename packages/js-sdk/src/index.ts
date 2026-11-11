@@ -86,6 +86,7 @@ export { KNOWN_OAUTH_PROVIDERS } from './types.js';
 export type {
 	AuthResult,
 	DefaultCollections,
+	DefaultFunctions,
 	DefaultMailTemplates,
 	Issues,
 	KnownOAuthProvider,

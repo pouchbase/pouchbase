@@ -63,7 +63,8 @@
 	<ul>
 		<li>
 			Every <a href={resolve('/docs/platform/functions')}>function</a> gets a key of its own in
-			<Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an admin key like any other. It is renewed on
+			<Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an admin key like any other, which
+			<Code.Root>ctx.pouch</Code.Root> uses. It is renewed on
 			every deploy; the old one stops working once the new version runs. The API keys page lists it,
 			but it is deleted with its function, not on its own.
 		</li>

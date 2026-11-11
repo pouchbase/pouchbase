@@ -11,7 +11,7 @@
 
 	const sections: Section[] = [
 		{ id: 'write-a-function', title: 'Write a function' },
-		{ id: 'the-signed-in-user', title: 'The signed-in user' },
+		{ id: 'the-js-sdk', title: 'The JS SDK' },
 		{ id: 'secrets', title: 'Secrets and variables' },
 		{ id: 'call-a-function', title: 'Call a function' },
 		{ id: 'versions-logs-and-tests', title: 'Versions, logs and tests' },
@@ -46,13 +46,25 @@
 		<CodeBlock.Source code={data.code.bundle} />
 	</CodeBlock.Root>
 
-	<h2 id="the-signed-in-user">The signed-in user</h2>
+	<h2 id="the-js-sdk">The JS SDK</h2>
 
 	<p>
-		Pouchbase checks the caller's token before the request reaches the function.
-		<Code.Root>pouchbaseUser(request)</Code.Root> returns the user, as
-		<Code.Root>GET /api/auth/me</Code.Root> does, or <Code.Root>null</Code.Root> without a valid token.
-		A function set to require sign-in answers <Code.Root>401</Code.Root> to those requests without running.
+		Every function has the <a href={resolve('/docs/sdk')}>JS SDK</a> as
+		<Code.Root>ctx.pouch</Code.Root>, with no import or bundling. It acts as an admin, with the
+		function's <a href={resolve('/docs/platform/api-keys')}>API key</a>: the
+		<a href={resolve('/docs/platform/collections/access-rules')}>access rules</a> don't apply and it
+		sees hidden fields, so check first what the caller may do.
+		<Code.Root>ctx.pouch.auth.me()</Code.Root> returns the signed-in user, without hidden fields, or
+		<Code.Root>null</Code.Root> without a token.
+	</p>
+
+	<CodeBlock.Root title="function.ts">
+		<CodeBlock.Source code={data.code.sdk} />
+	</CodeBlock.Root>
+
+	<p>
+		Pouchbase checks the caller's token before the request reaches the function. A function set to
+		require sign-in answers <Code.Root>401</Code.Root> to requests without a valid token, without running.
 	</p>
 
 	<h2 id="secrets">Secrets and variables</h2>
@@ -61,9 +73,9 @@
 		Set secrets on the <strong>Secrets</strong> tab. Cloudflare stores them encrypted on the
 		function's Worker, and the code reads them from <Code.Root>env</Code.Root>. Names are upper-case
 		letters, digits and underscores. Pouchbase sets <Code.Root>env.POUCHBASE_URL</Code.Root>, the
-		URL of the installation, and <Code.Root>env.POUCHBASE_API_KEY</Code.Root>, an
-		<a href={resolve('/docs/platform/api-keys')}>API key</a> renewed on every deploy, for example to
-		<a href={resolve('/docs/platform/email')}>send email</a>.
+		URL of the installation, and <Code.Root>env.POUCHBASE_API_KEY</Code.Root>, the
+		<a href={resolve('/docs/platform/api-keys')}>API key</a> of <Code.Root>ctx.pouch</Code.Root>,
+		renewed on every deploy.
 	</p>
 
 	<h2 id="call-a-function">Call a function</h2>
@@ -92,8 +104,9 @@
 	<ul>
 		<li>Every deploy is kept as a version, and an earlier version can be restored.</li>
 		<li>
-			The <strong>Test</strong> tab sends requests to the deployed version, without a user:
-			<Code.Root>pouchbaseUser(request)</Code.Root> returns <Code.Root>null</Code.Root>.
+			The <strong>Test</strong> tab sends requests to the deployed version. Without an
+			<Code.Root>Authorization</Code.Root> header, <Code.Root>ctx.pouch.auth.me()</Code.Root> returns
+			<Code.Root>null</Code.Root>.
 		</li>
 		<li>
 			The <strong>Logs</strong> tab shows Workers Logs; the instance's API token needs Workers Observability

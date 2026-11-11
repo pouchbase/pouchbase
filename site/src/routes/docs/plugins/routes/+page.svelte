@@ -14,6 +14,7 @@
 		{ id: 'a-route', title: 'A route' },
 		{ id: 'params', title: 'Params' },
 		{ id: 'users-and-admins', title: 'Users and admins' },
+		{ id: 'functions', title: 'Functions' },
 		{ id: 'the-context', title: 'The context' },
 		{ id: 'server-code', title: 'Server code' },
 		{ id: 'status-codes', title: 'Status codes' }
@@ -151,9 +152,44 @@
 		<CodeBlock.Source code={data.code.routeUser} />
 	</CodeBlock.Root>
 
+	<h2 id="functions">Functions</h2>
+
+	<p>
+		For an endpoint your apps are meant to call, add a function instead of a route.
+		<Code.Root>functions</Code.Root> of <Code.Root>definePlugin</Code.Root> maps a name to
+		<Code.Root>defineFunction(&#123; … &#125;)</Code.Root>. Apps call it as
+		<Code.Root>&lt;plugin&gt;-&lt;name&gt;</Code.Root>, at
+		<Code.Root>/api/functions/&lt;plugin&gt;-&lt;name&gt;</Code.Root> or with
+		<Code.Root>pouch.functions.invoke()</Code.Root>, and it is listed on the Functions page and in the
+		generated types.
+	</p>
+
+	<CodeBlock.Root title="functions/get-posts.ts">
+		<CodeBlock.Source code={data.code.pluginFunction} />
+	</CodeBlock.Root>
+
+	<ul>
+		<li>
+			The handler answers every method. With <Code.Root>requireAuth: true</Code.Root>, callers without
+			an app user's bearer token get a 401 before it runs; without it, anyone may call the function.
+		</li>
+		<li>
+			It runs in the plugin's Worker with the plugin's <Code.Root>ctx</Code.Root> and permissions, so
+			it has no secrets or API key of its own; use
+			<a href={resolve('/docs/plugins/settings')}>settings</a> for secrets.
+		</li>
+		<li>
+			The dashboard shows it but can't change it: it is updated and removed with the plugin. Installing
+			fails when a function of the app or another plugin has its name.
+		</li>
+	</ul>
+
 	<h2 id="the-context">The context</h2>
 
-	<p>Every handler, of a route, field type or sign-in provider, gets <Code.Root>ctx</Code.Root>:</p>
+	<p>
+		Every handler, of a route, function, field type or sign-in provider, gets
+		<Code.Root>ctx</Code.Root>:
+	</p>
 
 	<Table.Root>
 		<Table.Header>
@@ -173,14 +209,14 @@
 	</Table.Root>
 
 	<p>
-		<Code.Root>ctx.admin</Code.Root>, <Code.Root>ctx.user</Code.Root> and
-		<Code.Root>ctx.params</Code.Root> are only set in routes.
+		<Code.Root>ctx.admin</Code.Root> and <Code.Root>ctx.user</Code.Root> are only set in routes and
+		functions, <Code.Root>ctx.params</Code.Root> only in routes.
 	</p>
 
 	<h2 id="server-code">Server code</h2>
 
 	<p>
-		The handlers of routes, field types and sign-in providers are bundled into one module that runs
+		The handlers of routes, functions, field types and sign-in providers are bundled into one module that runs
 		in the plugin's own Worker on your Cloudflare account. In that Worker:
 	</p>
 

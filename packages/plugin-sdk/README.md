@@ -90,6 +90,7 @@ declare module '@pouchbasejs/plugin-sdk/server' {
 | `pages`         | Dashboard pages by their path below `/plugins/<plugin>/`, with their title, sidebar link and icon. See [Pages](#pages).                          |
 | `authProviders` | Sign-in providers by id: `defineAuthProvider(...)`. See [Auth providers](#auth-providers).                                                       |
 | `routes`        | Routes by path, at `/api/plugins/<plugin><path>`: a handler per method, usually a module's exports (`import * as items`). See [Routes](#routes). |
+| `functions`     | Functions by name, called as `<plugin>-<name>` at `/api/functions/<plugin>-<name>`: `defineFunction(...)`. See [Functions](#functions).           |
 
 The folders are yours: nothing is found by its name or place, so `fields/`, `pages/`, `routes/` and `auth/` are only the layout `init` and `add` start with. A suggestion:
 
@@ -303,9 +304,34 @@ A small route can be written in place: `routes: { '/ping': { GET: () => new Resp
 
 Routes are public: anyone can call them. `ctx.admin` is `true` only for a request from an admin signed in to the dashboard (a valid admin session on a same-origin request, as `api.fetch` from a page makes); `ctx.user` is the app user of the request's `Authorization: Bearer <token>`, or `null` without one (an invalid or expired token is answered with 401 before the route runs; API keys are not users). A static segment wins over a param (`/items/new` over `/items/:id`), a path that exists with another method answers 405 (`HEAD` included) and an unknown path 404. A handler that throws, doesn't return a `Response` or doesn't start answering within 10 seconds gives the caller 502 `{"message":"The plugin route failed"}`; the reason is only in the Pouchbase log. See [Security](#security) for the headers Pouchbase adds and removes.
 
+### Functions
+
+`functions` maps a name to `defineFunction({ description, requireAuth, handler })`. It adds a function like those on the Functions page of the dashboard, named `<plugin>-<name>`: apps call it at `/api/functions/<plugin>-<name>` or with `pouch.functions.invoke()`, and it is in the generated types. Use a function for an endpoint apps are meant to call, and a route for what belongs to the plugin itself, such as the API of its pages or a path with params.
+
+```ts
+// functions/get-posts.ts: every method of /api/functions/<plugin>-get-posts
+import { defineFunction } from '@pouchbasejs/plugin-sdk/server';
+
+export default defineFunction({
+	description: 'The published posts.',
+	requireAuth: false,
+	handler: async (request, ctx) => {
+		const { items } = await ctx.pouch.db.$collection('posts').findMany({
+			where: { status: 'published' }
+		});
+
+		return Response.json(items);
+	}
+});
+```
+
+The handler gets `(request, ctx)` for every method and for every path below the function; `request.url` is the URL the caller used. With `requireAuth: true`, callers without an app user's bearer token get 401 before it runs; without it, anyone may call the function. An invalid or expired token always gets 401.
+
+Unlike a function an admin writes, it has no Worker, API key or secrets of its own: it runs in the plugin's Worker with the plugin's `ctx`, so `permissions.network` and `permissions.collections` apply. Use settings for secrets. The dashboard shows it but can't change it; it changes with the plugin and goes when the plugin is removed. Installing fails with error 19024 when a function of the app or another plugin has its name. Failures and timeouts answer like a route's, with 502.
+
 ### Collections
 
-`ctx.pouch` is a client of [`@pouchbasejs/js-sdk`](https://www.npmjs.com/package/@pouchbasejs/js-sdk), signed in as the plugin, with the same records API as an app: `ctx.pouch.db.$collection('posts').findMany({ where, orderBy, include })`, `find`, `insert`, `patch` and `remove`. It reaches the plugin's own collections and the app's collections in `permissions.collections` of `pouchbase-plugin.json`; other collections fail with a `forbidden` error, and so does an `include` of one. The collections' API rules don't apply to the plugin, so check `ctx.user` before acting for a user. Realtime, files, mail, functions and the schema API aren't available to plugins.
+`ctx.pouch` is a client of [`@pouchbasejs/js-sdk`](https://www.npmjs.com/package/@pouchbasejs/js-sdk), signed in as the plugin, with the same records API as an app: `ctx.pouch.db.$collection('posts').findMany({ where, orderBy, include })`, `find`, `insert`, `patch` and `remove`. It reaches the plugin's own collections and the app's collections in `permissions.collections` of `pouchbase-plugin.json`; other collections fail with a `forbidden` error, and so does an `include` of one. The collections' API rules don't apply to the plugin, so check `ctx.user` before acting for a user. Realtime, files, mail, calling functions and the schema API aren't available to plugins.
 
 ```json
 { "permissions": { "collections": { "read": ["users"], "write": ["posts"] } } }
@@ -530,9 +556,9 @@ It returns `ctx`, the `requests` that reached `ctx.fetch` and the `logs` of `ctx
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Bundle                | 25 MiB (`MAX_BUNDLE_SIZE`)                                                                                                  |
 | Call                  | 10 seconds for a field hook or `profile`, and until a route's response starts                                               |
-| Contributions         | 20 field types, 20 pages, 10 auth providers, 20 collections, 30 settings                                                    |
+| Contributions         | 20 field types, 20 pages, 10 auth providers, 20 collections, 20 functions, 30 settings                                      |
 | Collections           | The name with its prefix up to 63 characters; up to 50 names in each of `permissions.collections.read` and `write`          |
-| Names                 | Plugin id up to 64 characters, field type up to 32, setting key up to 63                                                    |
+| Names                 | Plugin id up to 64 characters, field type up to 32, setting key up to 63, function with its prefix up to 40                 |
 | Icons                 | 32 KiB each (`MAX_ICON_SIZE`)                                                                                               |
 | `permissions.network` | Up to 20 host names (`api.example.com`, `*.example.com`): no schemes, ports, paths, IP addresses or `localhost`; HTTPS only |
 | Categories            | 3 (`MAX_CATEGORIES`)                                                                                                        |
@@ -568,14 +594,14 @@ The dashboard and the CLI talk to a plugin registry (`https://api.pouchbase.io` 
 
 Errors have the body `{ "error": { "code": "...", "message": "...", "issues": [...] } }`.
 
-A `PluginVersion` may have `contributes`, a summary of what the version adds for the install dialog: `{ fields: [{ type, label }], pages: [{ path, title }], authProviders: [{ id, label }], routes: ['GET /stats'], settings: [{ key, label }] }`. `contributionSummary(manifest, routes)` builds it; registries that leave it out still parse. The pouchbase.io registry fills it for a version and for the newest version in `PluginDetails`, with the route keys it finds in `server.js`.
+A `PluginVersion` may have `contributes`, a summary of what the version adds for the install dialog: `{ fields: [{ type, label }], pages: [{ path, title }], authProviders: [{ id, label }], routes: ['GET /stats'], functions: ['get-posts'], settings: [{ key, label }] }`. `contributionSummary(manifest, routes)` builds it; registries that leave it out still parse. The pouchbase.io registry fills it for a version and for the newest version in `PluginDetails`, with the route keys it finds in `server.js`.
 
 ## CLI
 
 | Command                                                         |                                                                                                                                                                                                                                                                                                           |
 | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pouchbase-plugin init <dir> [--template <name>]`               | Create a plugin from `field`, `page`, `auth-provider` or `empty`; the directory name becomes its id. Asks for the template in a terminal.                                                                                                                                                                 |
-| `pouchbase-plugin add <field\|page\|auth-provider\|route> <id>` | Create the files of a contribution and add it, with its import, to `plugin.ts`, e.g. `add route items/:id`.                                                                                                                                                                                               |
+| `pouchbase-plugin add <field\|page\|auth-provider\|route\|function> <id>` | Create the files of a contribution and add it, with its import, to `plugin.ts`, e.g. `add route items/:id`.                                                                                                                                                                                               |
 | `pouchbase-plugin add setting <key> [--type <type>]`            | Append a setting to `plugin.ts` (created with the `Register` block when missing); `--type` is `text` (default), `secret`, `number`, `boolean` or `url`.                                                                                                                                                   |
 | `pouchbase-plugin validate`                                     | Check `plugin.ts`, the manifest, the settings and the server code, and compile the UI files with Pouchbase's import rules; reports what it found, e.g. `Found 3 field types (color, phone, rating), 3 pages (overview, fields, api), 5 routes (POST /echo, …), 3 settings (greeting, max_length, shout)`. |
 | `pouchbase-plugin manifest`                                     | Print the full manifest the plugin builds into, as JSON on stdout (the steps go to stderr).                                                                                                                                                                                                               |

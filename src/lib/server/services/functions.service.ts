@@ -1,8 +1,9 @@
 import type { ApiKeysService } from './api-keys.service';
-import type { AppUser } from './auth.service';
 import type { ErrorOf, ServiceError } from './base.service';
 import type { FunctionRequest, FunctionResponse, FunctionRow } from './functions-worker';
 import type { FunctionLog } from '../platform';
+import type { PluginFunction, PluginsError } from './plugins.service';
+import type { PluginUser } from '@pouchbasejs/plugin-sdk/server';
 import type { ResultAsync } from 'neverthrow';
 
 import { desc, eq, max } from 'drizzle-orm';
@@ -24,6 +25,11 @@ import { testReason, testWorker, uploadWorker, workerRequest } from './functions
  * its own (`<instance>-fn-<name>`) on the Cloudflare account. Every deploy is kept as a version;
  * secrets live only on the Worker. Apps call a function through `/api/functions/<name>`, which
  * forwards the request to the Worker (see `../functions.ts`).
+ *
+ * Plugins contribute functions too (`contributes.functions`, named `<plugin>-<name>`). They have no
+ * row and no Worker of their own: they come from the plugin's manifest and run in the plugin's
+ * Worker with its permissions, so they appear here and answer the same URL, but only the plugin
+ * changes them. Methods that take an `id` don't find them.
  */
 
 /** A function as the Functions pages show it; the shared secret stays on the server. */
@@ -37,6 +43,8 @@ export type FunctionInfo = {
 	/** Number of the version that runs, `null` before the first deploy. */
 	version: number | null;
 	language: FunctionLanguage | null;
+	/** The plugin that contributes the function, which can't be changed here; `null` for the app's. */
+	plugin: { id: string; name: string } | null;
 	createdAt: Date;
 	updatedAt: Date;
 };
@@ -62,8 +70,12 @@ export type FunctionCode = {
 	compiled?: string;
 };
 
+/** A function apps can call, as the generated types list it. */
+export type PublicFunction = Pick<FunctionInfo, 'name' | 'description' | 'requireAuth'>;
+
 export type FunctionsError =
 	| ErrorOf<ReturnType<ApiKeysService['issueFunctionKey']>>
+	| PluginsError
 	| ServiceError<18000, 'FUNCTIONS_FAILED'>
 	| ServiceError<18001, 'FUNCTION_NOT_FOUND'>
 	| ServiceError<18002, 'FUNCTION_NAME_TAKEN'>
@@ -92,9 +104,32 @@ function info(row: FunctionRow, version: VersionSummary | null): FunctionInfo {
 		deployed: !!row.url && !!version,
 		version: version?.number ?? null,
 		language: version?.language ?? null,
+		plugin: null,
 		createdAt: row.createdAt,
 		updatedAt: row.updatedAt
 	};
+}
+
+/** A plugin's function as the Functions pages show it; its id is no row's, so nothing changes it. */
+function pluginInfo(fn: PluginFunction): FunctionInfo {
+	const date = fn.updatedAt ?? new Date();
+
+	return {
+		id: `plugin:${fn.name}`,
+		name: fn.name,
+		description: fn.description,
+		requireAuth: fn.requireAuth,
+		deployed: true,
+		version: null,
+		language: null,
+		plugin: { id: fn.pluginId, name: fn.pluginName },
+		createdAt: date,
+		updatedAt: date
+	};
+}
+
+function byName(a: { name: string }, b: { name: string }) {
+	return a.name.localeCompare(b.name);
 }
 
 function versionInfo(version: typeof functionVersions.$inferSelect): FunctionVersion {
@@ -108,10 +143,10 @@ function versionInfo(version: typeof functionVersions.$inferSelect): FunctionVer
 }
 
 export class FunctionsService extends Service {
-	/** Every function with the version that runs, by name. */
+	/** Every function, those of plugins too, with the version that runs, by name. */
 	list(): ResultAsync<FunctionInfo[], FunctionsError> {
 		return this.run(async () => {
-			const [rows, versions] = await Promise.all([
+			const [rows, versions, contributed] = await Promise.all([
 				this.db.select().from(functions).orderBy(functions.name),
 				this.db
 					.select({
@@ -119,7 +154,8 @@ export class FunctionsService extends Service {
 						number: functionVersions.number,
 						language: functionVersions.language
 					})
-					.from(functionVersions)
+					.from(functionVersions),
+				this.must(this.services.plugins().functions())
 			]);
 			const latest = new Map<string, VersionSummary>();
 
@@ -129,17 +165,25 @@ export class FunctionsService extends Service {
 				}
 			}
 
-			return rows.map((row) => info(row, latest.get(row.id) ?? null));
+			return [
+				...rows.map((row) => info(row, latest.get(row.id) ?? null)),
+				...contributed.map(pluginInfo)
+			].sort(byName);
 		}, this.failed);
 	}
 
-	/** The function with this name and the code that runs, or `null`. */
+	/**
+	 * The function with this name and the code that runs, or `null`. A plugin's function has no code
+	 * to show: it is part of the plugin's bundle.
+	 */
 	get(name: string): ResultAsync<FunctionDetail | null, FunctionsError> {
 		return this.run(async () => {
 			const row = await this.findRow(name);
 
 			if (!row) {
-				return null;
+				const contributed = await this.findContributed(name);
+
+				return contributed ? { ...pluginInfo(contributed), source: '' } : null;
 			}
 
 			const [version] = await this.db
@@ -164,7 +208,7 @@ export class FunctionsService extends Service {
 		language: FunctionLanguage;
 	}): ResultAsync<FunctionInfo, FunctionsError> {
 		return this.run(async () => {
-			if (await this.findRow(input.name)) {
+			if ((await this.findRow(input.name)) || (await this.findContributed(input.name))) {
 				this.fail(18002, 'FUNCTION_NAME_TAKEN');
 			}
 
@@ -333,6 +377,28 @@ export class FunctionsService extends Service {
 		}, this.failed);
 	}
 
+	/** The deployed functions, which apps can call, by name. */
+	callable(): ResultAsync<PublicFunction[], FunctionsError> {
+		return this.run(async () => {
+			const [rows, contributed] = await Promise.all([
+				this.db
+					.select({
+						name: functions.name,
+						description: functions.description,
+						requireAuth: functions.requireAuth,
+						url: functions.url
+					})
+					.from(functions)
+					.orderBy(functions.name),
+				this.must(this.services.plugins().functions())
+			]);
+
+			return [...rows.filter((row) => row.url), ...contributed]
+				.map(({ name, description, requireAuth }) => ({ name, description, requireAuth }))
+				.sort(byName);
+		}, this.failed);
+	}
+
 	/**
 	 * The function with this name as the public API needs it: whether callers must be signed in.
 	 * `null` when it doesn't exist or isn't deployed.
@@ -341,25 +407,38 @@ export class FunctionsService extends Service {
 		return this.run(async () => {
 			const row = await this.findRow(name);
 
-			return row?.url ? { requireAuth: row.requireAuth } : null;
+			if (row) {
+				return row.url ? { requireAuth: row.requireAuth } : null;
+			}
+
+			const contributed = await this.findContributed(name);
+
+			return contributed ? { requireAuth: contributed.requireAuth } : null;
 		}, this.failed);
 	}
 
 	/**
-	 * Forwards a request to the function's Worker, as `user` (or anonymously), and returns its
-	 * response. Who may call the function is checked by the caller.
+	 * Forwards a request to the function's Worker, with its `Authorization` header, and returns its
+	 * response; a plugin's function runs in the plugin's Worker, with `caller` as `ctx.admin` and
+	 * `ctx.user`. Who may call the function is checked by the caller.
 	 */
 	invoke(
 		name: string,
 		request: Request,
 		path: string,
-		user: AppUser | null
+		caller: { admin: boolean; user: PluginUser | null }
 	): ResultAsync<Response, FunctionsError> {
 		return this.run(async () => {
 			const row = await this.findRow(name);
 
 			if (!row) {
-				this.fail(18001, 'FUNCTION_NOT_FOUND');
+				const contributed = await this.findContributed(name);
+
+				if (!contributed) {
+					this.fail(18001, 'FUNCTION_NOT_FOUND');
+				}
+
+				return this.invokeContributed(contributed, request, caller);
 			}
 
 			if (!row.url) {
@@ -369,7 +448,7 @@ export class FunctionsService extends Service {
 			const hasBody = request.method !== 'GET' && request.method !== 'HEAD';
 
 			try {
-				return await fetch(workerRequest(row, path, request.method, request.headers, user), {
+				return await fetch(workerRequest(row, path, request.method, request.headers), {
 					body: hasBody ? request.body : null,
 					// Node's fetch needs this for a streamed body.
 					...(hasBody ? { duplex: 'half' } : {})
@@ -380,7 +459,7 @@ export class FunctionsService extends Service {
 		}, this.failed);
 	}
 
-	/** Sends a request from the test panel, without a user, and reads the whole response. */
+	/** Sends a request from the test panel and reads the whole response. */
 	test(id: string, input: FunctionRequest): ResultAsync<FunctionResponse, FunctionsError> {
 		return this.run(async () => {
 			const row = await this.requireDeployed(id);
@@ -428,7 +507,7 @@ export class FunctionsService extends Service {
 			await uploadWorker(row, {
 				code: compiled ?? code.source,
 				number,
-				origin: this.ctx.url.origin,
+				origin: this.origin,
 				apiKey: apiKey.key
 			});
 		} catch (error) {
@@ -471,6 +550,30 @@ export class FunctionsService extends Service {
 		const [row] = await this.db.select().from(functions).where(eq(functions.name, name));
 
 		return row ?? null;
+	}
+
+	/** The plugin's function with this name, or `null`. */
+	private async findContributed(name: string): Promise<PluginFunction | null> {
+		const contributed = await this.must(this.services.plugins().functions());
+
+		return contributed.find((fn) => fn.name === name) ?? null;
+	}
+
+	private async invokeContributed(
+		fn: PluginFunction,
+		request: Request,
+		caller: { admin: boolean; user: PluginUser | null }
+	): Promise<Response> {
+		const result = await this.services.plugins().invokeFunction(fn, request, caller);
+
+		if (result.isErr()) {
+			this.invokeFailed(
+				result.error,
+				result.error.code === 19013 ? result.error.data.reason : result.error.message
+			);
+		}
+
+		return result.value ?? this.fail(18001, 'FUNCTION_NOT_FOUND');
 	}
 
 	private async requireRow(id: string): Promise<FunctionRow> {

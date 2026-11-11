@@ -9,9 +9,14 @@
 	import * as Icon from '#lib/components/ui/icon/index.js';
 	import * as Code from '#lib/components/ui/inputs/code/index.js';
 	import { toast } from '#lib/components/ui/toast/index.js';
-	import { FUNCTION_LIBS, FUNCTION_TYPINGS } from '#lib/functions/functions.js';
+	import { FUNCTION_LIBS } from '#lib/functions/functions.js';
 	import type { FunctionLanguage } from '#lib/functions/functions.js';
-	import { deployFunction, getFunction, getFunctionVersions } from '../functions.remote';
+	import {
+		deployFunction,
+		getFunction,
+		getFunctionTypings,
+		getFunctionVersions
+	} from '../functions.remote';
 	import type { FunctionData } from '../types';
 	import UploadCodeDialog from './upload-code-dialog.svelte';
 
@@ -20,6 +25,7 @@
 	let { fn }: Props = $props();
 
 	const dialogs = Dialog.getDialogs();
+	const typings = $derived(await getFunctionTypings());
 
 	// The editor starts from the code that runs; the page creates it again after a new version.
 	let language = $state<FunctionLanguage>(untrack(() => fn.language ?? 'typescript'));
@@ -82,9 +88,9 @@
 		{/snippet}
 
 		{#snippet description()}
-			An ES module whose default export has a <code>fetch(request, env)</code> handler, like a
-			Cloudflare Worker. Secrets are in <code>env</code>; <code>pouchbaseUser(request)</code> returns
-			the signed-in app user.
+			An ES module whose default export has a <code>fetch(request, env, ctx)</code> handler, like a
+			Cloudflare Worker. Secrets are in <code>env</code>. <code>ctx.pouch</code> is the JS SDK
+			acting as an admin, and <code>ctx.pouch.auth.me()</code> is the signed-in user.
 		{/snippet}
 
 		{#snippet actions()}
@@ -135,7 +141,7 @@
 			<Code.Root
 				bind:value={source}
 				{language}
-				typings={FUNCTION_TYPINGS}
+				{typings}
 				lib={FUNCTION_LIBS}
 				aria-labelledby="function-code-title"
 				class="h-[36rem]"

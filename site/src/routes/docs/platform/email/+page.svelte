@@ -87,8 +87,8 @@
 
 	<p>
 		Sending needs an <a href={resolve('/docs/platform/api-keys')}>API key</a>, not a user's token:
-		the <Code.Root>env.POUCHBASE_API_KEY</Code.Root> of a
-		<a href={resolve('/docs/platform/functions')}>function</a>, or a key of your own back-end. A
+		<Code.Root>ctx.pouch</Code.Root> in a
+		<a href={resolve('/docs/platform/functions')}>function</a> has one, or use a key of your own back-end. A
 		send names the template, up to 50 addresses and the variables; every recipient gets an email of
 		their own. Instead of a template, a send can carry its own subject and HTML.
 	</p>

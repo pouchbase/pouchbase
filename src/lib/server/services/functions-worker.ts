@@ -1,17 +1,9 @@
-import type { AppUser } from './auth.service';
 import type { functions } from '../db';
 
-import { USER_HEADER } from '#lib/functions/functions.js';
+import { SECRET_HEADER } from '#lib/functions/functions.js';
 
 import { describeError } from '../errors';
-import {
-	ENTRY_CODE,
-	ENTRY_MODULE,
-	FUNCTION_MODULE,
-	headerJson,
-	scriptName,
-	SECRET_HEADER
-} from '../functions';
+import { ENTRY_CODE, ENTRY_MODULE, FUNCTION_MODULE, scriptName } from '../functions';
 import { functions as driver } from '../platform';
 
 /**
@@ -45,7 +37,6 @@ const STRIPPED_HEADERS = [
 	// The admin's session cookie on this origin must never reach a function.
 	'cookie',
 	SECRET_HEADER,
-	USER_HEADER,
 	'content-length',
 	'cf-connecting-ip',
 	'cf-ray',
@@ -69,14 +60,8 @@ export function testReason(error: unknown) {
 		: describeError(error);
 }
 
-/** The request to the Worker: the path below its URL, with the secret and the user. */
-export function workerRequest(
-	row: FunctionRow,
-	path: string,
-	method: string,
-	incoming: Headers,
-	user: AppUser | null
-) {
+/** The request to the Worker: the path below its URL, with the secret. */
+export function workerRequest(row: FunctionRow, path: string, method: string, incoming: Headers) {
 	const url = new URL(path.startsWith('/') ? path : `/${path}`, row.url!);
 	const headers = new Headers(incoming);
 
@@ -85,10 +70,6 @@ export function workerRequest(
 	}
 
 	headers.set(SECRET_HEADER, row.secret);
-
-	if (user) {
-		headers.set(USER_HEADER, headerJson(user));
-	}
 
 	return new Request(url, { method, headers, redirect: 'manual' });
 }
@@ -119,14 +100,14 @@ export async function uploadWorker(
 	}
 }
 
-/** Sends a request from the test panel, without a user, and reads the whole response. */
+/** Sends a request from the test panel and reads the whole response. */
 export async function testWorker(
 	row: FunctionRow,
 	input: FunctionRequest
 ): Promise<FunctionResponse> {
 	const started = performance.now();
 	const response = await fetch(
-		workerRequest(row, input.path, input.method, new Headers(input.headers), null),
+		workerRequest(row, input.path, input.method, new Headers(input.headers)),
 		{
 			body: input.method === 'GET' || input.method === 'HEAD' ? null : input.body,
 			signal: AbortSignal.timeout(TEST_TIMEOUT)

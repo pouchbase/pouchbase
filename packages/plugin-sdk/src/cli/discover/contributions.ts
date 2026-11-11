@@ -10,6 +10,7 @@ import {
 	type PageContribution
 } from '../../manifest.js';
 import { collectionContributionSchema, type CollectionContribution } from '../../collections.js';
+import { functionContributionSchema, type FunctionContribution } from '../../functions.js';
 import { pluginFilePath } from '../../server.js';
 import { isObject, missingProviderMembers } from '../project.js';
 import { ROUTE_METHODS } from '../server-entry.js';
@@ -30,7 +31,8 @@ export const DEFINITION_KEYS = [
 	'pages',
 	'authProviders',
 	'collections',
-	'routes'
+	'routes',
+	'functions'
 ] as const;
 
 /** A component that `plugin.ts` names: its path, and where in the definition it is. */
@@ -321,6 +323,48 @@ export function collectionContributions(scope: DefinitionScope): CollectionContr
 					message:
 						issue.path[0] === 'name'
 							? `${where}: ${lowercaseHint(name) ?? `"${name}" can't be a collection name; ${issue.message.toLowerCase()}, e.g. reviews`}`
+							: `${where}.${issue.path.join('.')}: ${issue.message}`
+				}))
+			);
+			continue;
+		}
+
+		contributions.push(result.data);
+	}
+
+	return contributions;
+}
+
+/** Functions: `functions: { 'get-posts': getPosts }`. */
+export function functionContributions(scope: DefinitionScope): FunctionContribution[] {
+	const { file, problems } = scope;
+	const contributions: FunctionContribution[] = [];
+
+	for (const [name, fn] of recordOf(scope, 'functions')) {
+		const where = at('functions', name);
+
+		if (!isObject(fn) || typeof fn.handler !== 'function') {
+			problems.push({
+				path: file,
+				message: `${where} must be defineFunction({ handler })`,
+				hint: 'A function has a handler: defineFunction({ handler: (request, ctx) => Response.json({ ok: true }) }).'
+			});
+			continue;
+		}
+
+		const result = functionContributionSchema.safeParse({
+			name,
+			description: fn.description,
+			requireAuth: fn.requireAuth
+		});
+
+		if (!result.success) {
+			problems.push(
+				...result.error.issues.map((issue) => ({
+					path: file,
+					message:
+						issue.path[0] === 'name'
+							? `${where}: ${lowercaseHint(name) ?? `"${name}" can't be a function name; ${issue.message.toLowerCase()}, e.g. get-posts`}`
 							: `${where}.${issue.path.join('.')}: ${issue.message}`
 				}))
 			);

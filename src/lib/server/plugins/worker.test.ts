@@ -55,6 +55,20 @@ export default {
 			Response.json({ limit: await ctx.settings.get('limit'), all: await ctx.settings.getAll() }),
 		'GET /posts': async (_request, ctx) => Response.json(await ctx.pouch.db.posts.findMany({ limit: 2 }))
 	},
+	functions: {
+		'get-posts': async (request, ctx) =>
+			Response.json({
+				method: request.method,
+				url: request.url,
+				body: await request.text(),
+				user: ctx.user?.email ?? null,
+				cookie: request.headers.has('cookie'),
+				region: await ctx.settings.get('region')
+			}),
+		boom: () => {
+			throw new Error('boom');
+		}
+	},
 	authProviders: {
 		example: {
 			authorizeUrl: 'https://example.com/authorize',
@@ -182,6 +196,7 @@ describe('plugin Worker', () => {
 			},
 			fields: ['rating', 'bytes'],
 			routes: ['GET /hello', 'POST /items/:id', 'GET /boom', 'GET /settings', 'GET /posts'],
+			functions: ['get-posts', 'boom'],
 			fieldHandlers: {
 				rating: { validate: true, serialize: true, deserialize: true },
 				bytes: { validate: false, serialize: true, deserialize: true }
@@ -319,6 +334,45 @@ describe('plugin Worker routes', () => {
 		await expect(fetch('https://pouchbase.example.com/api/health')).resolves.toBeInstanceOf(
 			Response
 		);
+	});
+
+	it('runs a function with the original request and the caller', async () => {
+		const url = 'https://pouchbase.example.com/api/functions/auth-example-get-posts/a?page=2';
+		const response = await runtime().invoke(
+			new Request(url, { method: 'POST', body: 'hi', headers: { cookie: 'session=1' } }),
+			'get-posts',
+			context
+		);
+
+		await expect(response.json()).resolves.toEqual({
+			method: 'POST',
+			url,
+			body: 'hi',
+			user: 'ada@example.com',
+			cookie: false,
+			region: 'Zürich'
+		});
+	});
+
+	it('answers 404 for an unknown function and throws for one that fails', async () => {
+		const request = () => new Request('https://pouchbase.example.com/api/functions/x');
+
+		expect((await runtime().invoke(request(), 'nope', context)).status).toBe(404);
+		await expect(runtime().invoke(request(), 'boom', context)).rejects.toThrow(
+			new PluginCallError('boom')
+		);
+	});
+
+	it('does not reach a function through a route path', async () => {
+		for (const path of ['/__function/get-posts', '/../__function/get-posts']) {
+			const response = await runtime().route(
+				new Request(`${original}${path}`),
+				{ path, search: '' },
+				context
+			);
+
+			expect(response.status).toBe(404);
+		}
 	});
 
 	it('answers /__route/hello with the handler response', async () => {

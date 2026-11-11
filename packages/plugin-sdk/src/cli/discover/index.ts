@@ -27,7 +27,7 @@ export { uiBundlePath } from './ui-files.js';
 
 /**
  * Finding what a plugin project contributes. `plugin.ts` says it all: its default export is
- * `definePlugin({ settings, fields, pages, authProviders, collections, routes })`, and it imports the code,
+ * `definePlugin({ settings, fields, pages, authProviders, collections, routes, functions })`, and it imports the code,
  * components and icons of each from wherever the plugin keeps them.
  *
  * ```ts
@@ -65,6 +65,8 @@ export type ProjectContents = {
 	collections: string[];
 	/** Route keys, e.g. `GET /items/:id`. */
 	routes: string[];
+	/** Names of the plugin's functions, without the prefix. */
+	functions: string[];
 	settings: string[];
 };
 
@@ -114,6 +116,7 @@ export function describeContents(found: ProjectContents): string {
 		listed(found.authProviders, 'auth provider'),
 		listed(found.collections, 'collection'),
 		listed(found.routes, 'route'),
+		listed(found.functions, 'function'),
 		listed(found.settings, 'setting')
 	].filter((part) => part !== null);
 
@@ -217,6 +220,7 @@ async function discoverDefinition(
 		authProviders: providerContributions,
 		collections: collectionContributions,
 		routes,
+		functions: functionContributions,
 		components,
 		iconFiles,
 		iconifyIcons
@@ -228,13 +232,19 @@ async function discoverDefinition(
 		providerContributions.length && count(providerContributions.length, 'auth provider'),
 		collectionContributions.length && count(collectionContributions.length, 'collection'),
 		routes.length && count(routes.length, 'route'),
+		functionContributions.length && count(functionContributions.length, 'function'),
 		settings.length && count(settings.length, 'setting')
 	].filter(Boolean);
 
 	log?.detail(contents.length ? contents.join(', ') : 'Nothing to contribute yet');
 
 	// Server code: the generated entry turns the definition into what the host runs.
-	const hasServer = fieldContributions.length + providerContributions.length + routes.length > 0;
+	const hasServer =
+		fieldContributions.length +
+			providerContributions.length +
+			routes.length +
+			functionContributions.length >
+		0;
 	const serverEntry = hasServer ? generateServerEntry({ plugin: file }, { root }) : null;
 	let serverCode: string | null = null;
 
@@ -292,7 +302,8 @@ async function discoverDefinition(
 					fields: fieldContributions,
 					pages: pageContributions,
 					authProviders: providerContributions,
-					collections: collectionContributions
+					collections: collectionContributions,
+					functions: functionContributions
 				}
 			},
 			await loadPackageJson(root)
@@ -317,6 +328,7 @@ async function discoverDefinition(
 		authProviders: providerContributions.map((provider) => provider.id),
 		collections: collectionContributions.map((collection) => collection.name),
 		routes,
+		functions: functionContributions.map((fn) => fn.name),
 		settings: manifest.settings.map((setting) => setting.key)
 	};
 

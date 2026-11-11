@@ -110,6 +110,12 @@ export interface MailTemplates {
 		items?: unknown;
 	};
 	// …
+}
+
+export interface Functions {
+	/** Mails an invoice. Requires sign-in. */
+	'send-invoice': unknown;
+	// …
 }`
 );
 
@@ -144,6 +150,21 @@ await pouch.mail.send('welcome', { to: 'ada@example.com', variables: { name: 'Ad
 
 await pouch.mail.send('welcome', { to: 'ada@example.com' }); // type error: name is required
 await pouch.mail.send('welcom', { to: 'ada@example.com' }); // type error: no template welcom`
+);
+
+export const typedFunctions = snippet(
+	'typescript',
+	`
+import { createClient } from '@pouchbasejs/js-sdk';
+import type { Functions, MailTemplates, Schema } from './pouchbase';
+
+const pouch = createClient<Schema, MailTemplates, Functions>('https://pouchbase.example.com');
+
+const { sent } = await pouch.functions.invoke<{ sent: boolean }>('send-invoice', {
+	body: { order: '42' }
+});
+
+await pouch.functions.invoke('send-invoices'); // type error: no function send-invoices`
 );
 
 export const fetchTypes = snippet(
@@ -429,18 +450,10 @@ await app.db.posts.findMany();`
 export const sendMail = snippet(
 	'typescript',
 	`
-import { createClient } from '@pouchbasejs/js-sdk';
-
-interface Env {
-	POUCHBASE_URL: string;
-	POUCHBASE_API_KEY: string;
-}
-
+// In a function, ctx.pouch is a client with the function's API key
 export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
-		const pouch = createClient(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
-
-		const { sent } = await pouch.mail.send('welcome', {
+	async fetch(request: Request, env: object, ctx: ExecutionContext): Promise<Response> {
+		const { sent } = await ctx.pouch.mail.send('welcome', {
 			to: 'ada@example.com', // or a list of up to 50
 			variables: { name: 'Ada', items: [{ title: 'Create a project' }] }
 		});

@@ -337,7 +337,7 @@ export class AuthService extends Service {
 
 	/** Sends the built-in email with a link to a page of this deployment that handles it. */
 	private async sendLink(template: string, email: string, path: string, token: string) {
-		const url = new URL(path, this.ctx.url.origin);
+		const url = new URL(path, this.origin);
 		url.searchParams.set('token', token);
 
 		await this.must(

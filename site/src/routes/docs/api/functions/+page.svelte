@@ -61,7 +61,7 @@
 
 	<p>
 		Pouchbase checks the user's token before the request reaches the function, which gets the user
-		from <Code.Root>pouchbaseUser(request)</Code.Root>. An invalid or expired token is a
+		from <Code.Root>ctx.pouch.auth.me()</Code.Root>. An invalid or expired token is a
 		<Code.Root>401</Code.Root>, and so is a call without one to a function that requires sign-in:
 	</p>
 

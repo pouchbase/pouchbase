@@ -13,13 +13,9 @@
 		return JSON.stringify(value, null, '\t').replace(/\n/g, `\n${'\t'.repeat(depth)}`);
 	}
 
-	const fn = $derived(`import { Pouchbase } from '@pouchbasejs/js-sdk';
-
-export default {
-	async fetch(request, env) {
-		const pb = new Pouchbase(env.POUCHBASE_URL, { apiKey: env.POUCHBASE_API_KEY });
-
-		await pb.mail.send('${name}', {
+	const fn = $derived(`export default {
+	async fetch(request, env, ctx) {
+		await ctx.pouch.mail.send('${name}', {
 			to: 'ada@example.com',
 			variables: ${indent(sampleData, 3)}
 		});
@@ -36,8 +32,8 @@ export default {
 
 <div class="flex flex-col gap-4 text-sm text-zinc-600">
 	<p>
-		Send the template with an API key. A function has its own key in
-		<code>env.POUCHBASE_API_KEY</code>; for your back-end, create one on the
+		Send the template with an API key. In a function, <code>ctx.pouch</code> uses the
+		function's own key; for your back-end, create one on the
 		<Link.Root href={resolve('/(app)/api-keys')}>API keys</Link.Root> page. Keep keys on the server: an
 		app in the browser can't send email.
 	</p>
