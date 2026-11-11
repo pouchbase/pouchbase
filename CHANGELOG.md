@@ -1,5 +1,11 @@
 # pouchbase
 
+## 0.10.1
+
+### Patch Changes
+
+- [`0dd4754`](https://github.com/pouchbase/pouchbase/commit/0dd4754e881ea71551c0ffd5f3ee142f7fd78597) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Fix the Docker image build, which failed because the JS SDK's tsconfig was left out of the build context.
+
 ## 0.10.0
 
 ### Minor Changes
