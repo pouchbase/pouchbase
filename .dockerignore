@@ -22,7 +22,8 @@ docker-compose.yml
 .dockerignore
 
 # The site and the test app aren't part of the image; only their package.json (for the lockfile). Of
-# the JS SDK only the sources are needed: the dashboard bundles its realtime client.
+# the JS SDK only the sources and tsconfig are needed: the dashboard bundles its realtime client and
+# the function worker build emits its declarations (vite/function-worker.ts).
 site/*
 !site/package.json
 test-app/*
@@ -30,3 +31,4 @@ test-app/*
 packages/js-sdk/*
 !packages/js-sdk/package.json
 !packages/js-sdk/src
+!packages/js-sdk/tsconfig.json
