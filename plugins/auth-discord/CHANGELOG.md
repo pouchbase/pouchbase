@@ -1,5 +1,11 @@
 # @pouchbase-plugins/auth-discord
 
+## 1.0.2
+
+### Patch Changes
+
+- [`626a5db`](https://github.com/pouchbase/pouchbase/commit/626a5db5b635aa331c8b01a5e5ec59b71197bcb0) Thanks [@codeit-ninja](https://github.com/codeit-ninja)! - Build the plugin from `definePlugin` in `plugin.ts` with the plugin SDK; the sign-in provider is unchanged.
+
 ## 1.0.1
 
 ### Patch Changes
